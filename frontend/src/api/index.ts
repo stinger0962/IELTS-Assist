@@ -118,8 +118,11 @@ export const topicsAPI = {
 
 // Goals API
 export const goalsAPI = {
-  getAll: (completed?: boolean, limit = 20) =>
-    api.get(`/goals?completed=${completed ?? ''}&limit=${limit}`),
+  getAll: (completed?: boolean, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (completed !== undefined) params.set('completed', String(completed));
+    return api.get(`/goals?${params}`);
+  },
   create: (data: { title: string; description?: string; target_date?: string; target_minutes?: number }) =>
     api.post('/goals', data),
   update: (id: number, data: { completed?: boolean }) =>

@@ -42,7 +42,7 @@ export default function Goals() {
       const res = await goalsAPI.create({
         title: newGoal.title,
         description: newGoal.description,
-        target_date: newGoal.target_date || undefined,
+        target_date: newGoal.target_date ? `${newGoal.target_date}T00:00:00` : undefined,
         target_minutes: newGoal.target_minutes,
       });
       setGoals([res.data, ...goals]);

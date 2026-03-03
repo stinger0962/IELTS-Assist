@@ -147,22 +147,17 @@ export default function Practice() {
 
   const loadExercises = async () => {
     setLoading(true);
-    try {
-      const [reading, listening, writing, speaking] = await Promise.all([
-        practiceAPI.getReading(),
-        practiceAPI.getListening(),
-        practiceAPI.getWriting(),
-        practiceAPI.getSpeaking(),
-      ]);
-      setReadingExercises(reading.data);
-      setListeningExercises(listening.data);
-      setWritingTopics(writing.data);
-      setSpeakingTopics(speaking.data);
-    } catch (error) {
-      console.error('Failed to load exercises:', error);
-    } finally {
-      setLoading(false);
-    }
+    const [reading, listening, writing, speaking] = await Promise.allSettled([
+      practiceAPI.getReading(),
+      practiceAPI.getListening(),
+      practiceAPI.getWriting(),
+      practiceAPI.getSpeaking(),
+    ]);
+    if (reading.status === 'fulfilled') setReadingExercises(Array.isArray(reading.value.data) ? reading.value.data : []);
+    if (listening.status === 'fulfilled') setListeningExercises(Array.isArray(listening.value.data) ? listening.value.data : []);
+    if (writing.status === 'fulfilled') setWritingTopics(Array.isArray(writing.value.data) ? writing.value.data : []);
+    if (speaking.status === 'fulfilled') setSpeakingTopics(Array.isArray(speaking.value.data) ? speaking.value.data : []);
+    setLoading(false);
   };
 
   const handleComplete = (correct: number, total: number) => {
