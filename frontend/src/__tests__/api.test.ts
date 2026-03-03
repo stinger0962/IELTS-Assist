@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import axios from 'axios'
 import { api, authAPI } from '../api'
 import { useAppStore } from '../store'
 
@@ -18,6 +19,57 @@ describe('API Configuration', () => {
 
   it('should have response interceptor for error handling', () => {
     expect((api.interceptors.response.handlers?.length ?? 0)).toBeGreaterThan(0)
+  })
+})
+
+// These tests guard against the login Content-Type regression that caused
+// hours of debugging. The backend login endpoint (OAuth2PasswordRequestForm)
+// REQUIRES application/x-www-form-urlencoded. If Axios sends application/json
+// instead, FastAPI returns 422 Unprocessable Content.
+describe('authAPI.login request format', () => {
+  let postSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    // Spy on bare axios.post (not the api instance) — that's what login uses
+    postSpy = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'tok', token_type: 'bearer' } })
+  })
+
+  afterEach(() => {
+    postSpy.mockRestore()
+  })
+
+  it('sends Content-Type: application/x-www-form-urlencoded', async () => {
+    await authAPI.login('user@example.com', 'pass123')
+    const config = postSpy.mock.calls[0][2] as Record<string, unknown>
+    const headers = config?.headers as Record<string, string>
+    expect(headers?.['Content-Type']).toBe('application/x-www-form-urlencoded')
+  })
+
+  it('sends body as a plain URL-encoded string (not JSON or URLSearchParams object)', async () => {
+    await authAPI.login('user@example.com', 'pass123')
+    const body = postSpy.mock.calls[0][1]
+    // Must be a string — when data is a string, Axios skips type detection
+    // and cannot override our explicit Content-Type header
+    expect(typeof body).toBe('string')
+  })
+
+  it('uses "username" field name for the email value (required by OAuth2PasswordRequestForm)', async () => {
+    await authAPI.login('user@example.com', 'pass123')
+    const body = postSpy.mock.calls[0][1] as string
+    const params = new URLSearchParams(body)
+    // OAuth2PasswordRequestForm reads "username", not "email"
+    expect(params.get('username')).toBe('user@example.com')
+    expect(params.get('password')).toBe('pass123')
+    // Must NOT use "email" as the field name
+    expect(params.get('email')).toBeNull()
+  })
+
+  it('encodes special characters in email and password', async () => {
+    await authAPI.login('test+tag@ex.com', 'p@ss w0rd!')
+    const body = postSpy.mock.calls[0][1] as string
+    const params = new URLSearchParams(body)
+    expect(params.get('username')).toBe('test+tag@ex.com')
+    expect(params.get('password')).toBe('p@ss w0rd!')
   })
 })
 
