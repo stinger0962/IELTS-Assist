@@ -11,11 +11,11 @@ describe('API Configuration', () => {
   })
 
   it('should have request interceptor for auth token', () => {
-    // Axios interceptors are stored in an array
-    expect(api.interceptors.request.handlers.length).toBeGreaterThan(0)
+    // Axios interceptors are stored in an array (may be null when cleared)
+    expect((api.interceptors.request.handlers?.length ?? 0)).toBeGreaterThan(0)
   })
 
   it('should have response interceptor for error handling', () => {
-    expect(api.interceptors.response.handlers.length).toBeGreaterThan(0)
+    expect((api.interceptors.response.handlers?.length ?? 0)).toBeGreaterThan(0)
   })
 })
