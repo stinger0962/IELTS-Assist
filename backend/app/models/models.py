@@ -134,3 +134,14 @@ class Goal(Base):
     created_at = Column(DateTime, server_default=func.now())
     
     user = relationship("User", back_populates="goals")
+
+class GeneratedPractice(Base):
+    __tablename__ = "generated_practices"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    skill = Column(String(50), nullable=False)  # reading, listening, etc.
+    topic = Column(String(255), nullable=True)
+    content = Column(Text, nullable=False)  # JSON content of the practice
+    is_validated = Column(Boolean, default=False)
+    generated_date = Column(DateTime, server_default=func.now())
+    used_date = Column(DateTime, nullable=True)  # When user started this practice
