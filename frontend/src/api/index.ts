@@ -33,11 +33,14 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  // Use bare axios (not api instance) so URLSearchParams auto-sets the correct
-  // Content-Type: application/x-www-form-urlencoded without being overridden by
-  // the api instance's application/json default.
+  // Use bare axios with a pre-serialized string body so Axios skips type
+  // detection entirely and our explicit Content-Type is guaranteed to survive.
   login: (email: string, password: string) =>
-    axios.post(`${API_URL}/auth/login`, new URLSearchParams({ username: email, password })),
+    axios.post(
+      `${API_URL}/auth/login`,
+      new URLSearchParams({ username: email, password }).toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    ),
   register: (data: { email: string; username: string; password: string; full_name?: string }) =>
     api.post('/auth/register', data),
   // token param bypasses the interceptor — used right after login before store is updated
