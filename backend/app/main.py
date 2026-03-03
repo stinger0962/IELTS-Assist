@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, progress, practice, mistakes, topics, goals
+from app.routers import auth, generate, progress, practice, mistakes, topics, goals
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -28,6 +28,7 @@ app.include_router(progress.router, prefix=f"{settings.API_PREFIX}", tags=["Prog
 app.include_router(practice.router, prefix=f"{settings.API_PREFIX}/practice", tags=["Practice"])
 app.include_router(mistakes.router, prefix=f"{settings.API_PREFIX}/mistakes", tags=["Mistakes"])
 app.include_router(topics.router, prefix=f"{settings.API_PREFIX}/topics", tags=["Topics"])
+app.include_router(generate.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(goals.router, prefix=f"{settings.API_PREFIX}/goals", tags=["Goals"])
 
 @app.get("/")
