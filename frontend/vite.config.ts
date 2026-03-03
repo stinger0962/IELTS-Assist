@@ -7,7 +7,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // IELTS-Assist backend runs on 8001 to avoid collisions with other local services.
+        // Override with VITE_BACKEND_PORT env var if needed.
+        target: `http://localhost:${process.env.VITE_BACKEND_PORT ?? '8001'}`,
         changeOrigin: true,
       },
     },
