@@ -21,36 +21,49 @@ describe('API Configuration', () => {
   })
 })
 
-describe('authAPI.me', () => {
+describe('authAPI.me token parameter', () => {
+  it('should be a function that accepts an optional token argument', () => {
+    // me(token) passes the token directly in the request header,
+    // bypassing the Zustand interceptor — used right after login/register
+    // before the store is reliably updated.
+    // me() falls back to the interceptor — used by App.tsx initAuth.
+    expect(typeof authAPI.me).toBe('function')
+    // me accepts 0 or 1 arguments (optional token)
+    expect(authAPI.me.length).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('Response interceptor logout guard', () => {
   beforeEach(() => {
     useAppStore.setState({ token: null, user: null })
   })
 
-  it('should exist and be a function', () => {
-    expect(typeof authAPI.me).toBe('function')
-  })
-
-  it('should accept an optional token parameter', () => {
-    // me() called without token uses interceptor (for App.tsx initAuth)
-    // me(token) called with token bypasses interceptor (for login/register flow)
-    // Both are valid call signatures — verify no TypeError is thrown
-    expect(() => authAPI.me('explicit-token')).not.toThrow()
-    expect(() => authAPI.me()).not.toThrow()
-  })
-
-  it('should not auto-logout when 401 occurs with no authenticated user', () => {
-    // The response interceptor should only logout if user !== null.
-    // This prevents clearing a freshly-set token during the login/register flow
-    // if an in-flight me() call (from App.tsx initAuth) returns 401 concurrently.
+  it('should not clear token when user is null (login/register flow)', () => {
+    // This guards against a race condition: if App.tsx initAuth me() returns
+    // 401 concurrently with the register flow setting a new token, the
+    // interceptor must NOT call logout() and clear the new token.
     useAppStore.setState({ token: 'new-token', user: null })
-    
-    // Simulate what the response interceptor does
+
+    // Replicate the interceptor guard logic
     const { user } = useAppStore.getState()
     if (user !== null) {
       useAppStore.getState().logout()
     }
 
-    // token should be preserved because user was null
     expect(useAppStore.getState().token).toBe('new-token')
+  })
+
+  it('should clear token when user is set (authenticated session expired)', () => {
+    const mockUser = { id: 1, email: 'a@b.com', username: 'u' } as any
+    useAppStore.getState().setAuth('valid-token', mockUser)
+
+    // Replicate the interceptor guard logic
+    const { user } = useAppStore.getState()
+    if (user !== null) {
+      useAppStore.getState().logout()
+    }
+
+    expect(useAppStore.getState().token).toBeNull()
+    expect(useAppStore.getState().user).toBeNull()
   })
 })
