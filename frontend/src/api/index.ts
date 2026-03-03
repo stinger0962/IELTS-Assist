@@ -19,11 +19,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors — only auto-logout when user is already authenticated
+// (prevents clearing a freshly-set token during the login/register flow)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && useAppStore.getState().user !== null) {
       useAppStore.getState().logout();
     }
     return Promise.reject(error);
@@ -32,13 +33,16 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  login: (email: string, password: string) => 
+  login: (email: string, password: string) =>
     api.post('/auth/login', new URLSearchParams({ username: email, password }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     }),
   register: (data: { email: string; username: string; password: string; full_name?: string }) =>
     api.post('/auth/register', data),
-  me: () => api.get('/auth/me'),
+  // token param bypasses the interceptor — used right after login before store is updated
+  me: (token?: string) => token
+    ? api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+    : api.get('/auth/me'),
   updateSettings: (data: { target_band?: number; test_date?: string; preferred_language?: string }) =>
     api.put('/auth/settings', data),
 };

@@ -39,6 +39,14 @@ describe('App Store', () => {
     expect(useAppStore.getState().token).toBe('my-token')
   })
 
+  it('should keep user null after setToken — only setAuth sets user', () => {
+    // This is the invariant the response interceptor relies on:
+    // user === null means we are not in an authenticated session,
+    // so 401 errors should NOT trigger auto-logout (e.g. during login/register flow)
+    useAppStore.getState().setToken('some-token')
+    expect(useAppStore.getState().user).toBeNull()
+  })
+
   it('should logout and clear token and user', () => {
     useAppStore.getState().setAuth('test-token', { id: 1, email: 'test@example.com' } as any)
     useAppStore.getState().logout()

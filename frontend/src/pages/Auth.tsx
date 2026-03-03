@@ -20,10 +20,10 @@ export function Login() {
 
     try {
       const tokenRes = await authAPI.login(formData.email, formData.password);
-      useAppStore.getState().setToken(tokenRes.data.access_token);
-      const userRes = await authAPI.me();
-      
-      setAuth(tokenRes.data.access_token, userRes.data);
+      const token = tokenRes.data.access_token;
+      const userRes = await authAPI.me(token);
+
+      setAuth(token, userRes.data);
       
       // Set language preference
       if (userRes.data.preferred_language) {
@@ -194,10 +194,10 @@ export function Register() {
       
       // Auto login after register
       const tokenRes = await authAPI.login(formData.email, formData.password);
-      useAppStore.getState().setToken(tokenRes.data.access_token);
-      const userRes = await authAPI.me();
-      
-      setAuth(tokenRes.data.access_token, userRes.data);
+      const token = tokenRes.data.access_token;
+      const userRes = await authAPI.me(token);
+
+      setAuth(token, userRes.data);
       setLanguage(userRes.data.preferred_language as 'en' | 'zh');
       
       navigate('/');
