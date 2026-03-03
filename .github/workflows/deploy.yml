@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI - Build & Test"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    # Only deploy if CI passed AND it was a push (not PR)
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /root/IELTS-Assist
+            git pull origin main
+            
+            # Backend
+            cd backend
+            source venv/bin/activate
+            pip install -r requirements.txt -q
+            python -m pytest tests/ --tb=short -q
+            systemctl restart ielts-backend
+            
+            # Frontend
+            cd ../frontend
+            npm ci
+            VITE_API_URL=/api npm run build
+            rm -rf /var/www/ielts-assist/*
+            cp -r dist/* /var/www/ielts-assist/
+            chown -R www-data:www-data /var/www/ielts-assist
+            
+            echo "Deploy complete!"
