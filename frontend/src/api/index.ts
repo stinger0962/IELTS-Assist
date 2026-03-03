@@ -62,6 +62,9 @@ export const progressAPI = {
 // Practice API
 export const practiceAPI = {
   getReading: () => api.get('/practice/reading'),
+  getDailyReading: () => api.get('/generate/daily-reading'),
+  generateMore: (count = 1, topic = '') =>
+    api.post(`/generate/generate-more?count=${count}`, { topic_hint: topic }),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),
