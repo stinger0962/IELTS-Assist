@@ -129,3 +129,66 @@ export interface SpeakingTopic {
   part: string;
   question: string;
 }
+
+// AI-generated reading practice types
+export interface TFNGQuestionItem {
+  question_number: number;
+  statement: string;
+}
+
+export interface TFNGAnswerItem {
+  question_number: number;
+  answer: 'TRUE' | 'FALSE' | 'NOT GIVEN';
+}
+
+export interface MCQQuestionItem {
+  question_number: number;
+  question: string;
+  options: Record<string, string>;
+}
+
+export interface MCQAnswerItem {
+  question_number: number;
+  answer: string;
+}
+
+export interface MatchingHeadingItem {
+  id: string;
+  text: string;
+}
+
+export interface MatchingParagraphItem {
+  number: number;
+  title: string;
+}
+
+export interface MatchingHeadingData {
+  headings: MatchingHeadingItem[];
+  paragraphs: MatchingParagraphItem[];
+}
+
+export interface MatchingAnswerItem {
+  paragraph_number: number;
+  answer: string;
+}
+
+export interface AIReadingPractice {
+  meta: {
+    module: string;
+    target_band: number;
+    word_count: number;
+    topic: string;
+  };
+  passage: string;
+  questions: {
+    true_false_not_given: TFNGQuestionItem[];
+    second_type: {
+      type: 'multiple_choice' | 'matching_headings';
+      items: MCQQuestionItem[] | MatchingHeadingData;
+    };
+  };
+  answer_key: {
+    true_false_not_given: TFNGAnswerItem[];
+    second_type_answers: MCQAnswerItem[] | MatchingAnswerItem[];
+  };
+}

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Headphones, Pen, MessageCircle, Check, X } from 'lucide-react';
+import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI } from '../api';
-import type { SkillType, ReadingExercise, ListeningExercise, WritingTopic, SpeakingTopic } from '../types';
-
-type Exercise = ReadingExercise | ListeningExercise;
+import type {
+  SkillType, ListeningExercise, WritingTopic, SpeakingTopic,
+  AIReadingPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
+  MatchingHeadingData, MatchingAnswerItem,
+} from '../types';
 
 const skillConfig = [
   { type: 'reading' as SkillType, icon: BookOpen, color: '#4F46E5' },
@@ -13,72 +15,355 @@ const skillConfig = [
   { type: 'speaking' as SkillType, icon: MessageCircle, color: '#EF4444' },
 ];
 
-function ReadingExerciseView({ exercise, onComplete }: { 
-  exercise: ReadingExercise; 
-  onComplete: (correct: number, total: number, answers: {question: string, userAnswer: string, correctAnswer: string}[]) => void 
+// ─── AI Reading Exercise View ────────────────────────────────────────────────
+
+function AIReadingExerciseView({
+  exercise,
+  onComplete,
+}: {
+  exercise: AIReadingPractice;
+  onComplete: (correct: number, total: number) => void;
+}) {
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
+  const [startTime] = useState(Date.now());
+
+  const tfngQuestions = exercise.questions.true_false_not_given ?? [];
+  const secondType = exercise.questions.second_type;
+  const isMCQ = secondType?.type === 'multiple_choice';
+  const mcqItems = isMCQ ? (secondType.items as MCQQuestionItem[]) : [];
+  const matchingData = !isMCQ ? (secondType.items as MatchingHeadingData) : null;
+
+  const setAnswer = (key: string, value: string) => {
+    if (!submitted) setUserAnswers(prev => ({ ...prev, [key]: value }));
+  };
+
+  const allAnswered = () => {
+    const tfngDone = tfngQuestions.every(q => userAnswers[`tfng_${q.question_number}`]);
+    if (isMCQ) return tfngDone && mcqItems.every(i => userAnswers[`mc_${i.question_number}`]);
+    return tfngDone && (matchingData?.paragraphs ?? []).every(p => userAnswers[`mh_${p.number}`]);
+  };
+
+  const handleSubmit = () => {
+    let correct = 0;
+
+    // Score T/F/NG
+    tfngQuestions.forEach(q => {
+      const userAns = userAnswers[`tfng_${q.question_number}`];
+      const correctAns = (exercise.answer_key.true_false_not_given as TFNGAnswerItem[]).find(
+        a => a.question_number === q.question_number
+      )?.answer;
+      if (userAns === correctAns) {
+        correct++;
+      } else {
+        mistakesAPI.create({
+          skill: 'reading', question: q.statement,
+          user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '',
+          mistake_type: 'true_false_not_given',
+        }).catch(() => {});
+      }
+    });
+
+    // Score second type
+    const secondAnswers = exercise.answer_key.second_type_answers;
+    if (isMCQ) {
+      mcqItems.forEach(item => {
+        const userAns = userAnswers[`mc_${item.question_number}`];
+        const correctAns = (secondAnswers as MCQAnswerItem[]).find(
+          a => a.question_number === item.question_number
+        )?.answer;
+        if (userAns === correctAns) {
+          correct++;
+        } else {
+          const opts = item.options ?? {};
+          mistakesAPI.create({
+            skill: 'reading', question: item.question,
+            user_answer: userAns ? `${userAns}. ${opts[userAns] ?? ''}` : '(unanswered)',
+            correct_answer: correctAns ? `${correctAns}. ${opts[correctAns] ?? ''}` : '',
+            mistake_type: 'multiple_choice',
+          }).catch(() => {});
+        }
+      });
+    } else if (matchingData) {
+      matchingData.paragraphs.forEach(para => {
+        const userAns = userAnswers[`mh_${para.number}`];
+        const correctAns = (secondAnswers as MatchingAnswerItem[]).find(
+          a => a.paragraph_number === para.number
+        )?.answer;
+        if (userAns === correctAns) correct++;
+      });
+    }
+
+    const secondCount = isMCQ ? mcqItems.length : (matchingData?.paragraphs.length ?? 0);
+    const total = tfngQuestions.length + secondCount;
+    setScore({ correct, total });
+    setSubmitted(true);
+
+    const timeTaken = Math.round((Date.now() - startTime) / 1000);
+    const exerciseId = `ai_${exercise.meta.topic.replace(/\s+/g, '_').slice(0, 40)}`;
+    practiceAPI.submit({
+      skill: 'reading', exercise_id: exerciseId,
+      score: total > 0 ? (correct / total) * 100 : 0,
+      total_questions: total, correct_answers: correct, time_taken_seconds: timeTaken,
+    }).catch(() => {});
+    progressAPI.updateProgress({ skill: 'reading', total_questions: total, correct_answers: correct }).catch(() => {});
+  };
+
+  const tfngCorrect = (qNum: number) =>
+    (exercise.answer_key.true_false_not_given as TFNGAnswerItem[]).find(a => a.question_number === qNum)?.answer;
+  const mcqCorrect = (qNum: number) =>
+    (exercise.answer_key.second_type_answers as MCQAnswerItem[]).find(a => a.question_number === qNum)?.answer;
+  const matchingCorrect = (paraNum: number) =>
+    (exercise.answer_key.second_type_answers as MatchingAnswerItem[]).find(a => a.paragraph_number === paraNum)?.answer;
+
+  const paragraphs = exercise.passage.split(/\n\n+/).filter(Boolean);
+
+  return (
+    <div className="ai-exercise-view">
+      {/* Passage */}
+      <div className="exercise-passage">
+        <div className="passage-meta">
+          <h3>{exercise.meta.topic}</h3>
+          <span className="passage-badge">
+            <Sparkles size={12} /> AI · {exercise.meta.word_count} words · Band {exercise.meta.target_band}
+          </span>
+        </div>
+        {paragraphs.map((para, i) => <p key={i} className="passage-para">{para}</p>)}
+      </div>
+
+      {/* Questions panel */}
+      <div className="exercise-questions">
+
+        {/* Section 1: T/F/NG */}
+        <div className="question-section">
+          <h4 className="section-title">Section 1 — True / False / Not Given</h4>
+          {tfngQuestions.map(q => {
+            const key = `tfng_${q.question_number}`;
+            const userAns = userAnswers[key];
+            const correct = tfngCorrect(q.question_number);
+            return (
+              <div key={q.question_number} className={`tfng-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
+                <div className="tfng-statement">
+                  <span className="q-num">{q.question_number}.</span>
+                  <span>{q.statement}</span>
+                </div>
+                <div className="tfng-btns">
+                  {(['TRUE', 'FALSE', 'NOT GIVEN'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      className={`tfng-btn ${userAns === opt ? 'selected' : ''} ${
+                        submitted ? (opt === correct ? 'btn-correct' : userAns === opt ? 'btn-wrong' : '') : ''
+                      }`}
+                      onClick={() => setAnswer(key, opt)}
+                      disabled={submitted}
+                    >
+                      {opt === 'NOT GIVEN' ? 'NG' : opt.charAt(0)}
+                    </button>
+                  ))}
+                </div>
+                {submitted && userAns !== correct && (
+                  <span className="inline-hint">→ {correct}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Section 2: MCQ or Matching */}
+        <div className="question-section">
+          <h4 className="section-title">
+            Section 2 — {isMCQ ? 'Multiple Choice' : 'Matching Headings'}
+          </h4>
+
+          {isMCQ && mcqItems.map(item => {
+            const key = `mc_${item.question_number}`;
+            const userAns = userAnswers[key];
+            const correct = submitted ? mcqCorrect(item.question_number) : undefined;
+            const opts = item.options ?? {};
+            return (
+              <div key={item.question_number} className="mcq-question">
+                <p className="q-text">
+                  <span className="q-num">{item.question_number}.</span> {item.question}
+                </p>
+                <div className="options">
+                  {Object.entries(opts).map(([letter, text]) => (
+                    <button
+                      key={letter}
+                      className={`option ${userAns === letter ? 'selected' : ''} ${
+                        submitted ? (letter === correct ? 'correct' : userAns === letter ? 'incorrect' : '') : ''
+                      }`}
+                      onClick={() => setAnswer(key, letter)}
+                      disabled={submitted}
+                    >
+                      <span className="option-letter">{letter}</span>
+                      <span className="option-text">{text}</span>
+                      {submitted && letter === correct && <Check size={14} className="result-icon correct" />}
+                      {submitted && userAns === letter && letter !== correct && <X size={14} className="result-icon incorrect" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {!isMCQ && matchingData && (
+            <div className="matching-section">
+              <div className="headings-bank">
+                <h5>Headings Bank</h5>
+                {(matchingData.headings ?? []).map(h => (
+                  <div key={h.id} className="heading-entry">
+                    <strong>{h.id}.</strong> {h.text}
+                  </div>
+                ))}
+              </div>
+              {(matchingData.paragraphs ?? []).map(para => {
+                const key = `mh_${para.number}`;
+                const userAns = userAnswers[key];
+                const correct = submitted ? matchingCorrect(para.number) : undefined;
+                return (
+                  <div key={para.number} className={`match-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
+                    <span className="para-label">Paragraph {para.number}: <em>{para.title}</em></span>
+                    <select
+                      value={userAns ?? ''}
+                      onChange={e => setAnswer(key, e.target.value)}
+                      disabled={submitted}
+                      className={submitted ? (userAns === correct ? 'select-correct' : 'select-wrong') : ''}
+                    >
+                      <option value="">Select…</option>
+                      {(matchingData.headings ?? []).map(h => (
+                        <option key={h.id} value={h.id}>{h.id}</option>
+                      ))}
+                    </select>
+                    {submitted && userAns !== correct && (
+                      <span className="inline-hint">→ {correct}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Submit / Finish */}
+        <div className="question-actions">
+          {!submitted ? (
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={!allAnswered()}>
+              Submit Answers
+            </button>
+          ) : (
+            <div className="ai-result-summary">
+              <div className="ai-score">
+                <span className="score-big">{score?.correct}/{score?.total}</span>
+                <span className="score-sub">correct</span>
+              </div>
+              <button className="btn btn-primary" onClick={() => onComplete(score!.correct, score!.total)}>
+                Finish
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        .ai-exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); align-items: start; }
+        @media (max-width: 1024px) { .ai-exercise-view { grid-template-columns: 1fr; } }
+        .passage-meta { margin-bottom: var(--spacing-md); }
+        .passage-meta h3 { margin-bottom: var(--spacing-xs); }
+        .passage-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(79,70,229,0.1); color: var(--color-primary); padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.75rem; }
+        .passage-para { line-height: 1.8; margin-bottom: var(--spacing-md); color: var(--color-text-primary); }
+        .exercise-questions { display: flex; flex-direction: column; gap: var(--spacing-lg); }
+        .question-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
+        .section-title { font-size: 0.8rem; font-weight: 700; color: var(--color-primary); margin-bottom: var(--spacing-md); text-transform: uppercase; letter-spacing: 0.06em; }
+        .tfng-row { margin-bottom: var(--spacing-md); padding: var(--spacing-sm); border-radius: var(--radius-md); }
+        .tfng-row.row-correct { background: rgba(16,185,129,0.08); }
+        .tfng-row.row-wrong { background: rgba(239,68,68,0.08); }
+        .tfng-statement { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); font-size: 0.9rem; line-height: 1.5; }
+        .tfng-btns { display: flex; gap: var(--spacing-xs); align-items: center; }
+        .tfng-btn { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); cursor: pointer; font-size: 0.8rem; font-weight: 700; transition: all var(--transition-fast); }
+        .tfng-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+        .tfng-btn.selected { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+        .tfng-btn.btn-correct { background: var(--color-success) !important; color: white !important; border-color: var(--color-success) !important; }
+        .tfng-btn.btn-wrong { background: var(--color-error) !important; color: white !important; border-color: var(--color-error) !important; }
+        .inline-hint { font-size: 0.8rem; color: var(--color-success); font-weight: 700; margin-left: var(--spacing-sm); }
+        .q-num { font-weight: 700; color: var(--color-primary); min-width: 1.5rem; flex-shrink: 0; }
+        .mcq-question { margin-bottom: var(--spacing-lg); }
+        .q-text { font-size: 0.95rem; margin-bottom: var(--spacing-sm); display: flex; gap: var(--spacing-xs); line-height: 1.5; }
+        .headings-bank { background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
+        .headings-bank h5 { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
+        .heading-entry { font-size: 0.875rem; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
+        .heading-entry:last-child { border-bottom: none; }
+        .match-row { display: flex; align-items: center; gap: var(--spacing-md); padding: var(--spacing-sm); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); flex-wrap: wrap; }
+        .match-row.row-correct { background: rgba(16,185,129,0.08); }
+        .match-row.row-wrong { background: rgba(239,68,68,0.08); }
+        .para-label { flex: 1; font-size: 0.875rem; min-width: 150px; }
+        .para-label em { color: var(--color-text-secondary); }
+        select { padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-primary); font-size: 0.875rem; }
+        select.select-correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
+        select.select-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+        .ai-result-summary { display: flex; align-items: center; gap: var(--spacing-lg); }
+        .ai-score { display: flex; flex-direction: column; }
+        .score-big { font-size: 2rem; font-weight: 700; color: var(--color-primary); line-height: 1; }
+        .score-sub { font-size: 0.75rem; color: var(--color-text-secondary); }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Listening Exercise View ─────────────────────────────────────────────────
+
+function ListeningExerciseView({
+  exercise,
+  onComplete,
+}: {
+  exercise: ListeningExercise;
+  onComplete: (correct: number, total: number) => void;
 }) {
   const { t } = useTranslation();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
-  const [answers, setAnswers] = useState<{question: string, userAnswer: string, correctAnswer: string}[]>([]);
+  const [answers, setAnswers] = useState<{ question: string; userAnswer: string; correctAnswer: string }[]>([]);
   const [startTime] = useState(Date.now());
 
   const question = exercise.questions[currentQuestion];
 
   const handleAnswer = () => {
     if (selectedAnswer === null) return;
-    
     const isCorrect = selectedAnswer === question.answer;
-    const answerRecord = {
+    setAnswers(prev => [...prev, {
       question: question.question,
       userAnswer: question.options[selectedAnswer],
-      correctAnswer: question.options[question.answer]
-    };
-    
-    setAnswers([...answers, answerRecord]);
+      correctAnswer: question.options[question.answer],
+    }]);
     setShowResult(true);
-    
-    // Record mistake if wrong
     if (!isCorrect) {
       mistakesAPI.create({
-        skill: 'reading',
-        question: question.question,
+        skill: 'listening', question: question.question,
         user_answer: question.options[selectedAnswer],
         correct_answer: question.options[question.answer],
-        mistake_type: 'reading_comprehension'
-      });
+        mistake_type: 'listening_comprehension',
+      }).catch(() => {});
     }
   };
 
   const handleNext = () => {
     if (currentQuestion < exercise.questions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
+      setCurrentQuestion(q => q + 1);
       setSelectedAnswer(null);
       setShowResult(false);
     } else {
       const timeTaken = Math.round((Date.now() - startTime) / 1000);
-      const correct = answers.filter(a => a.userAnswer === a.correctAnswer).length + (showResult && selectedAnswer === question.answer ? 1 : 0);
+      const correct = answers.filter(a => a.userAnswer === a.correctAnswer).length +
+        (showResult && selectedAnswer === question.answer ? 1 : 0);
       const total = exercise.questions.length;
-      
-      // Submit results
       practiceAPI.submit({
-        skill: 'reading',
-        exercise_id: exercise.id,
+        skill: 'listening', exercise_id: exercise.id,
         score: (correct / total) * 100,
-        total_questions: total,
-        correct_answers: correct,
-        time_taken_seconds: timeTaken
-      });
-
-      // Update progress
-      progressAPI.updateProgress({
-        skill: 'reading',
-        total_questions: total,
-        correct_answers: correct
-      });
-
-      onComplete(correct, total, answers);
+        total_questions: total, correct_answers: correct, time_taken_seconds: timeTaken,
+      }).catch(() => {});
+      progressAPI.updateProgress({ skill: 'listening', total_questions: total, correct_answers: correct }).catch(() => {});
+      onComplete(correct, total);
     }
   };
 
@@ -86,21 +371,19 @@ function ReadingExerciseView({ exercise, onComplete }: {
     <div className="exercise-view">
       <div className="exercise-passage">
         <h3>{exercise.title}</h3>
-        <p>{exercise.content}</p>
+        <p>{exercise.script}</p>
       </div>
-      
       <div className="exercise-question">
         <div className="question-header">
           <span className="question-number">Question {currentQuestion + 1} of {exercise.questions.length}</span>
         </div>
         <p className="question-text">{question.question}</p>
-        
         <div className="options">
           {question.options.map((option, index) => (
             <button
               key={index}
               className={`option ${selectedAnswer === index ? 'selected' : ''} ${
-                showResult ? (index === question.answer ? 'correct' : (selectedAnswer === index ? 'incorrect' : '')) : ''
+                showResult ? (index === question.answer ? 'correct' : selectedAnswer === index ? 'incorrect' : '') : ''
               }`}
               onClick={() => !showResult && setSelectedAnswer(index)}
               disabled={showResult}
@@ -112,7 +395,6 @@ function ReadingExerciseView({ exercise, onComplete }: {
             </button>
           ))}
         </div>
-        
         <div className="question-actions">
           {!showResult ? (
             <button className="btn btn-primary" onClick={handleAnswer} disabled={selectedAnswer === null}>
@@ -129,35 +411,63 @@ function ReadingExerciseView({ exercise, onComplete }: {
   );
 }
 
+// ─── Main Practice Page ──────────────────────────────────────────────────────
+
 export default function Practice() {
   const { t } = useTranslation();
-  const [, setSelectedSkill] = useState<SkillType | null>(null);
-  const [readingExercises, setReadingExercises] = useState<ReadingExercise[]>([]);
+
+  const [aiReadingExercises, setAIReadingExercises] = useState<AIReadingPractice[]>([]);
+  const [currentAIExercise, setCurrentAIExercise] = useState<AIReadingPractice | null>(null);
+  const [generatingMore, setGeneratingMore] = useState(false);
+  const [readingLoading, setReadingLoading] = useState(false);
+
   const [listeningExercises, setListeningExercises] = useState<ListeningExercise[]>([]);
   const [writingTopics, setWritingTopics] = useState<WritingTopic[]>([]);
   const [speakingTopics, setSpeakingTopics] = useState<SpeakingTopic[]>([]);
-  const [currentExercise, setCurrentExercise] = useState<Exercise | null>(null);
+  const [currentExercise, setCurrentExercise] = useState<ListeningExercise | null>(null);
+
   const [showResult, setShowResult] = useState(false);
-  const [result, setResult] = useState<{correct: number; total: number} | null>(null);
+  const [result, setResult] = useState<{ correct: number; total: number } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadExercises();
-  }, []);
+  useEffect(() => { loadExercises(); }, []);
 
   const loadExercises = async () => {
     setLoading(true);
-    const [reading, listening, writing, speaking] = await Promise.allSettled([
-      practiceAPI.getReading(),
+    setReadingLoading(true);
+
+    const [readingRes, listening, writing, speaking] = await Promise.allSettled([
+      practiceAPI.getDailyReading(),
       practiceAPI.getListening(),
       practiceAPI.getWriting(),
       practiceAPI.getSpeaking(),
     ]);
-    if (reading.status === 'fulfilled') setReadingExercises(Array.isArray(reading.value.data) ? reading.value.data : []);
+
+    if (readingRes.status === 'fulfilled') {
+      const practices = readingRes.value.data?.practices;
+      setAIReadingExercises(Array.isArray(practices) ? practices : []);
+    }
+    setReadingLoading(false);
+
     if (listening.status === 'fulfilled') setListeningExercises(Array.isArray(listening.value.data) ? listening.value.data : []);
     if (writing.status === 'fulfilled') setWritingTopics(Array.isArray(writing.value.data) ? writing.value.data : []);
     if (speaking.status === 'fulfilled') setSpeakingTopics(Array.isArray(speaking.value.data) ? speaking.value.data : []);
     setLoading(false);
+  };
+
+  const handleGenerateMore = async () => {
+    setGeneratingMore(true);
+    try {
+      const res = await practiceAPI.generateMore(1);
+      const newPractices: AIReadingPractice[] = res.data?.practices ?? [];
+      if (newPractices.length > 0) {
+        setAIReadingExercises(prev => [...prev, ...newPractices]);
+      }
+    } catch (err) {
+      console.error('Failed to generate more:', err);
+    } finally {
+      setGeneratingMore(false);
+    }
   };
 
   const handleComplete = (correct: number, total: number) => {
@@ -166,6 +476,7 @@ export default function Practice() {
   };
 
   const handleBack = () => {
+    setCurrentAIExercise(null);
     setCurrentExercise(null);
     setShowResult(false);
     setResult(null);
@@ -177,191 +488,46 @@ export default function Practice() {
     return (
       <div className="practice result-view">
         <div className="result-card">
-          <div className="result-circle" style={{ '--percentage': percentage } as React.CSSProperties}>
+          <div className="result-circle" style={{ '--percentage': `${percentage}%` } as React.CSSProperties}>
             <span className="result-score">{percentage}%</span>
           </div>
           <h2>{t('practice.score')}</h2>
           <p>{result.correct} / {result.total} {t('practice.correct')}</p>
-          <button className="btn btn-primary btn-lg" onClick={handleBack}>
-            Continue
-          </button>
+          <button className="btn btn-primary btn-lg" onClick={handleBack}>Continue</button>
         </div>
         <style>{`
-          .result-view {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 60vh;
-          }
-          .result-card {
-            text-align: center;
-            padding: var(--spacing-2xl);
-          }
-          .result-circle {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: conic-gradient(var(--color-primary) var(--percentage, 0), var(--color-border) 0);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto var(--spacing-lg);
-          }
-          .result-score {
-            font-size: 2.5rem;
-            font-weight: 700;
-          }
+          .result-view { display: flex; justify-content: center; align-items: center; min-height: 60vh; }
+          .result-card { text-align: center; padding: var(--spacing-2xl); }
+          .result-circle { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(var(--color-primary) var(--percentage, 0%), var(--color-border) 0%); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--spacing-lg); }
+          .result-score { font-size: 2.5rem; font-weight: 700; }
         `}</style>
       </div>
     );
   }
 
-  // Exercise view
-  if (currentExercise) {
-    const isReading = 'content' in currentExercise;
+  // AI Reading exercise view
+  if (currentAIExercise) {
     return (
       <div className="practice">
-        <button className="back-btn" onClick={handleBack}>
-          ← Back
-        </button>
-        {isReading ? (
-          <ReadingExerciseView 
-            exercise={currentExercise as ReadingExercise} 
-            onComplete={handleComplete}
-          />
-        ) : (
-          <ReadingExerciseView 
-            exercise={{...currentExercise, content: (currentExercise as ListeningExercise).script} as ReadingExercise}
-            onComplete={handleComplete}
-          />
-        )}
-        <style>{`
-          .back-btn {
-            background: none;
-            border: none;
-            color: var(--color-primary);
-            font-size: 1rem;
-            cursor: pointer;
-            margin-bottom: var(--spacing-md);
-          }
-          .exercise-view {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--spacing-lg);
-          }
-          @media (max-width: 1024px) {
-            .exercise-view {
-              grid-template-columns: 1fr;
-            }
-          }
-          .exercise-passage {
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-lg);
-            padding: var(--spacing-lg);
-          }
-          .exercise-passage h3 {
-            margin-bottom: var(--spacing-md);
-          }
-          .exercise-passage p {
-            line-height: 1.8;
-            color: var(--color-text-primary);
-          }
-          .exercise-question {
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-lg);
-            padding: var(--spacing-lg);
-          }
-          .question-header {
-            margin-bottom: var(--spacing-md);
-          }
-          .question-number {
-            background: var(--color-primary);
-            color: white;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            border-radius: var(--radius-sm);
-            font-size: 0.75rem;
-            font-weight: 600;
-          }
-          .question-text {
-            font-size: 1.125rem;
-            font-weight: 500;
-            margin-bottom: var(--spacing-md);
-            color: var(--color-text-primary);
-          }
-          .options {
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-sm);
-            margin-bottom: var(--spacing-lg);
-          }
-          .option {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-            padding: var(--spacing-md);
-            background: var(--color-background);
-            border: 2px solid var(--color-border);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            text-align: left;
-            transition: all var(--transition-fast);
-          }
-          .option:hover:not(:disabled) {
-            border-color: var(--color-primary);
-          }
-          .option.selected {
-            border-color: var(--color-primary);
-            background: rgba(79, 70, 229, 0.1);
-          }
-          .option.correct {
-            border-color: var(--color-success);
-            background: rgba(16, 185, 129, 0.1);
-          }
-          .option.incorrect {
-            border-color: var(--color-error);
-            background: rgba(239, 68, 68, 0.1);
-          }
-          .option:disabled {
-            cursor: default;
-          }
-          .option-letter {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: var(--color-border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: 0.875rem;
-          }
-          .option.selected .option-letter {
-            background: var(--color-primary);
-            color: white;
-          }
-          .option-text {
-            flex: 1;
-          }
-          .result-icon {
-            margin-left: auto;
-          }
-          .result-icon.correct {
-            color: var(--color-success);
-          }
-          .result-icon.incorrect {
-            color: var(--color-error);
-          }
-          .question-actions {
-            display: flex;
-            justify-content: flex-end;
-          }
-        `}</style>
+        <button className="back-btn" onClick={handleBack}>← Back</button>
+        <AIReadingExerciseView exercise={currentAIExercise} onComplete={handleComplete} />
+        <style>{sharedExerciseStyles}</style>
       </div>
     );
   }
 
+  // Listening exercise view
+  if (currentExercise) {
+    return (
+      <div className="practice">
+        <button className="back-btn" onClick={handleBack}>← Back</button>
+        <ListeningExerciseView exercise={currentExercise} onComplete={handleComplete} />
+        <style>{sharedExerciseStyles}</style>
+      </div>
+    );
+  }
+
+  // Main list
   return (
     <div className="practice">
       <header className="page-header">
@@ -369,31 +535,47 @@ export default function Practice() {
       </header>
 
       {loading ? (
-        <div className="loading">
-          <div className="loading-spinner" />
-        </div>
+        <div className="loading"><div className="loading-spinner" /></div>
       ) : (
         <div className="practice-grid">
-          {/* Reading */}
+
+          {/* Reading — AI */}
           <div className="practice-section">
             <div className="section-header" style={{ borderColor: skillConfig[0].color }}>
               <BookOpen size={24} style={{ color: skillConfig[0].color }} />
               <h2>{t('practice.reading')}</h2>
+              <span className="ai-chip"><Sparkles size={11} /> AI</span>
             </div>
             <div className="exercise-list">
-              {readingExercises.map((exercise) => (
-                <button
-                  key={exercise.id}
-                  className="exercise-item"
-                  onClick={() => {
-                    setSelectedSkill('reading');
-                    setCurrentExercise(exercise);
-                  }}
-                >
-                  <span className="exercise-title">{exercise.title}</span>
-                  <span className="exercise-meta">{exercise.questions.length} questions</span>
-                </button>
-              ))}
+              {readingLoading ? (
+                <div className="generating-msg">
+                  <div className="loading-spinner-sm" />
+                  <span>Generating today's exercises…</span>
+                </div>
+              ) : aiReadingExercises.length === 0 ? (
+                <p className="empty-list">No exercises yet — click Generate below.</p>
+              ) : (
+                aiReadingExercises.map((ex, i) => (
+                  <button key={i} className="exercise-item" onClick={() => setCurrentAIExercise(ex)}>
+                    <span className="exercise-title">{ex.meta.topic}</span>
+                    <span className="exercise-meta">
+                      {ex.meta.word_count}w · {
+                        ex.questions.true_false_not_given.length +
+                        (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type.items.length : 3)
+                      }q
+                    </span>
+                  </button>
+                ))
+              )}
+              <button
+                className="generate-more-btn"
+                onClick={handleGenerateMore}
+                disabled={generatingMore}
+              >
+                {generatingMore
+                  ? <><div className="loading-spinner-sm" /> Generating…</>
+                  : <><RefreshCw size={13} /> Generate More</>}
+              </button>
             </div>
           </div>
 
@@ -404,15 +586,8 @@ export default function Practice() {
               <h2>{t('practice.listening')}</h2>
             </div>
             <div className="exercise-list">
-              {listeningExercises.map((exercise) => (
-                <button
-                  key={exercise.id}
-                  className="exercise-item"
-                  onClick={() => {
-                    setSelectedSkill('listening');
-                    setCurrentExercise(exercise);
-                  }}
-                >
+              {listeningExercises.map(exercise => (
+                <button key={exercise.id} className="exercise-item" onClick={() => setCurrentExercise(exercise)}>
                   <span className="exercise-title">{exercise.title}</span>
                   <span className="exercise-meta">{exercise.questions.length} questions</span>
                 </button>
@@ -427,14 +602,8 @@ export default function Practice() {
               <h2>{t('practice.writing')}</h2>
             </div>
             <div className="exercise-list">
-              {writingTopics.map((topic) => (
-                <button
-                  key={topic.id}
-                  className="exercise-item"
-                  onClick={() => {
-                    alert(`Writing Topic:\n\n${topic.question}`);
-                  }}
-                >
+              {writingTopics.map(topic => (
+                <button key={topic.id} className="exercise-item" onClick={() => alert(`Writing Topic:\n\n${topic.question}`)}>
                   <span className="exercise-title">{topic.type.toUpperCase()}</span>
                   <span className="exercise-meta">Click to view</span>
                 </button>
@@ -449,14 +618,8 @@ export default function Practice() {
               <h2>{t('practice.speaking')}</h2>
             </div>
             <div className="exercise-list">
-              {speakingTopics.map((topic) => (
-                <button
-                  key={topic.id}
-                  className="exercise-item"
-                  onClick={() => {
-                    alert(`Speaking Topic (${topic.part}):\n\n${topic.question}`);
-                  }}
-                >
+              {speakingTopics.map(topic => (
+                <button key={topic.id} className="exercise-item" onClick={() => alert(`Speaking Topic (${topic.part}):\n\n${topic.question}`)}>
                   <span className="exercise-title">{topic.part.toUpperCase()}</span>
                   <span className="exercise-meta">Click to view</span>
                 </button>
@@ -466,98 +629,61 @@ export default function Practice() {
         </div>
       )}
 
-      <style>{`
-        .practice {
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .page-header {
-          margin-bottom: var(--spacing-lg);
-        }
-
-        .practice-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: var(--spacing-lg);
-        }
-
-        @media (max-width: 1024px) {
-          .practice-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .practice-section {
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-        }
-
-        .section-header {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-sm);
-          padding: var(--spacing-md) var(--spacing-lg);
-          border-bottom: 3px solid;
-          background: var(--color-background);
-        }
-
-        .exercise-list {
-          padding: var(--spacing-md);
-          display: flex;
-          flex-direction: column;
-          gap: var(--spacing-sm);
-        }
-
-        .exercise-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: var(--spacing-md);
-          background: var(--color-background);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          text-align: left;
-        }
-
-        .exercise-item:hover {
-          border-color: var(--color-primary);
-          transform: translateX(4px);
-        }
-
-        .exercise-title {
-          font-weight: 500;
-          color: var(--color-text-primary);
-        }
-
-        .exercise-meta {
-          font-size: 0.75rem;
-          color: var(--color-text-secondary);
-        }
-
-        .loading {
-          display: flex;
-          justify-content: center;
-          padding: var(--spacing-2xl);
-        }
-
-        .loading-spinner {
-          width: 40px;
-          height: 40px;
-          border: 3px solid var(--color-border);
-          border-top-color: var(--color-primary);
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <style>{listStyles}</style>
     </div>
   );
 }
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+
+const sharedExerciseStyles = `
+  .back-btn { background: none; border: none; color: var(--color-primary); font-size: 1rem; cursor: pointer; margin-bottom: var(--spacing-md); }
+  .exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
+  @media (max-width: 1024px) { .exercise-view { grid-template-columns: 1fr; } }
+  .exercise-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
+  .exercise-passage h3 { margin-bottom: var(--spacing-md); }
+  .exercise-passage p { line-height: 1.8; color: var(--color-text-primary); }
+  .exercise-question { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
+  .question-header { margin-bottom: var(--spacing-md); }
+  .question-number { background: var(--color-primary); color: white; padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; }
+  .question-text { font-size: 1.125rem; font-weight: 500; margin-bottom: var(--spacing-md); color: var(--color-text-primary); }
+  .options { display: flex; flex-direction: column; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); }
+  .option { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md); background: var(--color-background); border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; transition: all var(--transition-fast); }
+  .option:hover:not(:disabled) { border-color: var(--color-primary); }
+  .option.selected { border-color: var(--color-primary); background: rgba(79,70,229,0.1); }
+  .option.correct { border-color: var(--color-success); background: rgba(16,185,129,0.1); }
+  .option.incorrect { border-color: var(--color-error); background: rgba(239,68,68,0.1); }
+  .option:disabled { cursor: default; }
+  .option-letter { width: 28px; height: 28px; border-radius: 50%; background: var(--color-border); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; flex-shrink: 0; }
+  .option.selected .option-letter { background: var(--color-primary); color: white; }
+  .option-text { flex: 1; }
+  .result-icon { margin-left: auto; }
+  .result-icon.correct { color: var(--color-success); }
+  .result-icon.incorrect { color: var(--color-error); }
+  .question-actions { display: flex; justify-content: flex-end; }
+`;
+
+const listStyles = `
+  .practice { max-width: 1200px; margin: 0 auto; }
+  .page-header { margin-bottom: var(--spacing-lg); }
+  .practice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-lg); }
+  @media (max-width: 1024px) { .practice-grid { grid-template-columns: 1fr; } }
+  .practice-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
+  .section-header { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-lg); border-bottom: 3px solid; background: var(--color-background); }
+  .ai-chip { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; background: rgba(79,70,229,0.12); color: var(--color-primary); padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.7rem; font-weight: 700; }
+  .exercise-list { padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
+  .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); text-align: left; }
+  .exercise-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
+  .exercise-title { font-weight: 500; color: var(--color-text-primary); }
+  .exercise-meta { font-size: 0.75rem; color: var(--color-text-secondary); }
+  .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-md) 0; }
+  .generating-msg { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) 0; font-size: 0.875rem; color: var(--color-text-secondary); }
+  .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-background); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }
+  .generate-more-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+  .generate-more-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .loading { display: flex; justify-content: center; padding: var(--spacing-2xl); }
+  .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
+  .loading-spinner-sm { width: 14px; height: 14px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+`;
