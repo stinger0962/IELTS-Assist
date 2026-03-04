@@ -41,7 +41,7 @@ function AIReadingExerciseView({
 
   const allAnswered = () => {
     const tfngDone = tfngQuestions.every(q => userAnswers[`tfng_${q.question_number}`]);
-    if (isMCQ) return tfngDone && mcqItems.every(i => userAnswers[`mc_${i.question_number}`]);
+    if (isMCQ) return tfngDone && mcqItems.every((_, idx) => userAnswers[`mc_${idx}`]);
     return tfngDone && (matchingData?.paragraphs ?? []).every(p => userAnswers[`mh_${p.number}`]);
   };
 
@@ -68,8 +68,8 @@ function AIReadingExerciseView({
     // Score second type
     const secondAnswers = exercise.answer_key.second_type_answers;
     if (isMCQ) {
-      mcqItems.forEach(item => {
-        const userAns = userAnswers[`mc_${item.question_number}`];
+      mcqItems.forEach((item, idx) => {
+        const userAns = userAnswers[`mc_${idx}`];
         const correctAns = (secondAnswers as MCQAnswerItem[]).find(
           a => a.question_number === item.question_number
         )?.answer;
@@ -184,13 +184,13 @@ function AIReadingExerciseView({
             Section 2 — {isMCQ ? 'Multiple Choice' : 'Matching Headings'}
           </h4>
 
-          {isMCQ && mcqItems.map(item => {
-            const key = `mc_${item.question_number}`;
+          {isMCQ && mcqItems.map((item, idx) => {
+            const key = `mc_${idx}`;
             const userAns = userAnswers[key];
             const correct = submitted ? mcqCorrect(item.question_number) : undefined;
             const opts = item.options ?? {};
             return (
-              <div key={item.question_number} className="mcq-question">
+              <div key={idx} className="mcq-question">
                 <p className="q-text">
                   <span className="q-num">{item.question_number}.</span> {item.question}
                 </p>
@@ -290,7 +290,7 @@ function AIReadingExerciseView({
         .tfng-btns { display: flex; gap: var(--spacing-xs); align-items: center; }
         .tfng-btn { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); cursor: pointer; font-size: 0.8rem; font-weight: 700; transition: all var(--transition-fast); }
         .tfng-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-        .tfng-btn.selected { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+        .tfng-btn.selected { background: var(--color-primary); color: white !important; border-color: var(--color-primary); }
         .tfng-btn.btn-correct { background: var(--color-success) !important; color: white !important; border-color: var(--color-success) !important; }
         .tfng-btn.btn-wrong { background: var(--color-error) !important; color: white !important; border-color: var(--color-error) !important; }
         .inline-hint { font-size: 0.8rem; color: var(--color-success); font-weight: 700; margin-left: var(--spacing-sm); }
