@@ -104,6 +104,7 @@ body {
   .main-content {
     margin-left: 0;
     padding: var(--spacing-md);
+    padding-top: 60px; /* reserve space for fixed mobile menu button */
   }
 }
 

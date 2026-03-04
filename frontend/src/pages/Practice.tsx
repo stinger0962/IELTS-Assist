@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw } from 'lucide-react';
+import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI } from '../api';
 import type {
   SkillType, ListeningExercise, WritingTopic, SpeakingTopic,
@@ -115,7 +115,16 @@ function AIReadingExerciseView({
         scoreVal, correct, total,
       ).catch(() => {});
     }
-    progressAPI.updateProgress({ skill: 'reading', total_questions: total, correct_answers: correct }).catch(() => {});
+    const studyMinutes = Math.max(1, Math.round(timeTaken / 60));
+    const estimatedBand = total > 0 ? Math.round((3.5 + (correct / total) * 4.5) * 2) / 2 : 0;
+    progressAPI.updateProgress({
+      skill: 'reading',
+      total_questions: total,
+      correct_answers: correct,
+      study_time_minutes: studyMinutes,
+      band_score: estimatedBand,
+    }).catch(() => {});
+    progressAPI.createSession({ skill: 'reading', duration_minutes: studyMinutes }).catch(() => {});
   };
 
   const tfngCorrect = (qNum: number) =>
@@ -536,7 +545,7 @@ export default function Practice() {
   if (currentAIExercise) {
     return (
       <div className="practice">
-        <button className="back-btn" onClick={handleBack}>← Back</button>
+        <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <AIReadingExerciseView exercise={currentAIExercise} onComplete={handleComplete} />
         <style>{sharedExerciseStyles}</style>
       </div>
@@ -547,7 +556,7 @@ export default function Practice() {
   if (currentExercise) {
     return (
       <div className="practice">
-        <button className="back-btn" onClick={handleBack}>← Back</button>
+        <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <ListeningExerciseView exercise={currentExercise} onComplete={handleComplete} />
         <style>{sharedExerciseStyles}</style>
       </div>
@@ -676,7 +685,8 @@ export default function Practice() {
 
 
 const sharedExerciseStyles = `
-  .back-btn { background: none; border: none; color: var(--color-primary); font-size: 1rem; cursor: pointer; margin-bottom: var(--spacing-md); }
+  .back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-md); }
+  .back-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
   .exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
   @media (max-width: 1024px) { .exercise-view { grid-template-columns: 1fr; } }
   .exercise-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
