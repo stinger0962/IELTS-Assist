@@ -32,6 +32,7 @@ class User(Base):
     mistakes = relationship("Mistake", back_populates="user", cascade="all, delete-orphan")
     practice_results = relationship("PracticeResult", back_populates="user", cascade="all, delete-orphan")
     goals = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
+    user_practices = relationship("UserPractice", back_populates="user", cascade="all, delete-orphan")
 
 class UserProgress(Base):
     __tablename__ = "user_progress"
@@ -137,11 +138,31 @@ class Goal(Base):
 
 class GeneratedPractice(Base):
     __tablename__ = "generated_practices"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     skill = Column(String(50), nullable=False)  # reading, listening, etc.
     topic = Column(String(255), nullable=True)
     content = Column(Text, nullable=False)  # JSON content of the practice
     is_validated = Column(Boolean, default=False)
     generated_date = Column(DateTime, server_default=func.now())
-    used_date = Column(DateTime, nullable=True)  # When user started this practice
+    used_date = Column(DateTime, nullable=True)  # deprecated — kept for backwards compat
+
+    user_practices = relationship("UserPractice", back_populates="practice")
+
+
+class UserPractice(Base):
+    """Per-user tracking of which exercises have been dealt and submitted."""
+    __tablename__ = "user_practices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    practice_id = Column(Integer, ForeignKey("generated_practices.id"), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())       # when card was dealt
+    submitted_at = Column(DateTime, nullable=True)                 # null = active card
+    user_answers = Column(Text, nullable=True)                     # JSON — future Mistakes area
+    score = Column(Float, nullable=True)
+    correct_count = Column(Integer, nullable=True)
+    total_questions = Column(Integer, nullable=True)
+
+    user = relationship("User", back_populates="user_practices")
+    practice = relationship("GeneratedPractice", back_populates="user_practices")

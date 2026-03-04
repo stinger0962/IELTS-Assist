@@ -1,13 +1,30 @@
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, generate, progress, practice, mistakes, topics, goals
+from app.routers import auth, generate, goals, mistakes, practice, progress, topics
+from app.routers.generate import daily_generate
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(daily_generate, CronTrigger(hour=0, minute=0), id="daily_generate")
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="IELTS Preparation Assistant API"
+    description="IELTS Preparation Assistant API",
+    lifespan=lifespan,
 )
 
 # CORS

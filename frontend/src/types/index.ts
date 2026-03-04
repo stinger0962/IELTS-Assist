@@ -173,6 +173,7 @@ export interface MatchingAnswerItem {
 }
 
 export interface AIReadingPractice {
+  practice_db_id?: number;  // injected by backend when dealt to user
   meta: {
     module: string;
     target_band: number;

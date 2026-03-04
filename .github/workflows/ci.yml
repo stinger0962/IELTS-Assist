@@ -45,6 +45,7 @@ jobs:
         env:
           DATABASE_URL: sqlite:///test.db
           OPENROUTER_API_KEY: test-key-not-real
+          OPENAI_API_KEY: test-key-not-real
         run: |
           python -m pytest tests/ -v --tb=short
 

@@ -102,11 +102,19 @@ function AIReadingExerciseView({
 
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
     const exerciseId = `ai_${exercise.meta.topic.replace(/\s+/g, '_').slice(0, 40)}`;
+    const scoreVal = total > 0 ? (correct / total) * 100 : 0;
     practiceAPI.submit({
       skill: 'reading', exercise_id: exerciseId,
-      score: total > 0 ? (correct / total) * 100 : 0,
+      score: scoreVal,
       total_questions: total, correct_answers: correct, time_taken_seconds: timeTaken,
     }).catch(() => {});
+    if (exercise.practice_db_id) {
+      practiceAPI.submitAIReading(
+        exercise.practice_db_id,
+        JSON.stringify(userAnswers),
+        scoreVal, correct, total,
+      ).catch(() => {});
+    }
     progressAPI.updateProgress({ skill: 'reading', total_questions: total, correct_answers: correct }).catch(() => {});
   };
 
@@ -419,6 +427,7 @@ export default function Practice() {
   const [aiReadingExercises, setAIReadingExercises] = useState<AIReadingPractice[]>([]);
   const [currentAIExercise, setCurrentAIExercise] = useState<AIReadingPractice | null>(null);
   const [generatingMore, setGeneratingMore] = useState(false);
+  const [poolEmpty, setPoolEmpty] = useState(false);
   const [readingLoading, setReadingLoading] = useState(false);
 
   const [listeningExercises, setListeningExercises] = useState<ListeningExercise[]>([]);
@@ -432,22 +441,29 @@ export default function Practice() {
 
   useEffect(() => { loadExercises(); }, []);
 
+  const loadAIReadingExercises = async () => {
+    setReadingLoading(true);
+    try {
+      const res = await practiceAPI.getDailyReading();
+      const practices = res.data?.practices;
+      setAIReadingExercises(Array.isArray(practices) ? practices : []);
+      setPoolEmpty(false);
+    } catch {
+      // keep existing list
+    } finally {
+      setReadingLoading(false);
+    }
+  };
+
   const loadExercises = async () => {
     setLoading(true);
-    setReadingLoading(true);
+    loadAIReadingExercises();
 
-    const [readingRes, listening, writing, speaking] = await Promise.allSettled([
-      practiceAPI.getDailyReading(),
+    const [listening, writing, speaking] = await Promise.allSettled([
       practiceAPI.getListening(),
       practiceAPI.getWriting(),
       practiceAPI.getSpeaking(),
     ]);
-
-    if (readingRes.status === 'fulfilled') {
-      const practices = readingRes.value.data?.practices;
-      setAIReadingExercises(Array.isArray(practices) ? practices : []);
-    }
-    setReadingLoading(false);
 
     if (listening.status === 'fulfilled') setListeningExercises(Array.isArray(listening.value.data) ? listening.value.data : []);
     if (writing.status === 'fulfilled') setWritingTopics(Array.isArray(writing.value.data) ? writing.value.data : []);
@@ -455,13 +471,23 @@ export default function Practice() {
     setLoading(false);
   };
 
+  const handleSelectAIExercise = (ex: AIReadingPractice) => {
+    setCurrentAIExercise(ex);
+    practiceAPI.triggerReplenish().catch(() => {});
+  };
+
   const handleGenerateMore = async () => {
     setGeneratingMore(true);
     try {
-      const res = await practiceAPI.generateMore(1);
-      const newPractices: AIReadingPractice[] = res.data?.practices ?? [];
-      if (newPractices.length > 0) {
-        setAIReadingExercises(prev => [...prev, ...newPractices]);
+      const res = await practiceAPI.generateMore();
+      if (res.data?.pool_empty) {
+        setPoolEmpty(true);
+      } else {
+        const newPractices: AIReadingPractice[] = res.data?.practices ?? [];
+        if (newPractices.length > 0) {
+          setAIReadingExercises(prev => [...prev, ...newPractices]);
+          setPoolEmpty(false);
+        }
       }
     } catch (err) {
       console.error('Failed to generate more:', err);
@@ -480,6 +506,7 @@ export default function Practice() {
     setCurrentExercise(null);
     setShowResult(false);
     setResult(null);
+    loadAIReadingExercises();
   };
 
   // Result screen
@@ -556,7 +583,7 @@ export default function Practice() {
                 <p className="empty-list">No exercises yet — click Generate below.</p>
               ) : (
                 aiReadingExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => setCurrentAIExercise(ex)}>
+                  <button key={i} className="exercise-item" onClick={() => handleSelectAIExercise(ex)}>
                     <span className="exercise-title">{ex.meta.topic}</span>
                     <span className="exercise-meta">
                       {ex.meta.word_count}w · {
@@ -567,15 +594,26 @@ export default function Practice() {
                   </button>
                 ))
               )}
-              <button
-                className="generate-more-btn"
-                onClick={handleGenerateMore}
-                disabled={generatingMore}
-              >
-                {generatingMore
-                  ? <><div className="loading-spinner-sm" /> Generating…</>
-                  : <><RefreshCw size={13} /> Generate More</>}
-              </button>
+              {aiReadingExercises.length < 3 && (
+                poolEmpty ? (
+                  <div className="pool-empty-msg">
+                    <span>Next exercise generating in background (~2 min)</span>
+                    <button className="retry-link" onClick={handleGenerateMore} disabled={generatingMore}>
+                      {generatingMore ? 'Checking…' : 'Retry'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="generate-more-btn"
+                    onClick={handleGenerateMore}
+                    disabled={generatingMore}
+                  >
+                    {generatingMore
+                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
+                      : <><RefreshCw size={13} /> Generate More</>}
+                  </button>
+                )
+              )}
             </div>
           </div>
 
@@ -682,6 +720,9 @@ const listStyles = `
   .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-background); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }
   .generate-more-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
   .generate-more-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .pool-empty-msg { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-sm) var(--spacing-md); background: rgba(245,158,11,0.08); border: 1px dashed rgba(245,158,11,0.4); border-radius: var(--radius-md); font-size: 0.8rem; color: var(--color-text-secondary); gap: var(--spacing-sm); }
+  .retry-link { background: none; border: none; color: var(--color-primary); font-size: 0.8rem; cursor: pointer; padding: 0; text-decoration: underline; }
+  .retry-link:disabled { opacity: 0.6; cursor: not-allowed; }
   .loading { display: flex; justify-content: center; padding: var(--spacing-2xl); }
   .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
   .loading-spinner-sm { width: 14px; height: 14px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0; }

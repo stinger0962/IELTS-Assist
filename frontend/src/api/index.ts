@@ -71,8 +71,22 @@ export const progressAPI = {
 export const practiceAPI = {
   getReading: () => api.get('/practice/reading'),
   getDailyReading: () => api.get('/generate/daily-reading'),
-  generateMore: (count = 1, topic = '') =>
-    api.post(`/generate/generate-more?count=${count}`, { topic_hint: topic }),
+  generateMore: () => api.post('/generate/generate-more'),
+  triggerReplenish: () => api.post('/generate/trigger-replenish'),
+  submitAIReading: (
+    practiceId: number,
+    userAnswers: string,
+    score: number,
+    correctCount: number,
+    totalQuestions: number,
+  ) => api.post('/generate/submit-ai-reading', {
+    practice_id: practiceId,
+    user_answers: userAnswers,
+    score,
+    correct_count: correctCount,
+    total_questions: totalQuestions,
+  }),
+  getPoolStatus: () => api.get('/generate/pool-status'),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),
