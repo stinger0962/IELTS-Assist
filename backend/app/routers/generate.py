@@ -27,7 +27,7 @@ def _active_cards(user_id: int, db: Session) -> list:
     ).all()
 
 
-def _available_for_user(user_id: int, db: Session, limit: int = None):
+def _available_for_user(user_id: int, db: Session, limit: int = None, exclude_topics: list = None):
     """Global pool practices not yet dealt to this user."""
     served = db.query(UserPractice.practice_id).filter(
         UserPractice.user_id == user_id
@@ -40,6 +40,10 @@ def _available_for_user(user_id: int, db: Session, limit: int = None):
         )
         .order_by(GeneratedPractice.generated_date.asc())
     )
+    if exclude_topics:
+        filtered = [t for t in exclude_topics if t]
+        if filtered:
+            q = q.filter(~GeneratedPractice.topic.in_(filtered))
     return q.limit(limit).all() if limit else q.all()
 
 
@@ -58,8 +62,17 @@ def _replenish(user_id: int) -> None:
         if needed <= 0:
             return
         logger.info(f"Replenishing pool: generating {needed} exercise(s) for user {user_id}")
+        recent = (
+            db.query(GeneratedPractice.topic)
+            .filter(GeneratedPractice.skill == "reading", GeneratedPractice.topic.isnot(None))
+            .order_by(GeneratedPractice.generated_date.desc())
+            .limit(15)
+            .all()
+        )
+        avoid_list = [r[0] for r in recent if r[0]]
+        topic_hint = f"avoid: {', '.join(avoid_list)}" if avoid_list else ""
         for _ in range(needed):
-            practice = practice_generator.generate_practice()
+            practice = practice_generator.generate_practice(topic_hint)
             if practice:
                 db.add(GeneratedPractice(
                     skill="reading",
@@ -114,7 +127,12 @@ def get_daily_reading(
 
     slots_needed = MAX_ACTIVE_CARDS - len(practices)
     if slots_needed > 0:
-        new_gps = _available_for_user(current_user.id, db, limit=slots_needed)
+        active_topics = [
+            db.get(GeneratedPractice, up.practice_id).topic
+            for up in active
+            if db.get(GeneratedPractice, up.practice_id) and db.get(GeneratedPractice, up.practice_id).topic
+        ]
+        new_gps = _available_for_user(current_user.id, db, limit=slots_needed, exclude_topics=active_topics)
         for gp in new_gps:
             db.add(UserPractice(user_id=current_user.id, practice_id=gp.id))
             practices.append(_with_db_id(gp))
@@ -132,10 +150,16 @@ def generate_more(
     current_user: User = Depends(get_current_user),
 ):
     """Pop 1 practice from pool instantly. Returns pool_empty if none available."""
-    if len(_active_cards(current_user.id, db)) >= MAX_ACTIVE_CARDS:
+    active_cards = _active_cards(current_user.id, db)
+    if len(active_cards) >= MAX_ACTIVE_CARDS:
         return {"practices": [], "at_capacity": True}
 
-    available = _available_for_user(current_user.id, db, limit=1)
+    active_topics = [
+        db.get(GeneratedPractice, up.practice_id).topic
+        for up in active_cards
+        if db.get(GeneratedPractice, up.practice_id) and db.get(GeneratedPractice, up.practice_id).topic
+    ]
+    available = _available_for_user(current_user.id, db, limit=1, exclude_topics=active_topics)
     if not available:
         background_tasks.add_task(_replenish, current_user.id)
         return {"practices": [], "pool_empty": True}

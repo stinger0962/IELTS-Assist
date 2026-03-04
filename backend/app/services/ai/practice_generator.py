@@ -20,15 +20,135 @@ CRITICAL RULES:
 Generation Context:
 - Date: {date}
 - Random Seed: {seed}
-- Optional Topic Hint: {topic_hint}
+- Recently Used Topics (AVOID these): {topic_hint}
 
-Use the random seed to influence topic choice, setting, names, numerical data,
-sub-arguments, and distractor patterns.
+Use the random seed to drive ALL four selection steps below.
+If "Recently Used Topics" lists any topics, do NOT choose them — pick something different.
 
-If Topic Hint is blank, randomly select an academic-style topic such as:
-urban planning, environmental policy, behavioural psychology, education systems,
-workplace productivity, digital privacy, public health trends, renewable energy
-adoption, migration patterns, language development, or scientific research methodology.
+--------------------------------------------------
+
+STEP 1 — SELECT ONE MAIN TOPIC
+
+Use the seed to pick exactly ONE topic from the pool below.
+Do NOT repeat any topic listed in "Recently Used Topics" above.
+
+TOPIC POOL (100 topics):
+
+Urban & Infrastructure:
+  1. Urban heat island effects, 2. Smart city planning,
+  3. Public transportation policy, 4. Affordable housing strategies,
+  5. Green roof implementation, 6. Pedestrian-friendly city design,
+  7. Urban waste management systems, 8. Disaster-resilient infrastructure,
+  9. Coastal city flood defenses, 10. Mixed-use development models
+
+Environment & Sustainability:
+  11. Rewilding initiatives, 12. Ocean plastic mitigation,
+  13. Carbon offset programs, 14. Sustainable agriculture models,
+  15. Soil degradation research, 16. Deforestation monitoring,
+  17. Biodiversity corridors, 18. Urban tree canopy impact,
+  19. Water conservation technologies, 20. Climate migration patterns
+
+Psychology & Behavioural Science:
+  21. Habit formation research, 22. Decision fatigue theory,
+  23. Social conformity experiments, 24. Risk perception studies,
+  25. Memory retention techniques, 26. Emotional regulation strategies,
+  27. Attention span in the digital age, 28. Motivation in workplace settings,
+  29. Cognitive bias in policymaking, 30. Group dynamics research
+
+Education Systems:
+  31. Online vs traditional learning, 32. Assessment reform policies,
+  33. Early childhood literacy, 34. Bilingual education models,
+  35. Teacher training reforms, 36. Educational technology adoption,
+  37. Standardized testing debates, 38. Lifelong learning initiatives,
+  39. STEM curriculum development, 40. Academic performance inequality
+
+Workplace & Economics:
+  41. Remote work productivity, 42. Gig economy regulation,
+  43. Workplace automation, 44. Corporate sustainability reporting,
+  45. Organizational leadership styles, 46. Employee well-being programs,
+  47. Small business resilience, 48. Innovation management theory,
+  49. Gender pay gap studies, 50. Economic impact of tourism
+
+Technology & Society:
+  51. Data privacy regulations, 52. Artificial intelligence ethics,
+  53. Social media misinformation, 54. Digital divide research,
+  55. Cybersecurity awareness, 56. Biometric authentication systems,
+  57. Smart home technology adoption, 58. E-commerce consumer behavior,
+  59. Algorithmic bias, 60. Virtual reality in education
+
+Public Health & Medicine:
+  61. Vaccination outreach strategies, 62. Mental health stigma reduction,
+  63. Aging population challenges, 64. Preventative healthcare models,
+  65. Urban air pollution health impact, 66. Nutritional policy reforms,
+  67. Sleep research findings, 68. Workplace stress interventions,
+  69. Community fitness initiatives, 70. Telemedicine expansion
+
+Science & Research:
+  71. Citizen science projects, 72. Interdisciplinary research models,
+  73. Research funding allocation, 74. Scientific peer review systems,
+  75. Space exploration funding debates, 76. Renewable battery innovation,
+  77. Water purification breakthroughs, 78. Agricultural biotechnology,
+  79. Wildlife tracking technology, 80. Archaeological excavation methods
+
+Society & Culture:
+  81. Language preservation efforts, 82. Cultural heritage tourism,
+  83. Migration integration policies, 84. Aging rural communities,
+  85. Urban youth subcultures, 86. Volunteerism trends,
+  87. Public art programs, 88. Community gardening projects,
+  89. Media influence on public opinion, 90. Cultural adaptation in global cities
+
+Policy & Governance:
+  91. Evidence-based policymaking, 92. Public consultation models,
+  93. Regulatory reform processes, 94. International climate agreements,
+  95. Local governance innovation, 96. Transparency initiatives,
+  97. Disaster response coordination, 98. Education funding distribution,
+  99. Public housing allocation, 100. Infrastructure investment priorities
+
+--------------------------------------------------
+
+STEP 2 — SELECT ONE SUB-ANGLE
+
+Use the seed to pick ONE analytical angle:
+  Policy impact | Economic consequences | Psychological effects |
+  Technological influence | Social implications | Environmental impact |
+  Historical evolution | Ethical debate | Implementation challenges |
+  Long-term projections
+
+--------------------------------------------------
+
+STEP 3 — SELECT ONE REGION CONTEXT
+
+Use the seed to pick ONE region:
+  Mid-sized European city | Rapidly developing Asian country |
+  Coastal North American city | Rural South American community |
+  Sub-Saharan African urban center | Australian regional town |
+  Scandinavian capital | Middle Eastern metropolitan area |
+  Small island nation | Fictional but realistic global setting
+
+--------------------------------------------------
+
+STEP 4 — SELECT ONE RESEARCH FRAMING
+
+Use the seed to pick ONE research element:
+  University-led longitudinal study | Government policy trial |
+  NGO field report | Private sector pilot program |
+  Comparative international study | Survey of 1,000+ participants |
+  Historical data analysis | Experimental lab-based study |
+  Community-based intervention | Meta-analysis of previous findings
+
+--------------------------------------------------
+
+Combine all 4 selections into a coherent academic passage.
+Example: "Urban heat island effects" + "Policy impact" + "Mid-sized European city"
++ "University-led longitudinal study" → a passage about a university study
+examining how urban heat island policy reduced temperatures in a mid-sized
+European city.
+
+If the combination feels too abstract or too narrow, regenerate internally
+until you reach an appropriate, Band 6.5-suitable combination.
+
+The "topic" field in the JSON meta should be the MAIN TOPIC name from Step 1
+(e.g. "Urban heat island effects"), not a sentence.
 
 --------------------------------------------------
 
@@ -186,7 +306,7 @@ class PracticeGenerator:
         prompt = GENERATION_PROMPT.format(
             date=date,
             seed=seed,
-            topic_hint=topic_hint or "random"
+            topic_hint=topic_hint or "none — choose freely from the 100-topic pool"
         )
         try:
             response = self.client.chat.completions.create(
