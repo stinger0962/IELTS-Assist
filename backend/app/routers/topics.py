@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.models.models import Topic, TopicReview, SkillType, User
@@ -49,9 +49,9 @@ def init_sample_topics(db: Session):
 
 @router.get("", response_model=List[TopicResponse])
 def get_topics(
-    skill: SkillType = None,
-    category: str = None,
-    difficulty: int = None,
+    skill: Optional[str] = None,
+    category: Optional[str] = None,
+    difficulty: Optional[int] = None,
     limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -61,12 +61,15 @@ def get_topics(
         (Topic.user_id == current_user.id) | (Topic.user_id.is_(None))
     )
     if skill:
-        query = query.filter(Topic.skill == skill)
+        try:
+            query = query.filter(Topic.skill == SkillType(skill))
+        except ValueError:
+            pass
     if category:
         query = query.filter(Topic.category == category)
     if difficulty:
         query = query.filter(Topic.difficulty == difficulty)
-    return query.order_by(Topic.created_at.desc()).limit(limit).all()
+    return query.order_by(Topic.id.desc()).limit(limit).all()
 
 
 @router.post("", response_model=TopicResponse)
@@ -131,7 +134,7 @@ def add_to_deck(
 
 @router.get("/flashcards", response_model=List[FlashCardResponse])
 def get_flashcards(
-    skill: SkillType = None,
+    skill: Optional[str] = None,
     limit: int = 10,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -153,7 +156,10 @@ def get_flashcards(
         )
     )
     if skill:
-        query = query.filter(Topic.skill == skill)
+        try:
+            query = query.filter(Topic.skill == SkillType(skill))
+        except ValueError:
+            pass
 
     topics = query.limit(limit).all()
 
@@ -181,19 +187,18 @@ def get_due_count(
     """Return count of flashcards due for review today."""
     now = datetime.utcnow()
     count = (
-        db.query(Topic)
-        .join(
+        db.query(func.count(Topic.id))
+        .outerjoin(
             TopicReview,
             and_(Topic.id == TopicReview.topic_id, TopicReview.user_id == current_user.id),
-            isouter=True,
         )
         .filter(
             (Topic.user_id == current_user.id) | (Topic.user_id.is_(None)),
             (TopicReview.next_review.is_(None)) | (TopicReview.next_review <= now),
         )
-        .count()
+        .scalar()
     )
-    return {"due": count}
+    return {"due": count or 0}
 
 
 @router.post("/review")

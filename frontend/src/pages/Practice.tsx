@@ -34,6 +34,7 @@ function AIReadingExerciseView({
   const [vocabPopupPos, setVocabPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [showVocabModal, setShowVocabModal] = useState(false);
   const [vocabDef, setVocabDef] = useState('');
+  const [vocabDefLoading, setVocabDefLoading] = useState(false);
   const [vocabSaving, setVocabSaving] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
 
@@ -165,13 +166,33 @@ function AIReadingExerciseView({
 
   const paragraphs = exercise.passage.split(/\n\n+/).filter(Boolean);
 
-  const handlePassageMouseUp = () => {
+  const openVocabModal = async (word: string) => {
+    setVocabWord(word);
+    setVocabDef('');
+    setVocabDefLoading(true);
+    setShowVocabModal(true);
+    setVocabPopupPos(null);
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const def = data?.[0]?.meanings?.[0]?.definitions?.[0]?.definition ?? '';
+        if (def) setVocabDef(def);
+      }
+    } catch { /* ignore — user can type manually */ } finally {
+      setVocabDefLoading(false);
+    }
+  };
+
+  const handleTextSelect = () => {
     const sel = window.getSelection();
     const text = sel?.toString().trim() ?? '';
     if (text.length >= 2 && text.length <= 60 && !text.includes('\n')) {
-      const rect = sel!.getRangeAt(0).getBoundingClientRect();
-      setVocabWord(text);
-      setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.top + window.scrollY });
+      try {
+        const rect = sel!.getRangeAt(0).getBoundingClientRect();
+        setVocabWord(text);
+        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.top + window.scrollY });
+      } catch { /* ignore */ }
     } else {
       setVocabPopupPos(null);
     }
@@ -198,7 +219,8 @@ function AIReadingExerciseView({
         <div
           className="vocab-popup"
           style={{ left: vocabPopupPos.x, top: vocabPopupPos.y - 38 }}
-          onMouseDown={e => { e.preventDefault(); setShowVocabModal(true); setVocabPopupPos(null); }}
+          onMouseDown={e => { e.preventDefault(); openVocabModal(vocabWord); }}
+          onTouchEnd={e => { e.preventDefault(); openVocabModal(vocabWord); }}
         >
           + Add to Vocab
         </div>
@@ -211,18 +233,21 @@ function AIReadingExerciseView({
             <h4>Add to Vocabulary</h4>
             <label className="vocab-label">Word</label>
             <input className="vocab-input" value={vocabWord} onChange={e => setVocabWord(e.target.value)} />
-            <label className="vocab-label">Definition <span className="vocab-required">*</span></label>
+            <label className="vocab-label">
+              Definition
+              {vocabDefLoading && <span className="vocab-loading-hint"> · Looking up…</span>}
+            </label>
             <textarea
               className="vocab-textarea"
-              placeholder="Enter a definition…"
+              placeholder={vocabDefLoading ? 'Looking up definition…' : 'Edit or enter a definition…'}
               value={vocabDef}
               onChange={e => setVocabDef(e.target.value)}
               rows={3}
-              autoFocus
+              autoFocus={!vocabDefLoading}
             />
             <div className="vocab-modal-actions">
               <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || !vocabDef.trim()}>
+              <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || vocabDefLoading || !vocabDef.trim()}>
                 {vocabSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
@@ -234,7 +259,7 @@ function AIReadingExerciseView({
       {vocabSaved && <div className="vocab-toast">✓ Added to vocabulary!</div>}
 
       {/* Passage */}
-      <div className="exercise-passage" onMouseUp={handlePassageMouseUp}>
+      <div className="exercise-passage" onMouseUp={handleTextSelect} onTouchEnd={handleTextSelect}>
         <div className="passage-meta">
           <h3>{exercise.meta.topic}</h3>
           <span className="passage-badge">
@@ -443,6 +468,7 @@ function AIReadingExerciseView({
         .vocab-input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; box-sizing: border-box; }
         .vocab-textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; resize: vertical; box-sizing: border-box; font-family: inherit; }
         .vocab-modal-actions { display: flex; justify-content: flex-end; gap: var(--spacing-sm); margin-top: var(--spacing-md); }
+        .vocab-loading-hint { color: var(--color-text-secondary); font-weight: 400; font-style: italic; }
         .vocab-toast { position: fixed; bottom: 24px; right: 24px; background: var(--color-success); color: white; padding: 10px 18px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 600; z-index: 1002; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
       `}</style>
     </div>

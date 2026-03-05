@@ -30,6 +30,23 @@ export default function Topics() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newWord, setNewWord] = useState({ title: '', content: '', example: '' });
   const [saving, setSaving] = useState(false);
+  const [dictLoading, setDictLoading] = useState(false);
+
+  const lookupWord = async (word: string) => {
+    if (!word.trim() || newWord.content.trim()) return; // don't overwrite user's own text
+    setDictLoading(true);
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`);
+      if (res.ok) {
+        const data = await res.json();
+        const def = data?.[0]?.meanings?.[0]?.definitions?.[0]?.definition ?? '';
+        const ex = data?.[0]?.meanings?.[0]?.definitions?.[0]?.example ?? '';
+        if (def) setNewWord(p => ({ ...p, content: p.content || def, example: p.example || ex }));
+      }
+    } catch { /* ignore */ } finally {
+      setDictLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadTopics();
@@ -224,16 +241,20 @@ export default function Topics() {
                   placeholder="e.g. mitigate"
                   value={newWord.title}
                   onChange={e => setNewWord(p => ({ ...p, title: e.target.value }))}
+                  onBlur={e => lookupWord(e.target.value)}
                   required
                   autoFocus
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Definition *</label>
+                <label className="form-label">
+                  Definition *
+                  {dictLoading && <span className="dict-loading"> · Looking up…</span>}
+                </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. to reduce severity of something"
+                  placeholder={dictLoading ? 'Looking up definition…' : 'Auto-filled or type manually'}
                   value={newWord.content}
                   onChange={e => setNewWord(p => ({ ...p, content: e.target.value }))}
                   required
@@ -244,7 +265,7 @@ export default function Topics() {
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Measures were taken to mitigate..."
+                  placeholder="Auto-filled or type manually"
                   value={newWord.example}
                   onChange={e => setNewWord(p => ({ ...p, example: e.target.value }))}
                 />
@@ -369,6 +390,7 @@ const listStyles = `
   @media (max-width: 768px) { .form-row-3 { grid-template-columns: 1fr; } }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
   .form-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); }
+  .dict-loading { font-weight: 400; font-style: italic; color: var(--color-text-secondary); opacity: 0.7; }
   .form-actions-right { display: flex; justify-content: flex-end; gap: var(--spacing-sm); margin-top: var(--spacing-md); }
   .filters { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }
   .filter-select { padding: var(--spacing-sm) var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text-primary); }
