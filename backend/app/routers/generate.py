@@ -232,6 +232,62 @@ def pool_status(
 
 # ── admin / seed ──────────────────────────────────────────────────────────────
 
+class WrongAnswerItem(BaseModel):
+    key: str           # e.g. "tfng_3" or "mc_1" — used to map response back to UI
+    question_type: str # "T/F/NG" or "MCQ"
+    question: str
+    user_answer: str
+    correct_answer: str
+
+
+class ExplainMistakesBody(BaseModel):
+    passage: str
+    wrong_answers: list[WrongAnswerItem]
+
+
+@router.post("/explain-mistakes")
+def explain_mistakes(
+    body: ExplainMistakesBody,
+    current_user: User = Depends(get_current_user),
+):
+    """Return a one-sentence explanation for each wrong answer, grounded in the passage."""
+    if not body.wrong_answers:
+        return {"explanations": []}
+
+    lines = []
+    for i, w in enumerate(body.wrong_answers, 1):
+        lines.append(
+            f'{i}. key="{w.key}" | Type: {w.question_type} | '
+            f'Question: "{w.question}" | You answered: {w.user_answer} | Correct: {w.correct_answer}'
+        )
+
+    prompt = (
+        "You are an IELTS reading teacher. Using only the passage below, write ONE concise sentence "
+        "for each wrong answer explaining why the correct answer is right. "
+        "Be specific — quote or paraphrase the relevant part of the passage.\n\n"
+        f"PASSAGE:\n{body.passage[:3500]}\n\n"
+        "WRONG ANSWERS:\n" + "\n".join(lines) + "\n\n"
+        'Return ONLY a JSON array: [{"key": "...", "explanation": "..."}, ...]'
+    )
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+        return {"explanations": data}
+    except Exception as e:
+        logger.error(f"Explain mistakes error: {e}")
+        return {"explanations": []}
+
+
 class ExtractVocabularyBody(BaseModel):
     passage: str
     topic: str

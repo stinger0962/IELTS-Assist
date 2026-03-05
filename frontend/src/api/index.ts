@@ -89,6 +89,10 @@ export const practiceAPI = {
   getPoolStatus: () => api.get('/generate/pool-status'),
   extractVocabulary: (passage: string, topic: string) =>
     api.post('/generate/extract-vocabulary', { passage, topic }),
+  explainMistakes: (passage: string, wrong_answers: Array<{
+    key: string; question_type: string; question: string;
+    user_answer: string; correct_answer: string;
+  }>) => api.post('/generate/explain-mistakes', { passage, wrong_answers }),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),

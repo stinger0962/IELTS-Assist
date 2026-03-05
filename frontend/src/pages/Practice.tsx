@@ -28,6 +28,8 @@ function AIReadingExerciseView({
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
   const [startTime] = useState(Date.now());
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [explanationsLoading, setExplanationsLoading] = useState(false);
 
   const tfngQuestions = exercise.questions.true_false_not_given ?? [];
   const secondType = exercise.questions.second_type;
@@ -47,16 +49,20 @@ function AIReadingExerciseView({
 
   const handleSubmit = () => {
     let correct = 0;
+    type WrongEntry = { key: string; question_type: string; question: string; user_answer: string; correct_answer: string };
+    const wrongAnswers: WrongEntry[] = [];
 
     // Score T/F/NG
     tfngQuestions.forEach(q => {
-      const userAns = userAnswers[`tfng_${q.question_number}`];
+      const key = `tfng_${q.question_number}`;
+      const userAns = userAnswers[key];
       const correctAns = (exercise.answer_key.true_false_not_given as TFNGAnswerItem[]).find(
         a => a.question_number === q.question_number
       )?.answer;
       if (userAns === correctAns) {
         correct++;
       } else {
+        wrongAnswers.push({ key, question_type: 'T/F/NG', question: q.statement, user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '' });
         mistakesAPI.create({
           skill: 'reading', question: q.statement,
           user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '',
@@ -69,7 +75,8 @@ function AIReadingExerciseView({
     const secondAnswers = exercise.answer_key.second_type_answers;
     if (isMCQ) {
       mcqItems.forEach((item, idx) => {
-        const userAns = userAnswers[`mc_${idx}`];
+        const key = `mc_${idx}`;
+        const userAns = userAnswers[key];
         const correctAns = (secondAnswers as MCQAnswerItem[]).find(
           a => a.question_number === item.question_number
         )?.answer;
@@ -77,10 +84,12 @@ function AIReadingExerciseView({
           correct++;
         } else {
           const opts = item.options ?? {};
+          const userLabel = userAns ? `${userAns}. ${opts[userAns] ?? ''}` : '(unanswered)';
+          const correctLabel = correctAns ? `${correctAns}. ${opts[correctAns] ?? ''}` : '';
+          wrongAnswers.push({ key, question_type: 'MCQ', question: item.question, user_answer: userLabel, correct_answer: correctLabel });
           mistakesAPI.create({
             skill: 'reading', question: item.question,
-            user_answer: userAns ? `${userAns}. ${opts[userAns] ?? ''}` : '(unanswered)',
-            correct_answer: correctAns ? `${correctAns}. ${opts[correctAns] ?? ''}` : '',
+            user_answer: userLabel, correct_answer: correctLabel,
             mistake_type: 'multiple_choice',
           }).catch(() => {});
         }
@@ -126,6 +135,19 @@ function AIReadingExerciseView({
     }).catch(() => {});
     progressAPI.createSession({ skill: 'reading', duration_minutes: studyMinutes }).catch(() => {});
     practiceAPI.extractVocabulary(exercise.passage, exercise.meta.topic).catch(() => {});
+
+    // Fetch one-sentence explanations for every wrong answer
+    if (wrongAnswers.length > 0) {
+      setExplanationsLoading(true);
+      practiceAPI.explainMistakes(exercise.passage, wrongAnswers)
+        .then(res => {
+          const map: Record<string, string> = {};
+          for (const item of (res.data.explanations ?? [])) map[item.key] = item.explanation;
+          setExplanations(map);
+        })
+        .catch(() => {})
+        .finally(() => setExplanationsLoading(false));
+    }
   };
 
   const tfngCorrect = (qNum: number) =>
@@ -183,6 +205,13 @@ function AIReadingExerciseView({
                 {submitted && userAns !== correct && (
                   <span className="inline-hint">→ {correct}</span>
                 )}
+                {submitted && userAns !== correct && (
+                  explanations[key]
+                    ? <p className="answer-explanation">{explanations[key]}</p>
+                    : explanationsLoading
+                      ? <p className="explanation-loading">Explaining…</p>
+                      : null
+                )}
               </div>
             );
           })}
@@ -221,6 +250,13 @@ function AIReadingExerciseView({
                     </button>
                   ))}
                 </div>
+                {submitted && userAns !== correct && (
+                  explanations[key]
+                    ? <p className="answer-explanation">{explanations[key]}</p>
+                    : explanationsLoading
+                      ? <p className="explanation-loading">Explaining…</p>
+                      : null
+                )}
               </div>
             );
           })}
@@ -323,6 +359,8 @@ function AIReadingExerciseView({
         .ai-score { display: flex; flex-direction: column; }
         .score-big { font-size: 2rem; font-weight: 700; color: var(--color-primary); line-height: 1; }
         .score-sub { font-size: 0.75rem; color: var(--color-text-secondary); }
+        .answer-explanation { font-size: 0.8rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); line-height: 1.5; border-left: 2px solid var(--color-primary); padding-left: var(--spacing-sm); }
+        .explanation-loading { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); opacity: 0.7; }
       `}</style>
     </div>
   );
