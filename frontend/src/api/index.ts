@@ -132,6 +132,10 @@ export const topicsAPI = {
     api.get(`/topics?skill=${skill || ''}&category=${category || ''}&limit=${limit}`),
   getFlashcards: (skill?: string, limit = 10) =>
     api.get(`/topics/flashcards?skill=${skill || ''}&limit=${limit}`),
+  getDueCount: () => api.get('/topics/due-count'),
+  create: (data: { title: string; content: string; example?: string; skill?: string; category?: string }) =>
+    api.post('/topics', data),
+  addToDeck: (topicId: number) => api.post(`/topics/${topicId}/add-to-deck`),
   review: (topicId: number, quality: number) =>
     api.post('/topics/review', { topic_id: topicId, quality }),
 };

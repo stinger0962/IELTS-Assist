@@ -64,6 +64,7 @@ export interface PracticeResult {
 
 export interface Topic {
   id: number;
+  user_id?: number | null;
   skill: SkillType;
   category: string;
   title: string;

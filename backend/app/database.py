@@ -36,6 +36,7 @@ def init_db():
     migrations = [
         "ALTER TABLE goals ADD COLUMN skill VARCHAR(50)",
         "ALTER TABLE goals ADD COLUMN goal_type VARCHAR(50) DEFAULT 'daily_minutes'",
+        "ALTER TABLE topics ADD COLUMN user_id INTEGER",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

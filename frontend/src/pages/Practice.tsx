@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft } from 'lucide-react';
-import { practiceAPI, progressAPI, mistakesAPI } from '../api';
+import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
 import type {
   SkillType, ListeningExercise, WritingTopic, SpeakingTopic,
   AIReadingPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
@@ -30,6 +30,12 @@ function AIReadingExerciseView({
   const [startTime] = useState(Date.now());
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explanationsLoading, setExplanationsLoading] = useState(false);
+  const [vocabWord, setVocabWord] = useState('');
+  const [vocabPopupPos, setVocabPopupPos] = useState<{ x: number; y: number } | null>(null);
+  const [showVocabModal, setShowVocabModal] = useState(false);
+  const [vocabDef, setVocabDef] = useState('');
+  const [vocabSaving, setVocabSaving] = useState(false);
+  const [vocabSaved, setVocabSaved] = useState(false);
 
   const tfngQuestions = exercise.questions.true_false_not_given ?? [];
   const secondType = exercise.questions.second_type;
@@ -159,10 +165,76 @@ function AIReadingExerciseView({
 
   const paragraphs = exercise.passage.split(/\n\n+/).filter(Boolean);
 
+  const handlePassageMouseUp = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? '';
+    if (text.length >= 2 && text.length <= 60 && !text.includes('\n')) {
+      const rect = sel!.getRangeAt(0).getBoundingClientRect();
+      setVocabWord(text);
+      setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.top + window.scrollY });
+    } else {
+      setVocabPopupPos(null);
+    }
+  };
+
+  const handleSaveVocab = async () => {
+    if (!vocabDef.trim()) return;
+    setVocabSaving(true);
+    try {
+      await topicsAPI.create({ title: vocabWord, content: vocabDef, skill: 'reading', category: 'vocabulary' });
+      setVocabSaved(true);
+      setShowVocabModal(false);
+      setVocabDef('');
+      setTimeout(() => setVocabSaved(false), 3000);
+    } catch { /* ignore */ } finally {
+      setVocabSaving(false);
+    }
+  };
+
   return (
     <div className="ai-exercise-view">
+      {/* Floating "Add to Vocab" popup on text selection */}
+      {vocabPopupPos && !showVocabModal && (
+        <div
+          className="vocab-popup"
+          style={{ left: vocabPopupPos.x, top: vocabPopupPos.y - 38 }}
+          onMouseDown={e => { e.preventDefault(); setShowVocabModal(true); setVocabPopupPos(null); }}
+        >
+          + Add to Vocab
+        </div>
+      )}
+
+      {/* Vocab modal */}
+      {showVocabModal && (
+        <div className="vocab-modal-overlay" onClick={() => { setShowVocabModal(false); setVocabDef(''); }}>
+          <div className="vocab-modal" onClick={e => e.stopPropagation()}>
+            <h4>Add to Vocabulary</h4>
+            <label className="vocab-label">Word</label>
+            <input className="vocab-input" value={vocabWord} onChange={e => setVocabWord(e.target.value)} />
+            <label className="vocab-label">Definition <span className="vocab-required">*</span></label>
+            <textarea
+              className="vocab-textarea"
+              placeholder="Enter a definition…"
+              value={vocabDef}
+              onChange={e => setVocabDef(e.target.value)}
+              rows={3}
+              autoFocus
+            />
+            <div className="vocab-modal-actions">
+              <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || !vocabDef.trim()}>
+                {vocabSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vocab saved toast */}
+      {vocabSaved && <div className="vocab-toast">✓ Added to vocabulary!</div>}
+
       {/* Passage */}
-      <div className="exercise-passage">
+      <div className="exercise-passage" onMouseUp={handlePassageMouseUp}>
         <div className="passage-meta">
           <h3>{exercise.meta.topic}</h3>
           <span className="passage-badge">
@@ -361,6 +433,17 @@ function AIReadingExerciseView({
         .score-sub { font-size: 0.75rem; color: var(--color-text-secondary); }
         .answer-explanation { font-size: 0.8rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); line-height: 1.5; border-left: 2px solid var(--color-primary); padding-left: var(--spacing-sm); }
         .explanation-loading { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); opacity: 0.7; }
+        .vocab-popup { position: fixed; transform: translateX(-50%); background: var(--color-primary); color: white; padding: 5px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600; cursor: pointer; z-index: 1000; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .vocab-popup:hover { background: #4338ca; }
+        .vocab-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; display: flex; align-items: center; justify-content: center; }
+        .vocab-modal { background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-lg); width: min(400px, 90vw); box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+        .vocab-modal h4 { margin-bottom: var(--spacing-md); font-size: 1rem; }
+        .vocab-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; margin-top: var(--spacing-sm); }
+        .vocab-required { color: var(--color-error); }
+        .vocab-input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; box-sizing: border-box; }
+        .vocab-textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; resize: vertical; box-sizing: border-box; font-family: inherit; }
+        .vocab-modal-actions { display: flex; justify-content: flex-end; gap: var(--spacing-sm); margin-top: var(--spacing-md); }
+        .vocab-toast { position: fixed; bottom: 24px; right: 24px; background: var(--color-success); color: white; padding: 10px 18px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 600; z-index: 1002; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
       `}</style>
     </div>
   );

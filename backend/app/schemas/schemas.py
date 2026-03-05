@@ -132,8 +132,16 @@ class PracticeResultResponse(BaseModel):
         from_attributes = True
 
 # Topic Schemas
+class TopicCreate(BaseModel):
+    title: str
+    content: str
+    example: Optional[str] = None
+    skill: str = "reading"
+    category: str = "vocabulary"
+
 class TopicResponse(BaseModel):
     id: int
+    user_id: Optional[int]
     skill: SkillType
     category: str
     title: str
@@ -142,7 +150,7 @@ class TopicResponse(BaseModel):
     example: Optional[str]
     example_zh: Optional[str]
     difficulty: int
-    
+
     class Config:
         from_attributes = True
 

@@ -97,8 +97,9 @@ class PracticeResult(Base):
 
 class Topic(Base):
     __tablename__ = "topics"
-    
+
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # NULL = global/curated
     skill = Column(Enum(SkillType), nullable=False)
     category = Column(String(100), nullable=False)  # vocabulary, grammar, topic_idea, etc.
     title = Column(String(255), nullable=False)

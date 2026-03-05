@@ -334,6 +334,7 @@ def extract_vocabulary(
         if not title or not content:
             continue
         db.add(Topic(
+            user_id=current_user.id,
             skill="reading",
             category="vocabulary",
             title=title,
