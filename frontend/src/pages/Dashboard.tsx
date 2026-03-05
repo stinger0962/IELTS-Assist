@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Flame, 
-  Clock, 
-  Target, 
-  BookOpen, 
-  AlertCircle, 
+import {
+  Flame,
+  Clock,
+  Target,
+  BookOpen,
+  AlertCircle,
   GraduationCap,
   TrendingUp
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { progressAPI, goalsAPI } from '../api';
-import type { ProgressStats, StudySession, Goal, UserProgress } from '../types';
+import type { GoalTodayProgressItem, ProgressStats, StudySession, Goal, UserProgress } from '../types';
 
 function ProgressRing({ progress, size = 80, strokeWidth = 8 }: { progress: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -68,13 +68,20 @@ function StatCard({ icon: Icon, label, value, subValue, color }: {
   );
 }
 
-function SkillCard({ progress, skillName }: {
+function SkillCard({ progress, skillName, goalProgress }: {
   progress: UserProgress;
   skillName: string;
+  goalProgress?: GoalTodayProgressItem;
 }) {
-  const percentage = progress.total_exercises > 0 
-    ? Math.round((progress.correct_answers / progress.total_exercises) * 100)
-    : 0;
+  const hasGoal = goalProgress && goalProgress.target > 0;
+  const ringPct = hasGoal
+    ? Math.min(100, Math.round((goalProgress.actual / goalProgress.target) * 100))
+    : progress.total_exercises > 0
+      ? Math.round((progress.correct_answers / progress.total_exercises) * 100)
+      : 0;
+  const ringLabel = hasGoal
+    ? `${goalProgress.actual}/${goalProgress.target}`
+    : `${ringPct}%`;
 
   return (
     <div className="skill-card">
@@ -83,7 +90,10 @@ function SkillCard({ progress, skillName }: {
         <span className="skill-band">{progress.band_score.toFixed(1)}</span>
       </div>
       <div className="skill-progress">
-        <ProgressRing progress={percentage} size={60} strokeWidth={6} />
+        <div className="ring-wrapper">
+          <ProgressRing progress={ringPct} size={60} strokeWidth={6} />
+          <span className="ring-sub">{hasGoal ? 'today' : 'accuracy'}</span>
+        </div>
         <div className="skill-stats">
           <div className="skill-stat">
             <span className="skill-stat-value">{progress.total_exercises}</span>
@@ -93,6 +103,12 @@ function SkillCard({ progress, skillName }: {
             <span className="skill-stat-value">{progress.study_time_minutes}</span>
             <span className="skill-stat-label">Min</span>
           </div>
+          {hasGoal && (
+            <div className="skill-stat">
+              <span className="skill-stat-value" style={{ color: 'var(--color-primary)', fontSize: '0.875rem' }}>{ringLabel}</span>
+              <span className="skill-stat-label">min</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -106,6 +122,7 @@ export default function Dashboard() {
   const [stats, setLocalStats] = useState<ProgressStats | null>(null);
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [todayProgress, setTodayProgress] = useState<GoalTodayProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -114,15 +131,17 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [statsRes, sessionsRes, goalsRes] = await Promise.all([
+      const [statsRes, sessionsRes, goalsRes, progressRes] = await Promise.all([
         progressAPI.getStats(),
         progressAPI.getSessions(5),
         goalsAPI.getAll(false, 5),
+        goalsAPI.getTodayProgress(),
       ]);
       setLocalStats(statsRes.data);
       setStats(statsRes.data);
       setSessions(sessionsRes.data);
       setGoals(goalsRes.data);
+      setTodayProgress(progressRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -190,6 +209,7 @@ export default function Dashboard() {
               key={p.id}
               progress={p}
               skillName={getSkillName(p.skill)}
+              goalProgress={todayProgress.find(tp => tp.skill === p.skill && tp.goal_type === 'daily_minutes')}
             />
           ))}
         </div>
@@ -250,17 +270,37 @@ export default function Dashboard() {
           <div className="card">
             {goals.length > 0 ? (
               <div className="goals-list">
-                {goals.map((goal) => (
-                  <div key={goal.id} className="goal-item">
-                    <Target size={16} />
-                    <span className="goal-title">{goal.title}</span>
-                    {goal.target_date && (
-                      <span className="goal-date">
-                        {new Date(goal.target_date).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {goals.map((goal) => {
+                  const prog = todayProgress.find(p => p.goal_id === goal.id);
+                  const pct = prog && prog.target > 0
+                    ? Math.min(100, Math.round((prog.actual / prog.target) * 100))
+                    : null;
+                  return (
+                    <div key={goal.id} className="goal-item">
+                      <Target size={16} />
+                      <div className="goal-item-content">
+                        <span className="goal-title">{goal.title}</span>
+                        {pct !== null && (
+                          <div className="goal-mini-progress">
+                            <div className="goal-mini-track">
+                              <div className="goal-mini-fill" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="goal-mini-label">
+                              {prog!.goal_type === 'weekly_exercises'
+                                ? `${prog!.actual}/${prog!.target} this week`
+                                : `${prog!.actual}/${prog!.target} min today`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {goal.target_date && (
+                        <span className="goal-date">
+                          {new Date(goal.target_date).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="empty-state">{t('goals.noGoals')}</p>
@@ -505,7 +545,7 @@ export default function Dashboard() {
 
         .goal-item {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: var(--spacing-sm);
           padding: var(--spacing-sm);
           border-radius: var(--radius-md);
@@ -515,17 +555,67 @@ export default function Dashboard() {
 
         .goal-item svg {
           color: var(--color-accent);
+          margin-top: 2px;
+          flex-shrink: 0;
+        }
+
+        .goal-item-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
 
         .goal-title {
-          flex: 1;
           font-weight: 500;
           font-size: 0.875rem;
+        }
+
+        .goal-mini-progress {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+        }
+
+        .goal-mini-track {
+          flex: 1;
+          height: 4px;
+          background: var(--color-border);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+
+        .goal-mini-fill {
+          height: 100%;
+          background: var(--color-primary);
+          border-radius: 2px;
+        }
+
+        .goal-mini-label {
+          font-size: 0.7rem;
+          color: var(--color-text-secondary);
+          white-space: nowrap;
         }
 
         .goal-date {
           font-size: 0.75rem;
           color: var(--color-text-secondary);
+          white-space: nowrap;
+        }
+
+        .ring-wrapper {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .ring-sub {
+          position: absolute;
+          bottom: -14px;
+          font-size: 0.6rem;
+          color: var(--color-text-secondary);
+          white-space: nowrap;
         }
 
         .empty-state {

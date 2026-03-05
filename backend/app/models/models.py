@@ -131,6 +131,8 @@ class Goal(Base):
     description = Column(Text, nullable=True)
     target_date = Column(DateTime, nullable=True)
     target_minutes = Column(Integer, nullable=True)
+    skill = Column(String(50), nullable=True)          # reading|listening|writing|speaking
+    goal_type = Column(String(50), default="daily_minutes")  # daily_minutes|weekly_exercises
     completed = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
     

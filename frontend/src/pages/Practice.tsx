@@ -125,6 +125,7 @@ function AIReadingExerciseView({
       band_score: estimatedBand,
     }).catch(() => {});
     progressAPI.createSession({ skill: 'reading', duration_minutes: studyMinutes }).catch(() => {});
+    practiceAPI.extractVocabulary(exercise.passage, exercise.meta.topic).catch(() => {});
   };
 
   const tfngCorrect = (qNum: number) =>
@@ -685,8 +686,8 @@ export default function Practice() {
 
 
 const sharedExerciseStyles = `
-  .back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-md); }
-  .back-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+  .back-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--color-text-secondary); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-md); }
+  .back-btn:hover { color: var(--color-primary); background: rgba(79,70,229,0.06); }
   .exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
   @media (max-width: 1024px) { .exercise-view { grid-template-columns: 1fr; } }
   .exercise-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }

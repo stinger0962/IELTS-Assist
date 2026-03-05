@@ -3,11 +3,13 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from openai import OpenAI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal, get_db
-from app.models.models import GeneratedPractice, User, UserPractice
+from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.ai.practice_generator import practice_generator
 from app.services.auth import get_current_user
 
@@ -229,6 +231,65 @@ def pool_status(
 
 
 # ── admin / seed ──────────────────────────────────────────────────────────────
+
+class ExtractVocabularyBody(BaseModel):
+    passage: str
+    topic: str
+
+
+@router.post("/extract-vocabulary")
+def extract_vocabulary(
+    body: ExtractVocabularyBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Extract 3-5 IELTS academic vocabulary items from a reading passage and save as Topics."""
+    prompt = (
+        "You are an IELTS vocabulary expert. Extract exactly 5 high-value IELTS Academic "
+        "vocabulary words or phrases from the passage below. "
+        "Return a JSON array of objects with keys: title, content (definition in simple English), example (a new example sentence). "
+        "Return ONLY the JSON array, no extra text.\n\n"
+        f"Topic: {body.topic}\n\nPassage:\n{body.passage[:3000]}"
+    )
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+        items = data if isinstance(data, list) else data.get("items", data.get("words", []))
+    except Exception as e:
+        logger.error(f"Vocabulary extraction error: {e}")
+        return {"extracted": 0}
+
+    count = 0
+    for item in items[:5]:
+        title = item.get("title", "").strip()
+        content = item.get("content", "").strip()
+        example = item.get("example", "").strip()
+        if not title or not content:
+            continue
+        db.add(Topic(
+            skill="reading",
+            category="vocabulary",
+            title=title,
+            content=content,
+            example=example or None,
+            difficulty=3,
+        ))
+        count += 1
+    if count:
+        db.commit()
+    return {"extracted": count}
+
 
 @router.post("/generate-reading")
 def generate_reading_practice(

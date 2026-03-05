@@ -88,8 +88,19 @@ export interface Goal {
   description?: string;
   target_date?: string;
   target_minutes?: number;
+  skill?: string;
+  goal_type?: string;
   completed: boolean;
   created_at: string;
+}
+
+export interface GoalTodayProgressItem {
+  goal_id: number;
+  title: string;
+  skill?: string;
+  goal_type: string;
+  target: number;
+  actual: number;
 }
 
 export interface AuthToken {

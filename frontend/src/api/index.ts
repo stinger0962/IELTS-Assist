@@ -87,6 +87,8 @@ export const practiceAPI = {
     total_questions: totalQuestions,
   }),
   getPoolStatus: () => api.get('/generate/pool-status'),
+  extractVocabulary: (passage: string, topic: string) =>
+    api.post('/generate/extract-vocabulary', { passage, topic }),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),
@@ -137,8 +139,9 @@ export const goalsAPI = {
     if (completed !== undefined) params.set('completed', String(completed));
     return api.get(`/goals?${params}`);
   },
-  create: (data: { title: string; description?: string; target_date?: string; target_minutes?: number }) =>
+  create: (data: { title: string; description?: string; target_date?: string; target_minutes?: number; skill?: string; goal_type?: string }) =>
     api.post('/goals', data),
+  getTodayProgress: () => api.get('/goals/today-progress'),
   update: (id: number, data: { completed?: boolean }) =>
     api.put(`/goals/${id}`, data),
   delete: (id: number) => api.delete(`/goals/${id}`),

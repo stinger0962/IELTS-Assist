@@ -2,24 +2,37 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Target, Plus, Check, Trash2, Calendar } from 'lucide-react';
 import { goalsAPI } from '../api';
-import type { Goal } from '../types';
+import type { Goal, GoalTodayProgressItem } from '../types';
+
+const GOAL_TEMPLATES = [
+  { label: 'Daily Reading Practice', skill: 'reading', goal_type: 'daily_minutes', default_minutes: 30 },
+  { label: 'Daily Listening Practice', skill: 'listening', goal_type: 'daily_minutes', default_minutes: 20 },
+  { label: 'Daily Writing Practice', skill: 'writing', goal_type: 'daily_minutes', default_minutes: 45 },
+  { label: 'Weekly Reading Exercises', skill: 'reading', goal_type: 'weekly_exercises', default_minutes: 5 },
+] as const;
+
+type TemplateIndex = 0 | 1 | 2 | 3;
 
 export default function Goals() {
   const { t } = useTranslation();
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [todayProgress, setTodayProgress] = useState<GoalTodayProgressItem[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [newGoal, setNewGoal] = useState({
-    title: '',
-    description: '',
-    target_date: '',
-    target_minutes: 30,
-  });
+  const [templateIdx, setTemplateIdx] = useState<TemplateIndex>(0);
+  const [targetAmount, setTargetAmount] = useState(30);
+  const [targetDate, setTargetDate] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadGoals();
   }, [filter]);
+
+  useEffect(() => {
+    goalsAPI.getTodayProgress()
+      .then(res => setTodayProgress(res.data))
+      .catch(() => {});
+  }, [goals]);
 
   const loadGoals = async () => {
     setLoading(true);
@@ -34,20 +47,27 @@ export default function Goals() {
     }
   };
 
+  const handleTemplateChange = (idx: TemplateIndex) => {
+    setTemplateIdx(idx);
+    setTargetAmount(GOAL_TEMPLATES[idx].default_minutes);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGoal.title.trim()) return;
-
+    const tpl = GOAL_TEMPLATES[templateIdx];
     try {
       const res = await goalsAPI.create({
-        title: newGoal.title,
-        description: newGoal.description,
-        target_date: newGoal.target_date ? `${newGoal.target_date}T00:00:00` : undefined,
-        target_minutes: newGoal.target_minutes,
+        title: tpl.label,
+        target_date: targetDate ? `${targetDate}T00:00:00` : undefined,
+        target_minutes: targetAmount,
+        skill: tpl.skill,
+        goal_type: tpl.goal_type,
       });
       setGoals([res.data, ...goals]);
       setShowForm(false);
-      setNewGoal({ title: '', description: '', target_date: '', target_minutes: 30 });
+      setTargetDate('');
+      setTemplateIdx(0);
+      setTargetAmount(GOAL_TEMPLATES[0].default_minutes);
     } catch (error) {
       console.error('Failed to create goal:', error);
     }
@@ -72,8 +92,13 @@ export default function Goals() {
     }
   };
 
+  const getProgress = (goal: Goal): GoalTodayProgressItem | undefined =>
+    todayProgress.find(p => p.goal_id === goal.id);
+
   const activeGoals = goals.filter(g => !g.completed);
   const completedGoals = goals.filter(g => g.completed);
+
+  const tpl = GOAL_TEMPLATES[templateIdx];
 
   return (
     <div className="goals-page">
@@ -87,19 +112,19 @@ export default function Goals() {
 
       {/* Filter tabs */}
       <div className="filter-tabs">
-        <button 
+        <button
           className={`tab ${filter === 'all' ? 'active' : ''}`}
           onClick={() => setFilter('all')}
         >
           All ({goals.length})
         </button>
-        <button 
+        <button
           className={`tab ${filter === 'active' ? 'active' : ''}`}
           onClick={() => setFilter('active')}
         >
           {t('goals.active')} ({activeGoals.length})
         </button>
-        <button 
+        <button
           className={`tab ${filter === 'completed' ? 'active' : ''}`}
           onClick={() => setFilter('completed')}
         >
@@ -112,45 +137,38 @@ export default function Goals() {
         <div className="goal-form-card">
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Title</label>
-              <input
-                type="text"
+              <label className="form-label">Goal Type</label>
+              <select
                 className="form-input"
-                value={newGoal.title}
-                onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
-                placeholder="e.g., Practice reading 30 min daily"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Description (optional)</label>
-              <textarea
-                className="form-textarea"
-                value={newGoal.description}
-                onChange={(e) => setNewGoal({ ...newGoal, description: e.target.value })}
-                placeholder="Additional details..."
-                rows={2}
-              />
+                value={templateIdx}
+                onChange={e => handleTemplateChange(Number(e.target.value) as TemplateIndex)}
+              >
+                {GOAL_TEMPLATES.map((tpl, i) => (
+                  <option key={i} value={i}>{tpl.label}</option>
+                ))}
+              </select>
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Target Date</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={newGoal.target_date}
-                  onChange={(e) => setNewGoal({ ...newGoal, target_date: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Minutes/Day</label>
+                <label className="form-label">
+                  {tpl.goal_type === 'weekly_exercises' ? 'Exercises/Week' : 'Minutes/Day'}
+                </label>
                 <input
                   type="number"
                   className="form-input"
-                  value={newGoal.target_minutes}
-                  onChange={(e) => setNewGoal({ ...newGoal, target_minutes: parseInt(e.target.value) })}
-                  min={15}
-                  max={480}
+                  value={targetAmount}
+                  onChange={e => setTargetAmount(parseInt(e.target.value))}
+                  min={1}
+                  max={tpl.goal_type === 'weekly_exercises' ? 50 : 480}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Target Date (optional)</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={targetDate}
+                  onChange={e => setTargetDate(e.target.value)}
                 />
               </div>
             </div>
@@ -180,42 +198,61 @@ export default function Goals() {
         </div>
       ) : (
         <div className="goals-list">
-          {goals.map((goal) => (
-            <div key={goal.id} className={`goal-card ${goal.completed ? 'completed' : ''}`}>
-              <button 
-                className="goal-check"
-                onClick={() => handleToggleComplete(goal)}
-              >
-                {goal.completed ? <Check size={20} /> : <div className="empty-check" />}
-              </button>
-              <div className="goal-content">
-                <h3 className="goal-title">{goal.title}</h3>
-                {goal.description && (
-                  <p className="goal-description">{goal.description}</p>
-                )}
-                <div className="goal-meta">
-                  {goal.target_date && (
-                    <span className="meta-item">
-                      <Calendar size={14} />
-                      {new Date(goal.target_date).toLocaleDateString()}
-                    </span>
+          {goals.map((goal) => {
+            const prog = getProgress(goal);
+            const showProgress = prog && !goal.completed;
+            const progressPct = showProgress ? Math.min(100, Math.round((prog.actual / prog.target) * 100)) : 0;
+            return (
+              <div key={goal.id} className={`goal-card ${goal.completed ? 'completed' : ''}`}>
+                <button
+                  className="goal-check"
+                  onClick={() => handleToggleComplete(goal)}
+                >
+                  {goal.completed ? <Check size={20} /> : <div className="empty-check" />}
+                </button>
+                <div className="goal-content">
+                  <h3 className="goal-title">{goal.title}</h3>
+                  {goal.skill && (
+                    <span className="skill-badge">{goal.skill}</span>
                   )}
-                  {goal.target_minutes && (
-                    <span className="meta-item">
-                      <Target size={14} />
-                      {goal.target_minutes} min/day
-                    </span>
+                  <div className="goal-meta">
+                    {goal.target_date && (
+                      <span className="meta-item">
+                        <Calendar size={14} />
+                        {new Date(goal.target_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    {goal.target_minutes && (
+                      <span className="meta-item">
+                        <Target size={14} />
+                        {goal.goal_type === 'weekly_exercises'
+                          ? `${goal.target_minutes} exercises/week`
+                          : `${goal.target_minutes} min/day`}
+                      </span>
+                    )}
+                  </div>
+                  {showProgress && (
+                    <div className="goal-progress">
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+                      </div>
+                      <span className="progress-label">
+                        {goal.goal_type === 'weekly_exercises'
+                          ? `This week: ${prog.actual}/${prog.target}`
+                          : `Today: ${prog.actual}/${prog.target} min`}
+                      </span>
+                    </div>
                   )}
                 </div>
+                <button
+                  className="goal-delete"
+                  onClick={() => handleDelete(goal.id)}
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
-              <button 
-                className="goal-delete"
-                onClick={() => handleDelete(goal.id)}
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -271,16 +308,6 @@ export default function Goals() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: var(--spacing-md);
-        }
-
-        .form-textarea {
-          width: 100%;
-          padding: var(--spacing-sm) var(--spacing-md);
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          color: var(--color-text-primary);
-          resize: vertical;
         }
 
         .form-actions {
@@ -354,10 +381,17 @@ export default function Goals() {
           margin-bottom: var(--spacing-xs);
         }
 
-        .goal-description {
-          font-size: 0.875rem;
-          color: var(--color-text-secondary);
-          margin-bottom: var(--spacing-sm);
+        .skill-badge {
+          display: inline-block;
+          font-size: 0.7rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 2px 8px;
+          border-radius: var(--radius-full);
+          background: var(--color-primary)20;
+          color: var(--color-primary);
+          margin-bottom: var(--spacing-xs);
         }
 
         .goal-meta {
@@ -365,12 +399,37 @@ export default function Goals() {
           gap: var(--spacing-md);
           font-size: 0.75rem;
           color: var(--color-text-secondary);
+          margin-bottom: var(--spacing-xs);
         }
 
         .meta-item {
           display: flex;
           align-items: center;
           gap: var(--spacing-xs);
+        }
+
+        .goal-progress {
+          margin-top: var(--spacing-xs);
+        }
+
+        .progress-track {
+          height: 4px;
+          background: var(--color-border);
+          border-radius: 2px;
+          overflow: hidden;
+          margin-bottom: 4px;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: var(--color-primary);
+          border-radius: 2px;
+          transition: width var(--transition-fast);
+        }
+
+        .progress-label {
+          font-size: 0.7rem;
+          color: var(--color-text-secondary);
         }
 
         .goal-delete {

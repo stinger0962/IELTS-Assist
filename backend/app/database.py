@@ -30,4 +30,17 @@ def get_db():
 
 def init_db():
     from app.models.models import Base
+    from sqlalchemy import text
     Base.metadata.create_all(bind=engine)
+    # Inline migrations for columns added after initial schema creation
+    migrations = [
+        "ALTER TABLE goals ADD COLUMN skill VARCHAR(50)",
+        "ALTER TABLE goals ADD COLUMN goal_type VARCHAR(50) DEFAULT 'daily_minutes'",
+    ]
+    with engine.connect() as conn:
+        for stmt in migrations:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists

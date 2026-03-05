@@ -163,6 +163,8 @@ class GoalCreate(BaseModel):
     description: Optional[str] = None
     target_date: Optional[datetime] = None
     target_minutes: Optional[int] = None
+    skill: Optional[str] = None
+    goal_type: str = "daily_minutes"
 
 class GoalResponse(BaseModel):
     id: int
@@ -170,14 +172,24 @@ class GoalResponse(BaseModel):
     description: Optional[str]
     target_date: Optional[datetime]
     target_minutes: Optional[int]
+    skill: Optional[str]
+    goal_type: Optional[str]
     completed: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 class GoalUpdate(BaseModel):
     completed: Optional[bool] = None
+
+class GoalTodayProgressItem(BaseModel):
+    goal_id: int
+    title: str
+    skill: Optional[str]
+    goal_type: str
+    target: int
+    actual: int
 
 # Settings Schemas
 class SettingsUpdate(BaseModel):
