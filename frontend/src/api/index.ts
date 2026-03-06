@@ -136,6 +136,7 @@ export const topicsAPI = {
   create: (data: { title: string; content: string; example?: string; skill?: string; category?: string }) =>
     api.post('/topics', data),
   addToDeck: (topicId: number) => api.post(`/topics/${topicId}/add-to-deck`),
+  removeFromDeck: (topicId: number) => api.delete(`/topics/${topicId}/remove-from-deck`),
   review: (topicId: number, quality: number) =>
     api.post('/topics/review', { topic_id: topicId, quality }),
 };

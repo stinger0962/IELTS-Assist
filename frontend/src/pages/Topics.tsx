@@ -156,6 +156,18 @@ export default function Topics() {
     }
   };
 
+  const handleRemoveFromDeck = async (topicId: number) => {
+    try {
+      const res = await topicsAPI.removeFromDeck(topicId);
+      if (res.data.removed) {
+        setAddedIds(prev => { const next = new Set(prev); next.delete(topicId); return next; });
+        topicsAPI.getDueCount().then(r => setDueCount(r.data.due)).catch(() => {});
+      }
+    } catch (error) {
+      console.error('Failed to remove from deck:', error);
+    }
+  };
+
   const categories = ['vocabulary', 'grammar', 'topic_idea'];
   const categoryLabels: Record<string, string> = {
     vocabulary: t('topics.vocabulary'),
@@ -359,9 +371,8 @@ export default function Topics() {
                   </span>
                   <button
                     className={`add-deck-btn ${inDeck ? 'in-deck' : ''}`}
-                    onClick={() => !inDeck && handleAddToDeck(topic.id)}
-                    disabled={inDeck}
-                    title={inDeck ? 'Already in deck' : 'Add to flashcard deck'}
+                    onClick={() => inDeck ? handleRemoveFromDeck(topic.id) : handleAddToDeck(topic.id)}
+                    title={inDeck ? 'Click to remove from deck' : 'Add to flashcard deck'}
                   >
                     {inDeck ? <><Check size={13} /> In Deck</> : <><BookmarkPlus size={13} /> Add to Deck</>}
                   </button>

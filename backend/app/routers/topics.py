@@ -181,6 +181,30 @@ def add_to_deck(
         raise
 
 
+@router.delete("/{topic_id}/remove-from-deck")
+def remove_from_deck(
+    topic_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove a topic from the user's flashcard deck (deletes review record)."""
+    logger.info("remove_from_deck: user=%s topic_id=%s", current_user.id, topic_id)
+    review = db.query(TopicReview).filter(
+        TopicReview.user_id == current_user.id,
+        TopicReview.topic_id == topic_id,
+    ).first()
+    if not review:
+        return {"removed": False}
+    try:
+        db.delete(review)
+        db.commit()
+        return {"removed": True}
+    except Exception:
+        db.rollback()
+        logger.error("remove_from_deck failed:\n%s", traceback.format_exc())
+        raise
+
+
 @router.get("/flashcards", response_model=List[FlashCardResponse])
 def get_flashcards(
     skill: Optional[str] = None,
@@ -191,18 +215,14 @@ def get_flashcards(
     init_sample_topics(db)
     now = datetime.utcnow()
 
-    # Outer join scoped to current user — topics with no review record OR past-due reviews
+    # Inner join — only topics the user has explicitly added to their deck and are due
     query = (
-        db.query(Topic)
+        db.query(Topic, TopicReview)
         .join(
             TopicReview,
             and_(Topic.id == TopicReview.topic_id, TopicReview.user_id == current_user.id),
-            isouter=True,
         )
-        .filter(
-            (Topic.user_id == current_user.id) | (Topic.user_id.is_(None)),
-            (TopicReview.next_review.is_(None)) | (TopicReview.next_review <= now),
-        )
+        .filter(TopicReview.next_review <= now)
     )
     if skill:
         try:
@@ -210,22 +230,17 @@ def get_flashcards(
         except ValueError:
             pass
 
-    topics = query.limit(limit).all()
-
-    results = []
-    for topic in topics:
-        review = db.query(TopicReview).filter(
-            TopicReview.user_id == current_user.id,
-            TopicReview.topic_id == topic.id,
-        ).first()
-        results.append(FlashCardResponse(
+    rows = query.limit(limit).all()
+    return [
+        FlashCardResponse(
             topic=topic,
-            next_review=review.next_review if review else None,
-            ease_factor=review.ease_factor if review else 2.5,
-            interval_days=review.interval_days if review else 1,
-            repetitions=review.repetitions if review else 0,
-        ))
-    return results
+            next_review=review.next_review,
+            ease_factor=review.ease_factor,
+            interval_days=review.interval_days,
+            repetitions=review.repetitions,
+        )
+        for topic, review in rows
+    ]
 
 
 @router.get("/due-count")
@@ -237,14 +252,10 @@ def get_due_count(
     now = datetime.utcnow()
     try:
         count = (
-            db.query(func.count(Topic.id))
-            .outerjoin(
-                TopicReview,
-                and_(Topic.id == TopicReview.topic_id, TopicReview.user_id == current_user.id),
-            )
+            db.query(func.count(TopicReview.id))
             .filter(
-                (Topic.user_id == current_user.id) | (Topic.user_id.is_(None)),
-                (TopicReview.next_review.is_(None)) | (TopicReview.next_review <= now),
+                TopicReview.user_id == current_user.id,
+                TopicReview.next_review <= now,
             )
             .scalar()
         )
