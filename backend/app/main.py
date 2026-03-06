@@ -1,9 +1,18 @@
+import logging
+import traceback
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(name)s %(levelname)s %(message)s',
+)
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.database import init_db
@@ -47,6 +56,12 @@ app.include_router(mistakes.router, prefix=f"{settings.API_PREFIX}/mistakes", ta
 app.include_router(topics.router, prefix=f"{settings.API_PREFIX}/topics", tags=["Topics"])
 app.include_router(generate.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(goals.router, prefix=f"{settings.API_PREFIX}/goals", tags=["Goals"])
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 @app.get("/")
 def root():

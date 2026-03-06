@@ -32,6 +32,12 @@ export default function Topics() {
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
 
+  const resetForm = () => {
+    setNewWord({ title: '', content: '', example: '' });
+    setDictLoading(false);
+    setShowAddForm(false);
+  };
+
   const lookupWord = async (word: string) => {
     if (!word.trim() || newWord.content.trim()) return; // don't overwrite user's own text
     setDictLoading(true);
@@ -39,8 +45,15 @@ export default function Topics() {
       const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`);
       if (res.ok) {
         const data = await res.json();
+        // Use first definition; search all meanings/definitions for an example sentence
         const def = data?.[0]?.meanings?.[0]?.definitions?.[0]?.definition ?? '';
-        const ex = data?.[0]?.meanings?.[0]?.definitions?.[0]?.example ?? '';
+        let ex = '';
+        for (const meaning of (data?.[0]?.meanings ?? [])) {
+          for (const d of (meaning.definitions ?? [])) {
+            if (d.example) { ex = d.example; break; }
+          }
+          if (ex) break;
+        }
         if (def) setNewWord(p => ({ ...p, content: p.content || def, example: p.example || ex }));
       }
     } catch { /* ignore */ } finally {
@@ -110,8 +123,7 @@ export default function Topics() {
       });
       setTopics(prev => [res.data, ...prev]);
       setAddedIds(prev => new Set(prev).add(res.data.id));
-      setNewWord({ title: '', content: '', example: '' });
-      setShowAddForm(false);
+      resetForm();
       setDueCount(d => d + 1);
     } catch (error) {
       console.error('Failed to add word:', error);
@@ -272,7 +284,7 @@ export default function Topics() {
               </div>
             </div>
             <div className="form-actions-right">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={resetForm}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Saving…' : 'Save & Add to Deck'}
               </button>

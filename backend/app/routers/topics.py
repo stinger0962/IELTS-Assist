@@ -1,9 +1,13 @@
+import logging
+import traceback
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models.models import Topic, TopicReview, SkillType, User
@@ -56,20 +60,27 @@ def get_topics(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    init_sample_topics(db)
-    query = db.query(Topic).filter(
-        (Topic.user_id == current_user.id) | (Topic.user_id.is_(None))
-    )
-    if skill:
-        try:
-            query = query.filter(Topic.skill == SkillType(skill))
-        except ValueError:
-            pass
-    if category:
-        query = query.filter(Topic.category == category)
-    if difficulty:
-        query = query.filter(Topic.difficulty == difficulty)
-    return query.order_by(Topic.id.desc()).limit(limit).all()
+    logger.info("get_topics: user=%s skill=%r category=%r", current_user.id, skill, category)
+    try:
+        init_sample_topics(db)
+        query = db.query(Topic).filter(
+            (Topic.user_id == current_user.id) | (Topic.user_id.is_(None))
+        )
+        if skill:
+            try:
+                query = query.filter(Topic.skill == SkillType(skill))
+            except ValueError:
+                pass
+        if category:
+            query = query.filter(Topic.category == category)
+        if difficulty:
+            query = query.filter(Topic.difficulty == difficulty)
+        results = query.order_by(Topic.id.desc()).limit(limit).all()
+        logger.info("get_topics: returning %d topics", len(results))
+        return results
+    except Exception:
+        logger.error("get_topics failed:\n%s", traceback.format_exc())
+        raise
 
 
 @router.post("", response_model=TopicResponse)
@@ -79,29 +90,37 @@ def create_topic(
     db: Session = Depends(get_db),
 ):
     """Create a personal vocabulary word for the current user."""
-    db_topic = Topic(
-        user_id=current_user.id,
-        skill=SkillType(topic.skill),
-        category=topic.category,
-        title=topic.title,
-        content=topic.content,
-        example=topic.example,
-        difficulty=2,
-    )
-    db.add(db_topic)
-    db.commit()
-    db.refresh(db_topic)
-    # Auto-add to user's flashcard queue (due immediately)
-    db.add(TopicReview(
-        user_id=current_user.id,
-        topic_id=db_topic.id,
-        next_review=datetime.utcnow(),
-        ease_factor=2.5,
-        interval_days=1,
-        repetitions=0,
-    ))
-    db.commit()
-    return db_topic
+    logger.info("create_topic: user=%s title=%r skill=%r", current_user.id, topic.title, topic.skill)
+    try:
+        db_topic = Topic(
+            user_id=current_user.id,
+            skill=SkillType(topic.skill),
+            category=topic.category,
+            title=topic.title,
+            content=topic.content,
+            example=topic.example,
+            difficulty=2,
+        )
+        db.add(db_topic)
+        db.commit()
+        db.refresh(db_topic)
+        logger.info("create_topic: inserted topic id=%s", db_topic.id)
+        # Auto-add to user's flashcard queue (due immediately)
+        db.add(TopicReview(
+            user_id=current_user.id,
+            topic_id=db_topic.id,
+            next_review=datetime.utcnow(),
+            ease_factor=2.5,
+            interval_days=1,
+            repetitions=0,
+        ))
+        db.commit()
+        logger.info("create_topic: review record inserted for topic id=%s", db_topic.id)
+        return db_topic
+    except Exception:
+        db.rollback()
+        logger.error("create_topic failed:\n%s", traceback.format_exc())
+        raise
 
 
 @router.post("/{topic_id}/add-to-deck")
@@ -111,6 +130,7 @@ def add_to_deck(
     db: Session = Depends(get_db),
 ):
     """Add a topic to the user's flashcard deck (idempotent — no-op if already in deck)."""
+    logger.info("add_to_deck: user=%s topic_id=%s", current_user.id, topic_id)
     topic = db.query(Topic).filter(Topic.id == topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -120,16 +140,21 @@ def add_to_deck(
     ).first()
     if existing:
         return {"added": False}
-    db.add(TopicReview(
-        user_id=current_user.id,
-        topic_id=topic_id,
-        next_review=datetime.utcnow(),
-        ease_factor=2.5,
-        interval_days=1,
-        repetitions=0,
-    ))
-    db.commit()
-    return {"added": True}
+    try:
+        db.add(TopicReview(
+            user_id=current_user.id,
+            topic_id=topic_id,
+            next_review=datetime.utcnow(),
+            ease_factor=2.5,
+            interval_days=1,
+            repetitions=0,
+        ))
+        db.commit()
+        return {"added": True}
+    except Exception:
+        db.rollback()
+        logger.error("add_to_deck failed:\n%s", traceback.format_exc())
+        raise
 
 
 @router.get("/flashcards", response_model=List[FlashCardResponse])
@@ -186,19 +211,24 @@ def get_due_count(
 ):
     """Return count of flashcards due for review today."""
     now = datetime.utcnow()
-    count = (
-        db.query(func.count(Topic.id))
-        .outerjoin(
-            TopicReview,
-            and_(Topic.id == TopicReview.topic_id, TopicReview.user_id == current_user.id),
+    try:
+        count = (
+            db.query(func.count(Topic.id))
+            .outerjoin(
+                TopicReview,
+                and_(Topic.id == TopicReview.topic_id, TopicReview.user_id == current_user.id),
+            )
+            .filter(
+                (Topic.user_id == current_user.id) | (Topic.user_id.is_(None)),
+                (TopicReview.next_review.is_(None)) | (TopicReview.next_review <= now),
+            )
+            .scalar()
         )
-        .filter(
-            (Topic.user_id == current_user.id) | (Topic.user_id.is_(None)),
-            (TopicReview.next_review.is_(None)) | (TopicReview.next_review <= now),
-        )
-        .scalar()
-    )
-    return {"due": count or 0}
+        logger.info("get_due_count: user=%s due=%s", current_user.id, count)
+        return {"due": count or 0}
+    except Exception:
+        logger.error("get_due_count failed:\n%s", traceback.format_exc())
+        raise
 
 
 @router.post("/review")
