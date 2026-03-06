@@ -50,10 +50,12 @@ export default function Topics() {
   const [newWord, setNewWord] = useState({ title: '', content: '', content_zh: '', example: '' });
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   const resetForm = () => {
     setNewWord({ title: '', content: '', content_zh: '', example: '' });
     setDictLoading(false);
+    setTranslating(false);
     setShowAddForm(false);
   };
 
@@ -68,9 +70,11 @@ export default function Topics() {
         if (content) {
           setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example }));
           if (language === 'zh') {
+            setTranslating(true);
             topicsAPI.translateDefinition(word.trim(), content)
               .then(r => { if (r.data.content_zh) setNewWord(p => ({ ...p, content_zh: r.data.content_zh })); })
-              .catch(() => {});
+              .catch(() => {})
+              .finally(() => setTranslating(false));
           }
         }
       }
@@ -296,14 +300,16 @@ export default function Topics() {
                 <label className="form-label">
                   Definition *
                   {dictLoading && <span className="dict-loading"> · Looking up…</span>}
+                  {!dictLoading && translating && <span className="dict-loading"> · Translating…</span>}
                 </label>
                 <textarea
                   className="form-textarea"
-                  placeholder={dictLoading ? 'Looking up…' : 'Auto-filled: v. meaning… n. meaning…'}
-                  value={newWord.content}
-                  onChange={e => setNewWord(p => ({ ...p, content: e.target.value }))}
+                  placeholder={dictLoading ? 'Looking up…' : translating ? 'Translating to Chinese…' : 'Auto-filled: v. meaning… n. meaning…'}
+                  value={language === 'zh' && (newWord.content_zh || translating) ? newWord.content_zh : newWord.content}
+                  onChange={e => language === 'zh'
+                    ? setNewWord(p => ({ ...p, content_zh: e.target.value }))
+                    : setNewWord(p => ({ ...p, content: e.target.value }))}
                   rows={3}
-                  required
                 />
               </div>
               <div className="form-group">
@@ -319,8 +325,8 @@ export default function Topics() {
             </div>
             <div className="form-actions-right">
               <button type="button" className="btn btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Saving…' : 'Save & Add to Deck'}
+              <button type="submit" className="btn btn-primary" disabled={saving || translating}>
+                {saving ? 'Saving…' : translating ? 'Translating…' : 'Save & Add to Deck'}
               </button>
             </div>
           </form>
