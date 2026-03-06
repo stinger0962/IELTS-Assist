@@ -99,6 +99,8 @@ export default function Topics() {
       loadTopics();
       setCurrentCard(0);
       setShowAnswer(false);
+    } else {
+      topicsAPI.getDueCount().then(res => setDueCount(res.data.due)).catch(() => {});
     }
   }, [mode]);
 
@@ -145,9 +147,9 @@ export default function Topics() {
 
   const handleAddToDeck = async (topicId: number) => {
     try {
-      await topicsAPI.addToDeck(topicId);
+      const res = await topicsAPI.addToDeck(topicId);
       setAddedIds(prev => new Set(prev).add(topicId));
-      setDueCount(d => d + 1);
+      if (res.data.added) setDueCount(d => d + 1);
     } catch (error) {
       console.error('Failed to add to deck:', error);
     }
