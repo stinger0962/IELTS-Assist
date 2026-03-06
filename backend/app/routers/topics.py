@@ -77,8 +77,21 @@ def get_topics(
         if difficulty:
             query = query.filter(Topic.difficulty == difficulty)
         results = query.order_by(Topic.id.desc()).limit(limit).all()
+        deck_ids = {
+            row[0] for row in db.query(TopicReview.topic_id)
+            .filter(TopicReview.user_id == current_user.id)
+            .all()
+        }
         logger.info("get_topics: returning %d topics", len(results))
-        return results
+        return [
+            TopicResponse(
+                id=t.id, user_id=t.user_id, skill=t.skill, category=t.category,
+                title=t.title, content=t.content, content_zh=t.content_zh,
+                example=t.example, example_zh=t.example_zh, difficulty=t.difficulty,
+                in_deck=t.id in deck_ids,
+            )
+            for t in results
+        ]
     except Exception:
         tb = traceback.format_exc()
         logger.error("get_topics failed:\n%s", tb)
@@ -119,7 +132,13 @@ def create_topic(
         ))
         db.commit()
         logger.info("create_topic: review record inserted for topic id=%s", db_topic.id)
-        return db_topic
+        return TopicResponse(
+            id=db_topic.id, user_id=db_topic.user_id, skill=db_topic.skill,
+            category=db_topic.category, title=db_topic.title, content=db_topic.content,
+            content_zh=db_topic.content_zh, example=db_topic.example,
+            example_zh=db_topic.example_zh, difficulty=db_topic.difficulty,
+            in_deck=True,
+        )
     except Exception:
         db.rollback()
         tb = traceback.format_exc()

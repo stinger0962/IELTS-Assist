@@ -86,6 +86,7 @@ export default function Topics() {
       } else {
         const res = await topicsAPI.getAll(filterSkill || undefined, filterCategory || undefined);
         setTopics(res.data);
+        setAddedIds(new Set(res.data.filter((t: Topic) => t.in_deck).map((t: Topic) => t.id)));
       }
     } catch (error) {
       console.error('Failed to load topics:', error);

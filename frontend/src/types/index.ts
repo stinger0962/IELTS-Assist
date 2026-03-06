@@ -73,6 +73,7 @@ export interface Topic {
   example?: string;
   example_zh?: string;
   difficulty: number;
+  in_deck?: boolean;
 }
 
 export interface FlashCard {

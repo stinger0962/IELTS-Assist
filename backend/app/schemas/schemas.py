@@ -150,6 +150,7 @@ class TopicResponse(BaseModel):
     example: Optional[str]
     example_zh: Optional[str]
     difficulty: int
+    in_deck: bool = False
 
     class Config:
         from_attributes = True
