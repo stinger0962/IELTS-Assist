@@ -73,6 +73,8 @@ export interface Topic {
   example?: string;
   example_zh?: string;
   difficulty: number;
+  phonetic?: string;
+  audio_url?: string;
   in_deck?: boolean;
 }
 

@@ -88,6 +88,7 @@ def get_topics(
                 id=t.id, user_id=t.user_id, skill=t.skill, category=t.category,
                 title=t.title, content=t.content, content_zh=t.content_zh,
                 example=t.example, example_zh=t.example_zh, difficulty=t.difficulty,
+                phonetic=t.phonetic, audio_url=t.audio_url,
                 in_deck=t.id in deck_ids,
             )
             for t in results
@@ -116,6 +117,8 @@ def create_topic(
             content=topic.content,
             content_zh=topic.content_zh,
             example=topic.example,
+            phonetic=topic.phonetic,
+            audio_url=topic.audio_url,
             difficulty=2,
         )
         db.add(db_topic)
@@ -138,6 +141,7 @@ def create_topic(
             category=db_topic.category, title=db_topic.title, content=db_topic.content,
             content_zh=db_topic.content_zh, example=db_topic.example,
             example_zh=db_topic.example_zh, difficulty=db_topic.difficulty,
+            phonetic=db_topic.phonetic, audio_url=db_topic.audio_url,
             in_deck=True,
         )
     except Exception:
@@ -234,7 +238,14 @@ def get_flashcards(
     rows = query.limit(limit).all()
     return [
         FlashCardResponse(
-            topic=topic,
+            topic=TopicResponse(
+                id=topic.id, user_id=topic.user_id, skill=topic.skill,
+                category=topic.category, title=topic.title, content=topic.content,
+                content_zh=topic.content_zh, example=topic.example,
+                example_zh=topic.example_zh, difficulty=topic.difficulty,
+                phonetic=topic.phonetic, audio_url=topic.audio_url,
+                in_deck=True,
+            ),
             next_review=review.next_review,
             ease_factor=review.ease_factor,
             interval_days=review.interval_days,

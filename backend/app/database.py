@@ -39,6 +39,8 @@ def init_db():
         "ALTER TABLE topics ADD COLUMN user_id INTEGER REFERENCES users(id)",
         # created_at was present in the ORM model but may be missing from older DB schemas
         "ALTER TABLE topics ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE topics ADD COLUMN phonetic VARCHAR(100)",
+        "ALTER TABLE topics ADD COLUMN audio_url VARCHAR(500)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

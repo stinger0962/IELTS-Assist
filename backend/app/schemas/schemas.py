@@ -139,6 +139,8 @@ class TopicCreate(BaseModel):
     example: Optional[str] = None
     skill: str = "reading"
     category: str = "vocabulary"
+    phonetic: Optional[str] = None
+    audio_url: Optional[str] = None
 
 class TopicResponse(BaseModel):
     id: int
@@ -151,6 +153,8 @@ class TopicResponse(BaseModel):
     example: Optional[str]
     example_zh: Optional[str]
     difficulty: int
+    phonetic: Optional[str] = None
+    audio_url: Optional[str] = None
     in_deck: bool = False
 
     class Config:

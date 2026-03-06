@@ -108,6 +108,8 @@ class Topic(Base):
     example = Column(Text, nullable=True)
     example_zh = Column(Text, nullable=True)
     difficulty = Column(Integer, default=1)  # 1-5
+    phonetic = Column(String(100), nullable=True)   # IPA string, e.g. /ˈæmplɪfaɪ/
+    audio_url = Column(String(500), nullable=True)  # MP3 from dictionaryapi.dev
     created_at = Column(DateTime, server_default=func.now())
 
 class TopicReview(Base):

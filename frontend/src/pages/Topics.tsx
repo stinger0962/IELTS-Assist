@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GraduationCap, Plus, BookmarkPlus, Check } from 'lucide-react';
+import { GraduationCap, Plus, BookmarkPlus, Check, Volume2 } from 'lucide-react';
 import { topicsAPI } from '../api';
 import type { Topic, SkillType } from '../types';
 import { useAppStore } from '../store';
@@ -47,16 +47,30 @@ export default function Topics() {
 
   // Add Word form state
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newWord, setNewWord] = useState({ title: '', content: '', content_zh: '', example: '' });
+  const [newWord, setNewWord] = useState({ title: '', content: '', content_zh: '', example: '', phonetic: '', audio_url: '' });
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
   const [translating, setTranslating] = useState(false);
 
   const resetForm = () => {
-    setNewWord({ title: '', content: '', content_zh: '', example: '' });
+    setNewWord({ title: '', content: '', content_zh: '', example: '', phonetic: '', audio_url: '' });
     setDictLoading(false);
     setTranslating(false);
     setShowAddForm(false);
+  };
+
+  const playPronunciation = (title: string, audioUrl?: string) => {
+    if (audioUrl) {
+      new Audio(audioUrl).play().catch(() => {
+        const u = new SpeechSynthesisUtterance(title);
+        u.lang = 'en-US';
+        window.speechSynthesis.speak(u);
+      });
+    } else {
+      const u = new SpeechSynthesisUtterance(title);
+      u.lang = 'en-US';
+      window.speechSynthesis.speak(u);
+    }
   };
 
   const lookupWord = async (word: string) => {
@@ -67,8 +81,10 @@ export default function Topics() {
       if (res.ok) {
         const data = await res.json();
         const { content, example } = parseDictionaryEntry(data);
+        const phonetic = data[0]?.phonetic || data[0]?.phonetics?.find((p: any) => p.text)?.text || '';
+        const audio_url = data[0]?.phonetics?.find((p: any) => p.audio?.endsWith('.mp3'))?.audio || '';
         if (content) {
-          setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example }));
+          setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example, phonetic, audio_url }));
           if (language === 'zh') {
             setTranslating(true);
             topicsAPI.translateDefinition(word.trim(), content)
@@ -146,6 +162,8 @@ export default function Topics() {
         example: newWord.example.trim() || undefined,
         skill: filterSkill || 'reading',
         category: 'vocabulary',
+        phonetic: newWord.phonetic || undefined,
+        audio_url: newWord.audio_url || undefined,
       });
       setTopics(prev => [res.data, ...prev]);
       setAddedIds(prev => new Set(prev).add(res.data.id));
@@ -219,7 +237,18 @@ export default function Topics() {
                     {flashcards[currentCard].topic.skill}
                   </span>
                   <h3 className="card-title">{flashcards[currentCard].topic.title}</h3>
-                  <button className="btn btn-primary" onClick={() => setShowAnswer(true)}>
+                  {flashcards[currentCard].topic.phonetic && (
+                    <span className="card-phonetic">{flashcards[currentCard].topic.phonetic}</span>
+                  )}
+                  <button
+                    className="card-pronounce-btn"
+                    onClick={() => playPronunciation(flashcards[currentCard].topic.title, flashcards[currentCard].topic.audio_url)}
+                    title="Listen to pronunciation"
+                    type="button"
+                  >
+                    <Volume2 size={16} /> Pronounce
+                  </button>
+                  <button className="btn btn-primary" style={{ marginTop: 'var(--spacing-md)' }} onClick={() => setShowAnswer(true)}>
                     {t('topics.showAnswer')}
                   </button>
                 </div>
@@ -228,6 +257,9 @@ export default function Topics() {
                     {flashcards[currentCard].topic.skill}
                   </span>
                   <h3 className="card-title">{flashcards[currentCard].topic.title}</h3>
+                  {flashcards[currentCard].topic.phonetic && (
+                    <span className="card-phonetic">{flashcards[currentCard].topic.phonetic}</span>
+                  )}
                   <p className="card-content">
                     {language === 'zh' && flashcards[currentCard].topic.content_zh
                       ? flashcards[currentCard].topic.content_zh
@@ -367,7 +399,18 @@ export default function Topics() {
                   <span className="topic-skill" style={{ background: skillColors[topic.skill] }}>{topic.skill}</span>
                   <span className="topic-category">{categoryLabels[topic.category] || topic.category}</span>
                 </div>
-                <h3 className="topic-title">{topic.title}</h3>
+                <div className="topic-title-row">
+                  <h3 className="topic-title">{topic.title}</h3>
+                  <button
+                    className="pronounce-btn"
+                    onClick={() => playPronunciation(topic.title, topic.audio_url)}
+                    title="Listen to pronunciation"
+                    type="button"
+                  >
+                    <Volume2 size={14} />
+                  </button>
+                </div>
+                {topic.phonetic && <span className="topic-phonetic">{topic.phonetic}</span>}
                 <p className="topic-content">
                   {language === 'zh' && topic.content_zh ? topic.content_zh : topic.content}
                 </p>
@@ -412,7 +455,10 @@ const flashcardStyles = `
   .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--spacing-xl); display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .flashcard-back { transform: rotateY(180deg); }
   .card-skill { position: absolute; top: var(--spacing-md); left: var(--spacing-md); padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-full); font-size: 0.625rem; font-weight: 600; color: white; text-transform: uppercase; }
-  .card-title { font-size: 1.5rem; margin-bottom: var(--spacing-lg); text-align: center; }
+  .card-title { font-size: 1.5rem; margin-bottom: var(--spacing-xs); text-align: center; }
+  .card-phonetic { font-size: 0.875rem; color: var(--color-text-secondary); font-style: italic; margin-bottom: var(--spacing-md); }
+  .card-pronounce-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 5px 14px; border-radius: var(--radius-md); font-size: 0.8rem; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-sm); }
+  .card-pronounce-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
   .card-content { font-size: 1rem; line-height: 1.8; text-align: left; color: var(--color-text-primary); }
   .card-example { margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-background); border-radius: var(--radius-md); text-align: left; font-size: 0.875rem; }
   .review-buttons { display: flex; justify-content: center; gap: var(--spacing-md); }
@@ -454,7 +500,11 @@ const listStyles = `
   .topic-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); }
   .topic-skill { padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.625rem; font-weight: 600; color: white; text-transform: uppercase; }
   .topic-category { font-size: 0.75rem; color: var(--color-text-secondary); }
-  .topic-title { font-size: 1rem; margin-bottom: var(--spacing-sm); }
+  .topic-title-row { display: flex; align-items: center; gap: var(--spacing-xs); margin-bottom: 2px; }
+  .topic-title { font-size: 1rem; margin: 0; }
+  .topic-phonetic { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; margin-bottom: var(--spacing-sm); display: block; }
+  .pronounce-btn { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; border-radius: var(--radius-sm); transition: color var(--transition-fast); flex-shrink: 0; }
+  .pronounce-btn:hover { color: var(--color-primary); }
   .topic-content { font-size: 0.875rem; line-height: 1.6; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex: 1; }
   .topic-example { font-size: 0.75rem; padding: var(--spacing-sm); background: var(--color-background); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); }
   .topic-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: var(--spacing-sm); }

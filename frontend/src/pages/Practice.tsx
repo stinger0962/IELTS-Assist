@@ -56,6 +56,8 @@ function AIReadingExerciseView({
   const [showVocabModal, setShowVocabModal] = useState(false);
   const [vocabDef, setVocabDef] = useState('');
   const [vocabDefZh, setVocabDefZh] = useState('');
+  const [vocabPhonetic, setVocabPhonetic] = useState('');
+  const [vocabAudioUrl, setVocabAudioUrl] = useState('');
   const [vocabDefLoading, setVocabDefLoading] = useState(false);
   const [vocabSaving, setVocabSaving] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
@@ -192,6 +194,8 @@ function AIReadingExerciseView({
     setVocabWord(word);
     setVocabDef('');
     setVocabDefZh('');
+    setVocabPhonetic('');
+    setVocabAudioUrl('');
     setVocabDefLoading(true);
     setShowVocabModal(true);
     setVocabPopupPos(null);
@@ -200,6 +204,10 @@ function AIReadingExerciseView({
       if (res.ok) {
         const data = await res.json();
         const formatted = parseDictionaryEntry(data);
+        const phonetic = data[0]?.phonetic || data[0]?.phonetics?.find((p: any) => p.text)?.text || '';
+        const audioUrl = data[0]?.phonetics?.find((p: any) => p.audio?.endsWith('.mp3'))?.audio || '';
+        setVocabPhonetic(phonetic);
+        setVocabAudioUrl(audioUrl);
         if (formatted) {
           setVocabDef(formatted);
           if (language === 'zh') {
@@ -232,7 +240,7 @@ function AIReadingExerciseView({
     if (!vocabDef.trim()) return;
     setVocabSaving(true);
     try {
-      await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'reading', category: 'vocabulary' });
+      await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'reading', category: 'vocabulary', phonetic: vocabPhonetic || undefined, audio_url: vocabAudioUrl || undefined });
       setVocabSaved(true);
       setShowVocabModal(false);
       setVocabDef('');
