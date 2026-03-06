@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
+import { useAppStore } from '../store';
 import type {
   SkillType, ListeningExercise, WritingTopic, SpeakingTopic,
   AIReadingPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
@@ -43,6 +44,7 @@ function AIReadingExerciseView({
   exercise: AIReadingPractice;
   onComplete: (correct: number, total: number) => void;
 }) {
+  const { language } = useAppStore();
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
@@ -53,6 +55,7 @@ function AIReadingExerciseView({
   const [vocabPopupPos, setVocabPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [showVocabModal, setShowVocabModal] = useState(false);
   const [vocabDef, setVocabDef] = useState('');
+  const [vocabDefZh, setVocabDefZh] = useState('');
   const [vocabDefLoading, setVocabDefLoading] = useState(false);
   const [vocabSaving, setVocabSaving] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
@@ -188,6 +191,7 @@ function AIReadingExerciseView({
   const openVocabModal = async (word: string) => {
     setVocabWord(word);
     setVocabDef('');
+    setVocabDefZh('');
     setVocabDefLoading(true);
     setShowVocabModal(true);
     setVocabPopupPos(null);
@@ -196,7 +200,14 @@ function AIReadingExerciseView({
       if (res.ok) {
         const data = await res.json();
         const formatted = parseDictionaryEntry(data);
-        if (formatted) setVocabDef(formatted);
+        if (formatted) {
+          setVocabDef(formatted);
+          if (language === 'zh') {
+            topicsAPI.translateDefinition(word, formatted)
+              .then(r => { if (r.data.content_zh) setVocabDefZh(r.data.content_zh); })
+              .catch(() => {});
+          }
+        }
       }
     } catch { /* ignore — user can type manually */ } finally {
       setVocabDefLoading(false);
@@ -221,7 +232,7 @@ function AIReadingExerciseView({
     if (!vocabDef.trim()) return;
     setVocabSaving(true);
     try {
-      await topicsAPI.create({ title: vocabWord, content: vocabDef, skill: 'reading', category: 'vocabulary' });
+      await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'reading', category: 'vocabulary' });
       setVocabSaved(true);
       setShowVocabModal(false);
       setVocabDef('');

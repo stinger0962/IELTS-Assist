@@ -114,6 +114,7 @@ def create_topic(
             category=topic.category,
             title=topic.title,
             content=topic.content,
+            content_zh=topic.content_zh,
             example=topic.example,
             difficulty=2,
         )

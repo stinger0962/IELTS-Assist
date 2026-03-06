@@ -47,12 +47,12 @@ export default function Topics() {
 
   // Add Word form state
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newWord, setNewWord] = useState({ title: '', content: '', example: '' });
+  const [newWord, setNewWord] = useState({ title: '', content: '', content_zh: '', example: '' });
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
 
   const resetForm = () => {
-    setNewWord({ title: '', content: '', example: '' });
+    setNewWord({ title: '', content: '', content_zh: '', example: '' });
     setDictLoading(false);
     setShowAddForm(false);
   };
@@ -65,7 +65,14 @@ export default function Topics() {
       if (res.ok) {
         const data = await res.json();
         const { content, example } = parseDictionaryEntry(data);
-        if (content) setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example }));
+        if (content) {
+          setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example }));
+          if (language === 'zh') {
+            topicsAPI.translateDefinition(word.trim(), content)
+              .then(r => { if (r.data.content_zh) setNewWord(p => ({ ...p, content_zh: r.data.content_zh })); })
+              .catch(() => {});
+          }
+        }
       }
     } catch { /* ignore */ } finally {
       setDictLoading(false);
@@ -131,6 +138,7 @@ export default function Topics() {
       const res = await topicsAPI.create({
         title: newWord.title.trim(),
         content: newWord.content.trim(),
+        content_zh: newWord.content_zh.trim() || undefined,
         example: newWord.example.trim() || undefined,
         skill: filterSkill || 'reading',
         category: 'vocabulary',

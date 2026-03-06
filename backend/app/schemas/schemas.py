@@ -135,6 +135,7 @@ class PracticeResultResponse(BaseModel):
 class TopicCreate(BaseModel):
     title: str
     content: str
+    content_zh: Optional[str] = None
     example: Optional[str] = None
     skill: str = "reading"
     category: str = "vocabulary"

@@ -133,10 +133,12 @@ export const topicsAPI = {
   getFlashcards: (skill?: string, limit = 10) =>
     api.get(`/topics/flashcards?skill=${skill || ''}&limit=${limit}`),
   getDueCount: () => api.get('/topics/due-count'),
-  create: (data: { title: string; content: string; example?: string; skill?: string; category?: string }) =>
+  create: (data: { title: string; content: string; content_zh?: string; example?: string; skill?: string; category?: string }) =>
     api.post('/topics', data),
   addToDeck: (topicId: number) => api.post(`/topics/${topicId}/add-to-deck`),
   removeFromDeck: (topicId: number) => api.delete(`/topics/${topicId}/remove-from-deck`),
+  translateDefinition: (word: string, content_en: string) =>
+    api.post('/generate/translate-definition', { word, content_en }),
   review: (topicId: number, quality: number) =>
     api.post('/topics/review', { topic_id: topicId, quality }),
 };

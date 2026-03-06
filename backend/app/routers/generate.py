@@ -288,6 +288,34 @@ def explain_mistakes(
         return {"explanations": []}
 
 
+class TranslateDefinitionBody(BaseModel):
+    word: str
+    content_en: str
+
+
+@router.post("/translate-definition")
+def translate_definition(
+    body: TranslateDefinitionBody,
+    current_user: User = Depends(get_current_user),
+):
+    """Translate an English vocabulary definition to Chinese."""
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": (
+                f"Translate this English vocabulary definition for the word '{body.word}' into Chinese. "
+                f"Keep it concise and natural. Return ONLY the Chinese text, nothing else.\n\n{body.content_en}"
+            )}],
+            temperature=0.2,
+            max_tokens=300,
+        )
+        return {"content_zh": response.choices[0].message.content.strip()}
+    except Exception as e:
+        logger.error(f"translate_definition error: {e}")
+        return {"content_zh": ""}
+
+
 class ExtractVocabularyBody(BaseModel):
     passage: str
     topic: str
