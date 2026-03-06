@@ -1,4 +1,5 @@
 import logging
+import sys
 import traceback
 from datetime import datetime, timedelta
 
@@ -79,7 +80,9 @@ def get_topics(
         logger.info("get_topics: returning %d topics", len(results))
         return results
     except Exception:
-        logger.error("get_topics failed:\n%s", traceback.format_exc())
+        tb = traceback.format_exc()
+        logger.error("get_topics failed:\n%s", tb)
+        print(f"[IELTS ERROR] get_topics\n{tb}", file=sys.stderr, flush=True)
         raise
 
 
@@ -119,7 +122,9 @@ def create_topic(
         return db_topic
     except Exception:
         db.rollback()
-        logger.error("create_topic failed:\n%s", traceback.format_exc())
+        tb = traceback.format_exc()
+        logger.error("create_topic failed:\n%s", tb)
+        print(f"[IELTS ERROR] create_topic\n{tb}", file=sys.stderr, flush=True)
         raise
 
 
@@ -227,7 +232,9 @@ def get_due_count(
         logger.info("get_due_count: user=%s due=%s", current_user.id, count)
         return {"due": count or 0}
     except Exception:
-        logger.error("get_due_count failed:\n%s", traceback.format_exc())
+        tb = traceback.format_exc()
+        logger.error("get_due_count failed:\n%s", tb)
+        print(f"[IELTS ERROR] get_due_count\n{tb}", file=sys.stderr, flush=True)
         raise
 
 

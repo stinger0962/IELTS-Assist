@@ -37,6 +37,8 @@ def init_db():
         "ALTER TABLE goals ADD COLUMN skill VARCHAR(50)",
         "ALTER TABLE goals ADD COLUMN goal_type VARCHAR(50) DEFAULT 'daily_minutes'",
         "ALTER TABLE topics ADD COLUMN user_id INTEGER",
+        # created_at was present in the ORM model but may be missing from older DB schemas
+        "ALTER TABLE topics ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

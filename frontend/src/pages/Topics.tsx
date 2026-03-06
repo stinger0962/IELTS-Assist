@@ -5,6 +5,25 @@ import { topicsAPI } from '../api';
 import type { Topic, SkillType } from '../types';
 import { useAppStore } from '../store';
 
+const POS_ABBR: Record<string, string> = {
+  verb: 'v.', noun: 'n.', adjective: 'adj.', adverb: 'adv.',
+  preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'interj.',
+};
+
+function parseDictionaryEntry(data: any[]): { content: string; example: string } {
+  if (!data?.length) return { content: '', example: '' };
+  const lines: string[] = [];
+  let firstExample = '';
+  for (const meaning of (data[0].meanings ?? []).slice(0, 3)) {
+    const abbr = POS_ABBR[meaning.partOfSpeech] ?? `${meaning.partOfSpeech}.`;
+    for (const def of (meaning.definitions ?? []).slice(0, 2)) {
+      lines.push(`${abbr} ${def.definition}${def.example ? ` e.g. "${def.example}"` : ''}`);
+      if (!firstExample && def.example) firstExample = def.example;
+    }
+  }
+  return { content: lines.join('\n'), example: firstExample };
+}
+
 const skillColors: Record<string, string> = {
   reading: '#4F46E5',
   listening: '#10B981',
@@ -45,16 +64,8 @@ export default function Topics() {
       const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`);
       if (res.ok) {
         const data = await res.json();
-        // Use first definition; search all meanings/definitions for an example sentence
-        const def = data?.[0]?.meanings?.[0]?.definitions?.[0]?.definition ?? '';
-        let ex = '';
-        for (const meaning of (data?.[0]?.meanings ?? [])) {
-          for (const d of (meaning.definitions ?? [])) {
-            if (d.example) { ex = d.example; break; }
-          }
-          if (ex) break;
-        }
-        if (def) setNewWord(p => ({ ...p, content: p.content || def, example: p.example || ex }));
+        const { content, example } = parseDictionaryEntry(data);
+        if (content) setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example }));
       }
     } catch { /* ignore */ } finally {
       setDictLoading(false);
@@ -263,12 +274,12 @@ export default function Topics() {
                   Definition *
                   {dictLoading && <span className="dict-loading"> · Looking up…</span>}
                 </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={dictLoading ? 'Looking up definition…' : 'Auto-filled or type manually'}
+                <textarea
+                  className="form-textarea"
+                  placeholder={dictLoading ? 'Looking up…' : 'Auto-filled: v. meaning… n. meaning…'}
                   value={newWord.content}
                   onChange={e => setNewWord(p => ({ ...p, content: e.target.value }))}
+                  rows={3}
                   required
                 />
               </div>
@@ -398,10 +409,12 @@ const listStyles = `
   .flashcard-btn { position: relative; }
   .due-badge { position: absolute; top: -6px; right: -6px; background: var(--color-error); color: white; font-size: 0.65rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
   .add-word-form { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md) var(--spacing-lg); margin-bottom: var(--spacing-lg); }
-  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-md); }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: var(--spacing-md); align-items: start; }
   @media (max-width: 768px) { .form-row-3 { grid-template-columns: 1fr; } }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
   .form-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); }
+  .form-textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.875rem; resize: vertical; font-family: inherit; line-height: 1.5; box-sizing: border-box; }
+  .form-textarea:focus { outline: none; border-color: var(--color-primary); }
   .dict-loading { font-weight: 400; font-style: italic; color: var(--color-text-secondary); opacity: 0.7; }
   .form-actions-right { display: flex; justify-content: flex-end; gap: var(--spacing-sm); margin-top: var(--spacing-md); }
   .filters { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }

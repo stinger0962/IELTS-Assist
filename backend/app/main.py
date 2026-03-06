@@ -1,4 +1,5 @@
 import logging
+import sys
 import traceback
 from contextlib import asynccontextmanager
 
@@ -8,10 +9,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(name)s %(levelname)s %(message)s',
-)
+# Explicitly attach a stderr StreamHandler so logs are visible in journalctl
+# regardless of whether uvicorn has already called logging.basicConfig().
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+_root = logging.getLogger()
+_root.setLevel(logging.INFO)
+if not any(isinstance(h, logging.StreamHandler) for h in _root.handlers):
+    _root.addHandler(_handler)
+
 logger = logging.getLogger(__name__)
 
 from app.config import settings
@@ -59,7 +65,10 @@ app.include_router(goals.router, prefix=f"{settings.API_PREFIX}/goals", tags=["G
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("Unhandled exception on %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+    tb = traceback.format_exc()
+    logger.error("Unhandled exception on %s %s\n%s", request.method, request.url.path, tb)
+    # print() to stderr as a guaranteed fallback (visible in journalctl regardless of log config)
+    print(f"[IELTS ERROR] {request.method} {request.url.path}\n{tb}", file=sys.stderr, flush=True)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

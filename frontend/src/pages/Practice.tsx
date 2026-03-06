@@ -15,6 +15,25 @@ const skillConfig = [
   { type: 'speaking' as SkillType, icon: MessageCircle, color: '#EF4444' },
 ];
 
+// ─── Dictionary helpers ───────────────────────────────────────────────────────
+
+const POS_ABBR: Record<string, string> = {
+  verb: 'v.', noun: 'n.', adjective: 'adj.', adverb: 'adv.',
+  preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'interj.',
+};
+
+function parseDictionaryEntry(data: any[]): string {
+  if (!data?.length) return '';
+  const lines: string[] = [];
+  for (const meaning of (data[0].meanings ?? []).slice(0, 3)) {
+    const abbr = POS_ABBR[meaning.partOfSpeech] ?? `${meaning.partOfSpeech}.`;
+    for (const def of (meaning.definitions ?? []).slice(0, 2)) {
+      lines.push(`${abbr} ${def.definition}${def.example ? ` e.g. "${def.example}"` : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 // ─── AI Reading Exercise View ────────────────────────────────────────────────
 
 function AIReadingExerciseView({
@@ -176,8 +195,8 @@ function AIReadingExerciseView({
       const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
       if (res.ok) {
         const data = await res.json();
-        const def = data?.[0]?.meanings?.[0]?.definitions?.[0]?.definition ?? '';
-        if (def) setVocabDef(def);
+        const formatted = parseDictionaryEntry(data);
+        if (formatted) setVocabDef(formatted);
       }
     } catch { /* ignore — user can type manually */ } finally {
       setVocabDefLoading(false);
