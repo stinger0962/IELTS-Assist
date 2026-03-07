@@ -240,12 +240,25 @@ function AIReadingExerciseView({
       try {
         const rect = sel!.getRangeAt(0).getBoundingClientRect();
         setVocabWord(text);
-        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.top + window.scrollY });
+        // Position popup BELOW the selection so it doesn't clash with the
+        // browser's native Copy / Google Search toolbar which appears above
+        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom + window.scrollY });
       } catch { /* ignore */ }
     } else {
       setVocabPopupPos(null);
     }
   };
+
+  // Listen on document so mobile handle-drag selections are also detected
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onSelChange = () => {
+      clearTimeout(timer);
+      timer = setTimeout(handleTextSelect, 200);
+    };
+    document.addEventListener('selectionchange', onSelChange);
+    return () => { clearTimeout(timer); document.removeEventListener('selectionchange', onSelChange); };
+  }, []);
 
   const handleSaveVocab = async () => {
     if (!vocabDef.trim()) return;
@@ -270,7 +283,7 @@ function AIReadingExerciseView({
       {vocabPopupPos && !showVocabModal && (
         <div
           className="vocab-popup"
-          style={{ left: vocabPopupPos.x, top: vocabPopupPos.y - 38 }}
+          style={{ left: vocabPopupPos.x, top: vocabPopupPos.y + 10 }}
           onMouseDown={e => { e.preventDefault(); openVocabModal(vocabWord); }}
           onTouchEnd={e => { e.preventDefault(); openVocabModal(vocabWord); }}
         >
@@ -312,7 +325,7 @@ function AIReadingExerciseView({
       {vocabSaved && <div className="vocab-toast">✓ Added to vocabulary!</div>}
 
       {/* Passage */}
-      <div className="exercise-passage" onMouseUp={handleTextSelect} onTouchEnd={handleTextSelect}>
+      <div className="exercise-passage">
         <div className="passage-meta">
           <h3>{exercise.meta.topic}</h3>
           <span className="passage-badge">
