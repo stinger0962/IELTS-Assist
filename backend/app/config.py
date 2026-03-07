@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Youdao Smart Cloud (有道智云) — text translation
+    YOUDAO_APP_KEY: str = ""
+    YOUDAO_APP_SECRET: str = ""
     
     class Config:
         env_file = ".env"

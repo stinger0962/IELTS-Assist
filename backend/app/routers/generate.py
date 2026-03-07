@@ -1,7 +1,11 @@
+import hashlib
 import json
 import logging
+import time
+import uuid
 from datetime import datetime
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
@@ -298,19 +302,35 @@ def translate_definition(
     body: TranslateDefinitionBody,
     current_user: User = Depends(get_current_user),
 ):
-    """Translate an English vocabulary definition to Chinese."""
+    """Translate an English vocabulary definition to Chinese via Youdao API."""
     try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": (
-                f"Translate this English vocabulary definition for the word '{body.word}' into Chinese. "
-                f"Keep it concise and natural. Return ONLY the Chinese text, nothing else.\n\n{body.content_en}"
-            )}],
-            temperature=0.2,
-            max_tokens=300,
+        salt = str(uuid.uuid4())
+        curtime = str(int(time.time()))
+        q = body.content_en
+        # Youdao v3 sign: truncate input if longer than 20 chars
+        input_str = q if len(q) <= 20 else q[:10] + str(len(q)) + q[-10:]
+        sign = hashlib.sha256(
+            (settings.YOUDAO_APP_KEY + input_str + salt + curtime + settings.YOUDAO_APP_SECRET).encode("utf-8")
+        ).hexdigest()
+        resp = httpx.post(
+            "https://openapi.youdao.com/api",
+            data={
+                "q": q,
+                "from": "en",
+                "to": "zh-CHS",
+                "appKey": settings.YOUDAO_APP_KEY,
+                "salt": salt,
+                "sign": sign,
+                "signType": "v3",
+                "curtime": curtime,
+            },
+            timeout=8.0,
         )
-        return {"content_zh": response.choices[0].message.content.strip()}
+        result = resp.json()
+        if result.get("errorCode") == "0" and result.get("translation"):
+            return {"content_zh": result["translation"][0]}
+        logger.error("Youdao translate-definition errorCode=%s", result.get("errorCode"))
+        return {"content_zh": ""}
     except Exception as e:
         logger.error(f"translate_definition error: {e}")
         return {"content_zh": ""}
