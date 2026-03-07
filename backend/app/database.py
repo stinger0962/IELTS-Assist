@@ -48,4 +48,4 @@ def init_db():
                 conn.execute(text(stmt))
                 conn.commit()
             except Exception:
-                pass  # Column already exists
+                conn.rollback()  # PostgreSQL aborts the whole txn on error; must rollback before next stmt
