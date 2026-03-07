@@ -87,7 +87,9 @@ export default function Topics() {
           setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example, phonetic, audio_url }));
           if (language === 'zh') {
             setTranslating(true);
-            topicsAPI.translateDefinition(word.trim(), content)
+            // Strip inline examples (e.g. "...") before translating — Youdao would translate them too
+            const contentForTranslation = content.replace(/ e\.g\. "[^"]*"/g, '').trim();
+            topicsAPI.translateDefinition(word.trim(), contentForTranslation)
               .then(r => { if (r.data.content_zh) setNewWord(p => ({ ...p, content_zh: r.data.content_zh })); })
               .catch(() => {})
               .finally(() => setTranslating(false));
@@ -449,10 +451,10 @@ const flashcardStyles = `
   .header-row { display: flex; justify-content: space-between; align-items: center; }
   .flashcard-container { max-width: 600px; margin: 0 auto; text-align: center; }
   .flashcard-progress { margin-bottom: var(--spacing-md); color: var(--color-text-secondary); }
-  .flashcard { perspective: 1000px; height: 350px; margin-bottom: var(--spacing-lg); }
+  .flashcard { perspective: 1000px; height: 460px; margin-bottom: var(--spacing-lg); }
   .flashcard-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
   .flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
-  .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--spacing-xl); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--spacing-xl); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; box-sizing: border-box; padding-top: 48px; }
   .flashcard-back { transform: rotateY(180deg); }
   .card-skill { position: absolute; top: var(--spacing-md); left: var(--spacing-md); padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-full); font-size: 0.625rem; font-weight: 600; color: white; text-transform: uppercase; }
   .card-title { font-size: 1.5rem; margin-bottom: var(--spacing-xs); text-align: center; }

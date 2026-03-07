@@ -211,7 +211,8 @@ function AIReadingExerciseView({
         if (formatted) {
           setVocabDef(formatted);
           if (language === 'zh') {
-            topicsAPI.translateDefinition(word, formatted)
+            const formattedForTranslation = formatted.replace(/ e\.g\. "[^"]*"/g, '').trim();
+            topicsAPI.translateDefinition(word, formattedForTranslation)
               .then(r => { if (r.data.content_zh) setVocabDefZh(r.data.content_zh); })
               .catch(() => {});
           }
