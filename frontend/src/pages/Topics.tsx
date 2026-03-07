@@ -88,9 +88,18 @@ export default function Topics() {
           if (language === 'zh') {
             setTranslating(true);
             // Strip inline examples (e.g. "...") before translating — Youdao would translate them too
+            // But preserve them in English by re-appending after translation
+            const egMatches = [...content.matchAll(/ e\.g\. ("[^"]*")/g)].map(m => `e.g. ${m[1]}`);
             const contentForTranslation = content.replace(/ e\.g\. "[^"]*"/g, '').trim();
             topicsAPI.translateDefinition(word.trim(), contentForTranslation)
-              .then(r => { if (r.data.content_zh) setNewWord(p => ({ ...p, content_zh: r.data.content_zh })); })
+              .then(r => {
+                if (r.data.content_zh) {
+                  const withExamples = egMatches.length
+                    ? r.data.content_zh + '\n' + egMatches.join('\n')
+                    : r.data.content_zh;
+                  setNewWord(p => ({ ...p, content_zh: withExamples }));
+                }
+              })
               .catch(() => {})
               .finally(() => setTranslating(false));
           }

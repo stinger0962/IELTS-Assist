@@ -211,9 +211,17 @@ function AIReadingExerciseView({
         if (formatted) {
           setVocabDef(formatted);
           if (language === 'zh') {
+            const egMatches = [...formatted.matchAll(/ e\.g\. ("[^"]*")/g)].map(m => `e.g. ${m[1]}`);
             const formattedForTranslation = formatted.replace(/ e\.g\. "[^"]*"/g, '').trim();
             topicsAPI.translateDefinition(word, formattedForTranslation)
-              .then(r => { if (r.data.content_zh) setVocabDefZh(r.data.content_zh); })
+              .then(r => {
+                if (r.data.content_zh) {
+                  const withExamples = egMatches.length
+                    ? r.data.content_zh + '\n' + egMatches.join('\n')
+                    : r.data.content_zh;
+                  setVocabDefZh(withExamples);
+                }
+              })
               .catch(() => {});
           }
         }
