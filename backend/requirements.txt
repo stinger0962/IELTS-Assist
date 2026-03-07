@@ -12,6 +12,7 @@ dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.1.0
 fastapi==0.109.0
+google-cloud-texttospeech==2.34.0
 greenlet==3.3.2
 h11==0.16.0
 httpcore==1.0.9

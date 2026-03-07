@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Youdao Smart Cloud (有道智云) — text translation
     YOUDAO_APP_KEY: str = ""
     YOUDAO_APP_SECRET: str = ""
+
+    # Google Cloud TTS — listening practice audio
+    GOOGLE_APPLICATION_CREDENTIALS: str = ""
+    TTS_AUDIO_DIR: str = "/var/www/ielts-assist/audio"
+    TTS_AUDIO_URL_PREFIX: str = "/audio"
     
     class Config:
         env_file = ".env"

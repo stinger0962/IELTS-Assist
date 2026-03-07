@@ -396,6 +396,31 @@ def extract_vocabulary(
     return {"extracted": count}
 
 
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "british_female"
+
+
+@router.post("/tts-preview")
+def tts_preview(
+    body: TTSRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Convert text to speech and return the audio URL. For testing TTS integration."""
+    from app.services.tts import synthesize, VOICES
+
+    if body.voice not in VOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown voice. Choose from: {list(VOICES.keys())}")
+    if len(body.text) > 5000:
+        raise HTTPException(status_code=400, detail="Text too long (max 5000 chars)")
+    try:
+        audio_url = synthesize(body.text, body.voice)
+        return {"audio_url": audio_url}
+    except Exception as e:
+        logger.error("TTS failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"TTS failed: {str(e)}")
+
+
 @router.post("/generate-reading")
 def generate_reading_practice(
     count: int = 3,
