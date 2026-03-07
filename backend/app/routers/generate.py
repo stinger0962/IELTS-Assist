@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.ai.practice_generator import practice_generator
+from app.services.ai.listening_generator import listening_generator
 from app.services.auth import get_current_user
 
 router = APIRouter()
@@ -435,6 +436,30 @@ def generate_reading_practice(
         if practice:
             db.add(GeneratedPractice(
                 skill="reading",
+                topic=practice.get("meta", {}).get("topic", ""),
+                content=json.dumps(practice),
+                is_validated=True,
+                generated_date=datetime.utcnow(),
+            ))
+            generated.append(practice)
+    db.commit()
+    return {"generated": len(generated), "practices": generated}
+
+
+@router.post("/generate-listening")
+def generate_listening_practice(
+    count: int = 1,
+    topic_hint: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate N listening exercises into global pool (with TTS audio)."""
+    generated = []
+    for _ in range(count):
+        practice = listening_generator.generate(topic_hint)
+        if practice:
+            db.add(GeneratedPractice(
+                skill="listening",
                 topic=practice.get("meta", {}).get("topic", ""),
                 content=json.dumps(practice),
                 is_validated=True,
