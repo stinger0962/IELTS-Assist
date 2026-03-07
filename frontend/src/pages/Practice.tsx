@@ -60,6 +60,7 @@ function AIReadingExerciseView({
   const [vocabAudioUrl, setVocabAudioUrl] = useState('');
   const [vocabDefLoading, setVocabDefLoading] = useState(false);
   const [vocabSaving, setVocabSaving] = useState(false);
+  const [vocabDuplicate, setVocabDuplicate] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
 
   const tfngQuestions = exercise.questions.true_false_not_given ?? [];
@@ -211,15 +212,16 @@ function AIReadingExerciseView({
         if (formatted) {
           setVocabDef(formatted);
           if (language === 'zh') {
-            const egMatches = [...formatted.matchAll(/ e\.g\. ("[^"]*")/g)].map(m => `e.g. ${m[1]}`);
-            const formattedForTranslation = formatted.replace(/ e\.g\. "[^"]*"/g, '').trim();
-            topicsAPI.translateDefinition(word, formattedForTranslation)
+            const quotes: string[] = [];
+            const tokenized = formatted.replace(/"([^"]*)"/g, (_, q) => {
+              quotes.push(`"${q}"`);
+              return `__Q${quotes.length - 1}__`;
+            });
+            topicsAPI.translateDefinition(word, tokenized)
               .then(r => {
                 if (r.data.content_zh) {
-                  const withExamples = egMatches.length
-                    ? r.data.content_zh + '\n' + egMatches.join('\n')
-                    : r.data.content_zh;
-                  setVocabDefZh(withExamples);
+                  const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
+                  setVocabDefZh(restored);
                 }
               })
               .catch(() => {});
@@ -248,13 +250,16 @@ function AIReadingExerciseView({
   const handleSaveVocab = async () => {
     if (!vocabDef.trim()) return;
     setVocabSaving(true);
+    setVocabDuplicate(false);
     try {
       await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'reading', category: 'vocabulary', phonetic: vocabPhonetic || undefined, audio_url: vocabAudioUrl || undefined });
       setVocabSaved(true);
       setShowVocabModal(false);
       setVocabDef('');
       setTimeout(() => setVocabSaved(false), 3000);
-    } catch { /* ignore */ } finally {
+    } catch (error: any) {
+      if (error?.response?.status === 409) setVocabDuplicate(true);
+    } finally {
       setVocabSaving(false);
     }
   };
@@ -292,8 +297,9 @@ function AIReadingExerciseView({
               rows={3}
               autoFocus={!vocabDefLoading}
             />
+            {vocabDuplicate && <p className="vocab-duplicate-msg">This word is already in your deck</p>}
             <div className="vocab-modal-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); }}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); setVocabDuplicate(false); }}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || vocabDefLoading || !vocabDef.trim()}>
                 {vocabSaving ? 'Saving…' : 'Save'}
               </button>
@@ -514,6 +520,7 @@ function AIReadingExerciseView({
         .vocab-required { color: var(--color-error); }
         .vocab-input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; box-sizing: border-box; }
         .vocab-textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; resize: vertical; box-sizing: border-box; font-family: inherit; }
+        .vocab-duplicate-msg { font-size: 0.8rem; color: var(--color-error); margin: var(--spacing-xs) 0 0; }
         .vocab-modal-actions { display: flex; justify-content: flex-end; gap: var(--spacing-sm); margin-top: var(--spacing-md); }
         .vocab-loading-hint { color: var(--color-text-secondary); font-weight: 400; font-style: italic; }
         .vocab-toast { position: fixed; bottom: 24px; right: 24px; background: var(--color-success); color: white; padding: 10px 18px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 600; z-index: 1002; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }

@@ -109,6 +109,12 @@ def create_topic(
     """Create a personal vocabulary word for the current user."""
     logger.info("create_topic: user=%s title=%r skill=%r", current_user.id, topic.title, topic.skill)
     try:
+        existing = db.query(Topic).filter(
+            Topic.user_id == current_user.id,
+            func.lower(Topic.title) == topic.title.strip().lower(),
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Word already in your deck")
         db_topic = Topic(
             user_id=current_user.id,
             skill=SkillType(topic.skill),
@@ -207,6 +213,30 @@ def remove_from_deck(
     except Exception:
         db.rollback()
         logger.error("remove_from_deck failed:\n%s", traceback.format_exc())
+        raise
+
+
+@router.delete("/{topic_id}")
+def delete_topic(
+    topic_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a personal vocabulary word. Only the owner can delete their own words."""
+    topic = db.query(Topic).filter(
+        Topic.id == topic_id,
+        Topic.user_id == current_user.id,
+    ).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    try:
+        db.query(TopicReview).filter(TopicReview.topic_id == topic_id).delete()
+        db.delete(topic)
+        db.commit()
+        return {"deleted": True}
+    except Exception:
+        db.rollback()
+        logger.error("delete_topic failed:\n%s", traceback.format_exc())
         raise
 
 

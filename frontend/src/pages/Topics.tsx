@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GraduationCap, Plus, BookmarkPlus, Check, Volume2 } from 'lucide-react';
+import { GraduationCap, Plus, BookmarkPlus, Check, Volume2, Trash2 } from 'lucide-react';
 import { topicsAPI } from '../api';
 import type { Topic, SkillType } from '../types';
 import { useAppStore } from '../store';
@@ -51,11 +51,13 @@ export default function Topics() {
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(false);
 
   const resetForm = () => {
     setNewWord({ title: '', content: '', content_zh: '', example: '', phonetic: '', audio_url: '' });
     setDictLoading(false);
     setTranslating(false);
+    setDuplicateError(false);
     setShowAddForm(false);
   };
 
@@ -87,17 +89,17 @@ export default function Topics() {
           setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example, phonetic, audio_url }));
           if (language === 'zh') {
             setTranslating(true);
-            // Strip inline examples (e.g. "...") before translating — Youdao would translate them too
-            // But preserve them in English by re-appending after translation
-            const egMatches = [...content.matchAll(/ e\.g\. ("[^"]*")/g)].map(m => `e.g. ${m[1]}`);
-            const contentForTranslation = content.replace(/ e\.g\. "[^"]*"/g, '').trim();
-            topicsAPI.translateDefinition(word.trim(), contentForTranslation)
+            // Replace "quoted strings" with tokens so Youdao preserves them in English
+            const quotes: string[] = [];
+            const tokenized = content.replace(/"([^"]*)"/g, (_, q) => {
+              quotes.push(`"${q}"`);
+              return `__Q${quotes.length - 1}__`;
+            });
+            topicsAPI.translateDefinition(word.trim(), tokenized)
               .then(r => {
                 if (r.data.content_zh) {
-                  const withExamples = egMatches.length
-                    ? r.data.content_zh + '\n' + egMatches.join('\n')
-                    : r.data.content_zh;
-                  setNewWord(p => ({ ...p, content_zh: withExamples }));
+                  const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
+                  setNewWord(p => ({ ...p, content_zh: restored }));
                 }
               })
               .catch(() => {})
@@ -180,8 +182,12 @@ export default function Topics() {
       setAddedIds(prev => new Set(prev).add(res.data.id));
       resetForm();
       setDueCount(d => d + 1);
-    } catch (error) {
-      console.error('Failed to add word:', error);
+    } catch (error: any) {
+      if (error?.response?.status === 409) {
+        setDuplicateError(true);
+      } else {
+        console.error('Failed to add word:', error);
+      }
     } finally {
       setSaving(false);
     }
@@ -206,6 +212,17 @@ export default function Topics() {
       }
     } catch (error) {
       console.error('Failed to remove from deck:', error);
+    }
+  };
+
+  const handleDeleteWord = async (topicId: number) => {
+    try {
+      await topicsAPI.delete(topicId);
+      setTopics(prev => prev.filter(t => t.id !== topicId));
+      setAddedIds(prev => { const next = new Set(prev); next.delete(topicId); return next; });
+      topicsAPI.getDueCount().then(r => setDueCount(r.data.due)).catch(() => {});
+    } catch (error) {
+      console.error('Failed to delete word:', error);
     }
   };
 
@@ -333,11 +350,15 @@ export default function Topics() {
                   className="form-input"
                   placeholder="e.g. mitigate"
                   value={newWord.title}
-                  onChange={e => setNewWord(p => ({ ...p, title: e.target.value }))}
+                  onChange={e => {
+                    setDuplicateError(false);
+                    setNewWord(p => ({ ...p, title: e.target.value, content: '', content_zh: '', example: '', phonetic: '', audio_url: '' }));
+                  }}
                   onBlur={e => lookupWord(e.target.value)}
                   required
                   autoFocus
                 />
+                {duplicateError && <span className="duplicate-error">This word is already in your deck</span>}
               </div>
               <div className="form-group">
                 <label className="form-label">
@@ -437,13 +458,25 @@ export default function Topics() {
                       <span key={i} className={i < topic.difficulty ? 'filled' : ''}>★</span>
                     ))}
                   </span>
-                  <button
-                    className={`add-deck-btn ${inDeck ? 'in-deck' : ''}`}
-                    onClick={() => inDeck ? handleRemoveFromDeck(topic.id) : handleAddToDeck(topic.id)}
-                    title={inDeck ? 'Click to remove from deck' : 'Add to flashcard deck'}
-                  >
-                    {inDeck ? <><Check size={13} /> In Deck</> : <><BookmarkPlus size={13} /> Add to Deck</>}
-                  </button>
+                  <div className="topic-footer-actions">
+                    {topic.user_id !== null && (
+                      <button
+                        className="delete-word-btn"
+                        onClick={() => handleDeleteWord(topic.id)}
+                        title="Delete this word"
+                        type="button"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    <button
+                      className={`add-deck-btn ${inDeck ? 'in-deck' : ''}`}
+                      onClick={() => inDeck ? handleRemoveFromDeck(topic.id) : handleAddToDeck(topic.id)}
+                      title={inDeck ? 'Click to remove from deck' : 'Add to flashcard deck'}
+                    >
+                      {inDeck ? <><Check size={13} /> In Deck</> : <><BookmarkPlus size={13} /> Add to Deck</>}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -519,6 +552,10 @@ const listStyles = `
   .topic-content { font-size: 0.875rem; line-height: 1.6; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex: 1; }
   .topic-example { font-size: 0.75rem; padding: var(--spacing-sm); background: var(--color-background); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); }
   .topic-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: var(--spacing-sm); }
+  .topic-footer-actions { display: flex; align-items: center; gap: var(--spacing-xs); }
+  .delete-word-btn { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 2px 4px; display: inline-flex; align-items: center; border-radius: var(--radius-sm); transition: color var(--transition-fast); opacity: 0.5; }
+  .delete-word-btn:hover { color: var(--color-error); opacity: 1; }
+  .duplicate-error { font-size: 0.75rem; color: var(--color-error); margin-top: 2px; }
   .topic-difficulty { font-size: 0.75rem; color: var(--color-text-secondary); }
   .topic-difficulty .filled { color: var(--color-warning); }
   .add-deck-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 3px 10px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); }

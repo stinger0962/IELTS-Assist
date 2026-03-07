@@ -137,6 +137,7 @@ export const topicsAPI = {
     api.post('/topics', data),
   addToDeck: (topicId: number) => api.post(`/topics/${topicId}/add-to-deck`),
   removeFromDeck: (topicId: number) => api.delete(`/topics/${topicId}/remove-from-deck`),
+  delete: (topicId: number) => api.delete(`/topics/${topicId}`),
   translateDefinition: (word: string, content_en: string) =>
     api.post('/generate/translate-definition', { word, content_en }),
   review: (topicId: number, quality: number) =>
