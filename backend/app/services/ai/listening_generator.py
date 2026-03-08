@@ -295,6 +295,39 @@ class ListeningGenerator:
             print(f"Listening validation error: {e}")
             return {"valid": False, "issues": [str(e)]}
 
+    # Common name → gender lookup (fallback when GPT omits gender tags)
+    FEMALE_NAMES = {
+        "emma", "emily", "sarah", "lisa", "anna", "maria", "laura", "sophie",
+        "jessica", "rachel", "claire", "kate", "lucy", "alice", "helen",
+        "olivia", "hannah", "amy", "natalie", "rebecca", "julia", "megan",
+        "charlotte", "victoria", "diana", "grace", "nina", "susan", "karen",
+        "mary", "jennifer", "amanda", "stephanie", "nicole", "elizabeth",
+        "catherine", "margaret", "patricia", "linda", "jane",
+    }
+    MALE_NAMES = {
+        "james", "john", "david", "mark", "josh", "tom", "mike", "chris",
+        "daniel", "robert", "jack", "ben", "sam", "alex", "ryan", "adam",
+        "peter", "paul", "luke", "jake", "andrew", "nathan", "oliver",
+        "william", "henry", "george", "edward", "matthew", "joseph",
+        "richard", "charles", "thomas", "kevin", "brian", "steven", "eric",
+        "patrick", "timothy", "jason", "jeffrey", "scott", "nicholas",
+    }
+    # Role-based names that are gender-neutral — skip inference
+    ROLE_NAMES = {
+        "receptionist", "agent", "advisor", "tutor", "professor", "guide",
+        "instructor", "manager", "assistant", "librarian", "operator",
+        "coordinator", "consultant", "clerk", "official", "host",
+    }
+
+    def _infer_gender(self, name: str) -> str | None:
+        """Infer gender from name: 'F', 'M', or None if unknown."""
+        low = name.lower().strip()
+        if low in self.FEMALE_NAMES:
+            return "F"
+        if low in self.MALE_NAMES:
+            return "M"
+        return None
+
     def _synthesize_audio(self, practice: dict) -> str:
         """Convert transcript to MP3 — dialogue for multi-speaker, single voice for monologue."""
         transcript = practice.get("transcript", "")
@@ -303,7 +336,7 @@ class ListeningGenerator:
 
         if fmt in ("conversation", "discussion") and len(speakers) >= 2:
             voice_pair = random.choice(VOICE_PAIRS)
-            # Match voice gender to speaker gender tags like "Lisa (F)", "Mark (M)"
+            # Parse gender tags like "Lisa (F)" or infer from name
             genders = []
             clean_speakers = []
             for s in speakers:
@@ -315,15 +348,15 @@ class ListeningGenerator:
                     genders.append("M")
                     clean_speakers.append(s_stripped[:-3].strip())
                 else:
-                    genders.append(None)
+                    # Fallback: infer gender from common names
+                    genders.append(self._infer_gender(s_stripped))
                     clean_speakers.append(s_stripped)
-            # If we know genders, ensure female voice → female speaker
-            if len(genders) >= 2 and genders[0] and genders[1]:
+            # If we know both genders, ensure female voice → female speaker
+            if len(genders) >= 2 and genders[0] and genders[1] and genders[0] != genders[1]:
                 pair_genders = ("F" if "female" in voice_pair[0] else "M",
                                 "F" if "female" in voice_pair[1] else "M")
-                if genders[0] != pair_genders[0] and genders[1] != pair_genders[1]:
+                if genders[0] != pair_genders[0]:
                     voice_pair = (voice_pair[1], voice_pair[0])  # swap
-            # Use clean names (without gender tags) for speaker matching
             practice["meta"]["speakers"] = clean_speakers
             return synthesize_dialogue(transcript, clean_speakers, voice_pair)
         else:
