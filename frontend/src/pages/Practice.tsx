@@ -848,10 +848,18 @@ function AIListeningExerciseView({
       {submitted && (() => {
         const timestamps = exercise.line_timestamps;
         const hasLyrics = timestamps && timestamps.length > 0;
+        // Sentence-level timestamps include "text" field (monologues)
+        const hasSentenceText = hasLyrics && !!timestamps[0].text;
         // Find active line: last line whose start <= currentTime
         const activeIdx = hasLyrics
           ? timestamps.reduce((acc, t) => (currentTime >= t.start ? t.line_index : acc), -1)
           : -1;
+
+        // Build display lines: use timestamp texts for monologues, transcript lines for dialogues
+        const displayLines = hasSentenceText
+          ? timestamps.map(t => t.text!)
+          : exercise.transcript.split('\n').filter(Boolean);
+
         return (
           <div className="transcript-section">
             <button className="transcript-toggle" onClick={() => setShowTranscript(!showTranscript)}>
@@ -860,10 +868,10 @@ function AIListeningExerciseView({
             </button>
             {showTranscript && (
               <div className="transcript-content">
-                {exercise.transcript.split('\n').filter(Boolean).map((line, i) => {
+                {displayLines.map((line, i) => {
                   const isActive = hasLyrics && i === activeIdx && isPlaying;
                   const colonIdx = line.indexOf(':');
-                  const hasSpeaker = colonIdx > 0 && colonIdx < 30;
+                  const hasSpeaker = !hasSentenceText && colonIdx > 0 && colonIdx < 30;
                   return (
                     <p
                       key={i}

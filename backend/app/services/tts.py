@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 import uuid
 from pathlib import Path
 
@@ -156,16 +157,37 @@ def synthesize_dialogue(
     return _save_audio(buf.getvalue()), timestamps
 
 
-def synthesize_monologue(text: str, voice_key: str = "british_female") -> tuple[str, list[dict]]:
-    """Convert a monologue (multi-line text) to MP3 with per-line timestamps.
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences, handling common abbreviations."""
+    # Protect abbreviations by replacing their dots with a placeholder
+    _ABBREVS = ["Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.", "St.",
+                "vs.", "etc.", "e.g.", "i.e.", "a.m.", "p.m.", "No."]
+    protected = text
+    for abbr in _ABBREVS:
+        protected = protected.replace(abbr, abbr.replace(".", "\x00"))
+    # Split on sentence-ending punctuation followed by space + uppercase
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', protected)
+    # Restore dots
+    return [s.replace("\x00", ".").strip() for s in parts if s.strip()]
 
-    Synthesizes each line individually and concatenates with short pauses.
-    Returns (audio_url, line_timestamps).
+
+def synthesize_monologue(text: str, voice_key: str = "british_female") -> tuple[str, list[dict]]:
+    """Convert a monologue to MP3 with per-sentence timestamps.
+
+    Splits text into sentences, synthesizes each individually, concatenates
+    with short pauses. Returns (audio_url, line_timestamps) where each
+    timestamp includes the sentence text for frontend display.
     """
     from pydub import AudioSegment
 
-    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
-    if not lines:
+    # Split paragraphs into sentences for finer-grained timestamps
+    sentences: list[str] = []
+    for para in text.strip().split("\n"):
+        para = para.strip()
+        if para:
+            sentences.extend(_split_sentences(para))
+
+    if not sentences:
         url = synthesize(text, voice_key)
         return url, []
 
@@ -173,12 +195,12 @@ def synthesize_monologue(text: str, voice_key: str = "british_female") -> tuple[
     voice = VOICES.get(voice_key, VOICES["british_female"])
     segments: list[AudioSegment] = []
     timestamps: list[dict] = []
-    pause = AudioSegment.silent(duration=400)  # 0.4s between sentences
+    pause = AudioSegment.silent(duration=200)  # 0.2s between sentences
     cursor_ms = 0
 
-    for i, line in enumerate(lines):
+    for i, sentence in enumerate(sentences):
         response = client.synthesize_speech(
-            input=texttospeech.SynthesisInput(text=line),
+            input=texttospeech.SynthesisInput(text=sentence),
             voice=voice,
             audio_config=AUDIO_CONFIG,
         )
@@ -186,13 +208,18 @@ def synthesize_monologue(text: str, voice_key: str = "british_female") -> tuple[
 
         if segments:
             segments.append(pause)
-            cursor_ms += 400
+            cursor_ms += 200
 
         start_s = cursor_ms / 1000.0
         cursor_ms += len(segment)
         end_s = cursor_ms / 1000.0
 
-        timestamps.append({"line_index": i, "start": round(start_s, 2), "end": round(end_s, 2)})
+        timestamps.append({
+            "line_index": i,
+            "start": round(start_s, 2),
+            "end": round(end_s, 2),
+            "text": sentence,
+        })
         segments.append(segment)
 
     combined = segments[0]
