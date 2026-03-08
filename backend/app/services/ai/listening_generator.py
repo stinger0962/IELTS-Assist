@@ -3,7 +3,7 @@ import random
 from datetime import datetime
 from openai import OpenAI
 from app.config import settings
-from app.services.tts import synthesize, synthesize_dialogue, VOICE_PAIRS, VOICES
+from app.services.tts import synthesize_monologue, synthesize_dialogue, VOICE_PAIRS, VOICES
 
 LISTENING_PROMPT = '''You are an IELTS Listening item writer.
 
@@ -358,18 +358,23 @@ class ListeningGenerator:
                 if genders[0] != pair_genders[0]:
                     voice_pair = (voice_pair[1], voice_pair[0])  # swap
             practice["meta"]["speakers"] = clean_speakers
-            return synthesize_dialogue(transcript, clean_speakers, voice_pair)
+            audio_url, timestamps = synthesize_dialogue(transcript, clean_speakers, voice_pair)
+            practice["line_timestamps"] = timestamps
+            return audio_url
         else:
             # Single speaker — pick a random solo voice
             solo_voices = list(VOICES.keys())
             voice_key = random.choice(solo_voices)
             # Strip speaker labels for cleaner TTS
-            clean = "\n".join(
+            clean_lines = [
                 line.split(":", 1)[1].strip() if ":" in line else line
                 for line in transcript.strip().split("\n")
                 if line.strip()
-            )
-            return synthesize(clean, voice_key)
+            ]
+            clean = "\n".join(clean_lines)
+            audio_url, timestamps = synthesize_monologue(clean, voice_key)
+            practice["line_timestamps"] = timestamps
+            return audio_url
 
 
 listening_generator = ListeningGenerator()

@@ -87,12 +87,17 @@ def synthesize(text: str, voice_key: str = "british_female") -> str:
     return _save_audio(response.audio_content)
 
 
-def synthesize_dialogue(transcript: str, speakers: list[str], voice_pair: tuple[str, str]) -> str:
+def synthesize_dialogue(
+    transcript: str, speakers: list[str], voice_pair: tuple[str, str],
+) -> tuple[str, list[dict]]:
     """Convert a multi-speaker transcript to a single MP3.
 
     Parses lines like "Sarah: Hello..." and "Receptionist: Welcome...",
     synthesizes each speaker's lines with a different voice, concatenates
-    with short pauses between turns, and returns the combined audio URL.
+    with short pauses between turns.
+
+    Returns (audio_url, line_timestamps) where each timestamp is
+    {"line_index": int, "start": float, "end": float} in seconds.
     """
     from pydub import AudioSegment  # lazy import — needs audioop (Python ≤3.12)
 
@@ -102,7 +107,10 @@ def synthesize_dialogue(transcript: str, speakers: list[str], voice_pair: tuple[
         voice_map[name.strip().lower()] = voice_pair[i % len(voice_pair)]
 
     segments: list[AudioSegment] = []
+    timestamps: list[dict] = []
     pause = AudioSegment.silent(duration=600)  # 0.6s pause between turns
+    cursor_ms = 0
+    line_index = 0
 
     for line in transcript.strip().split("\n"):
         line = line.strip()
@@ -122,12 +130,22 @@ def synthesize_dialogue(transcript: str, speakers: list[str], voice_pair: tuple[
             audio_config=AUDIO_CONFIG,
         )
         segment = AudioSegment.from_mp3(io.BytesIO(response.audio_content))
+
         if segments:
             segments.append(pause)
+            cursor_ms += 600
+
+        start_s = cursor_ms / 1000.0
+        cursor_ms += len(segment)
+        end_s = cursor_ms / 1000.0
+
+        timestamps.append({"line_index": line_index, "start": round(start_s, 2), "end": round(end_s, 2)})
         segments.append(segment)
+        line_index += 1
 
     if not segments:
-        return synthesize(transcript, voice_pair[0])
+        url = synthesize(transcript, voice_pair[0])
+        return url, []
 
     combined = segments[0]
     for seg in segments[1:]:
@@ -135,4 +153,52 @@ def synthesize_dialogue(transcript: str, speakers: list[str], voice_pair: tuple[
 
     buf = io.BytesIO()
     combined.export(buf, format="mp3")
-    return _save_audio(buf.getvalue())
+    return _save_audio(buf.getvalue()), timestamps
+
+
+def synthesize_monologue(text: str, voice_key: str = "british_female") -> tuple[str, list[dict]]:
+    """Convert a monologue (multi-line text) to MP3 with per-line timestamps.
+
+    Synthesizes each line individually and concatenates with short pauses.
+    Returns (audio_url, line_timestamps).
+    """
+    from pydub import AudioSegment
+
+    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+    if not lines:
+        url = synthesize(text, voice_key)
+        return url, []
+
+    client = _get_client()
+    voice = VOICES.get(voice_key, VOICES["british_female"])
+    segments: list[AudioSegment] = []
+    timestamps: list[dict] = []
+    pause = AudioSegment.silent(duration=400)  # 0.4s between sentences
+    cursor_ms = 0
+
+    for i, line in enumerate(lines):
+        response = client.synthesize_speech(
+            input=texttospeech.SynthesisInput(text=line),
+            voice=voice,
+            audio_config=AUDIO_CONFIG,
+        )
+        segment = AudioSegment.from_mp3(io.BytesIO(response.audio_content))
+
+        if segments:
+            segments.append(pause)
+            cursor_ms += 400
+
+        start_s = cursor_ms / 1000.0
+        cursor_ms += len(segment)
+        end_s = cursor_ms / 1000.0
+
+        timestamps.append({"line_index": i, "start": round(start_s, 2), "end": round(end_s, 2)})
+        segments.append(segment)
+
+    combined = segments[0]
+    for seg in segments[1:]:
+        combined += seg
+
+    buf = io.BytesIO()
+    combined.export(buf, format="mp3")
+    return _save_audio(buf.getvalue()), timestamps

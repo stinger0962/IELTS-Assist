@@ -213,6 +213,7 @@ export interface AIListeningPractice {
     audio_url: string;
   };
   transcript: string;
+  line_timestamps?: { line_index: number; start: number; end: number }[];
   questions: {
     completion: AIListeningCompletionQuestion[];
     multiple_choice: AIListeningMCQQuestion[];

@@ -648,6 +648,7 @@ function AIListeningExerciseView({
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explanationsLoading, setExplanationsLoading] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const transcriptLineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
 
   // Answer state: keyed by "comp_0", "mc_0", etc.
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -691,6 +692,18 @@ function AIListeningExerciseView({
   const replay = () => {
     if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); }
   };
+
+  // Auto-scroll to active transcript line
+  const activeLineIdx = (() => {
+    const ts = exercise.line_timestamps;
+    if (!ts || ts.length === 0 || !isPlaying) return -1;
+    return ts.reduce((acc, t) => (currentTime >= t.start ? t.line_index : acc), -1);
+  })();
+  useEffect(() => {
+    if (activeLineIdx >= 0 && showTranscript) {
+      transcriptLineRefs.current[activeLineIdx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [activeLineIdx, showTranscript]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -823,32 +836,49 @@ function AIListeningExerciseView({
         </div>
       </div>
 
-      {/* Transcript (after submit) */}
-      {submitted && (
-        <div className="transcript-section">
-          <button className="transcript-toggle" onClick={() => setShowTranscript(!showTranscript)}>
-            <FileText size={16} />
-            {showTranscript ? 'Hide Transcript' : 'Show Transcript'}
-          </button>
-          {showTranscript && (
-            <div className="transcript-content">
-              {exercise.transcript.split('\n').filter(Boolean).map((line, i) => {
-                const colonIdx = line.indexOf(':');
-                if (colonIdx > 0 && colonIdx < 30) {
-                  const speaker = line.slice(0, colonIdx);
-                  const text = line.slice(colonIdx + 1).trim();
+      {/* Transcript (after submit) — lyrics mode with time-synced highlighting */}
+      {submitted && (() => {
+        const timestamps = exercise.line_timestamps;
+        const hasLyrics = timestamps && timestamps.length > 0;
+        // Find active line: last line whose start <= currentTime
+        const activeIdx = hasLyrics
+          ? timestamps.reduce((acc, t) => (currentTime >= t.start ? t.line_index : acc), -1)
+          : -1;
+        return (
+          <div className="transcript-section">
+            <button className="transcript-toggle" onClick={() => setShowTranscript(!showTranscript)}>
+              <FileText size={16} />
+              {showTranscript ? 'Hide Transcript' : 'Show Transcript'}
+            </button>
+            {showTranscript && (
+              <div className="transcript-content">
+                {exercise.transcript.split('\n').filter(Boolean).map((line, i) => {
+                  const isActive = hasLyrics && i === activeIdx && isPlaying;
+                  const colonIdx = line.indexOf(':');
+                  const hasSpeaker = colonIdx > 0 && colonIdx < 30;
                   return (
-                    <p key={i} className="transcript-line">
-                      <span className="transcript-speaker">{speaker}:</span> {text}
+                    <p
+                      key={i}
+                      ref={el => { transcriptLineRefs.current[i] = el; }}
+                      className={`transcript-line ${hasLyrics ? 'transcript-clickable' : ''} ${isActive ? 'transcript-line-active' : ''}`}
+                      onClick={() => {
+                        if (hasLyrics && timestamps[i] && audioRef.current) {
+                          audioRef.current.currentTime = timestamps[i].start;
+                          setCurrentTime(timestamps[i].start);
+                        }
+                      }}
+                    >
+                      {hasSpeaker ? (
+                        <><span className="transcript-speaker">{line.slice(0, colonIdx)}:</span> {line.slice(colonIdx + 1).trim()}</>
+                      ) : line}
                     </p>
                   );
-                }
-                return <p key={i} className="transcript-line">{line}</p>;
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Questions */}
       <div className="listening-questions">
@@ -988,7 +1018,11 @@ function AIListeningExerciseView({
         .transcript-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); }
         .transcript-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
         .transcript-content { margin-top: var(--spacing-sm); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); max-height: 300px; overflow-y: auto; }
-        .transcript-line { font-size: 0.875rem; line-height: 1.7; color: var(--color-text-primary); margin-bottom: var(--spacing-xs); }
+        .transcript-content { scroll-behavior: smooth; }
+        .transcript-line { font-size: 0.875rem; line-height: 1.7; color: var(--color-text-primary); margin-bottom: var(--spacing-xs); padding: 2px 6px; border-radius: var(--radius-sm); transition: background 0.2s, opacity 0.2s; }
+        .transcript-clickable { cursor: pointer; }
+        .transcript-clickable:hover { background: var(--color-border); }
+        .transcript-line-active { background: color-mix(in srgb, var(--color-primary) 12%, transparent); font-weight: 500; }
         .transcript-speaker { font-weight: 600; color: var(--color-primary); }
 
         .submit-row { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
