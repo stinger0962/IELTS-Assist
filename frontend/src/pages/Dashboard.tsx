@@ -313,6 +313,9 @@ export default function Dashboard() {
         .dashboard {
           max-width: 1200px;
           margin: 0 auto;
+          overflow-x: hidden;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .page-header {
@@ -333,6 +336,24 @@ export default function Dashboard() {
         @media (max-width: 1024px) {
           .stats-grid {
             grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 480px) {
+          .stats-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-sm);
+          }
+          .stat-card {
+            padding: var(--spacing-sm);
+            gap: var(--spacing-sm);
+          }
+          .stat-icon {
+            width: 36px;
+            height: 36px;
+          }
+          .stat-value {
+            font-size: 1.25rem;
           }
         }
 
@@ -393,6 +414,19 @@ export default function Dashboard() {
         @media (max-width: 1024px) {
           .skills-grid {
             grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 480px) {
+          .skills-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-sm);
+          }
+          .skill-card {
+            padding: var(--spacing-sm);
+          }
+          .skill-progress {
+            gap: var(--spacing-sm);
           }
         }
 
@@ -523,6 +557,7 @@ export default function Dashboard() {
 
         .activity-info {
           flex: 1;
+          min-width: 0;
           display: flex;
           flex-direction: column;
         }
@@ -541,6 +576,8 @@ export default function Dashboard() {
           font-size: 0.875rem;
           color: var(--color-primary);
           font-weight: 500;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .goal-item {

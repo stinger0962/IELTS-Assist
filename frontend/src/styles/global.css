@@ -98,6 +98,8 @@ body {
   min-height: 100vh;
   padding: var(--spacing-lg);
   transition: margin-left var(--transition-normal);
+  overflow-x: hidden;
+  min-width: 0; /* allow flex child to shrink below content size */
 }
 
 @media (max-width: 1024px) {
