@@ -102,10 +102,11 @@ def _replenish(user_id: int) -> None:
 
 
 def daily_generate() -> None:
-    """Cron job: unconditionally add 3 fresh exercises to global pool."""
+    """Cron job: add 3 reading + 2 listening exercises to global pool at midnight UTC."""
     db = SessionLocal()
     try:
-        logger.info("Daily generation: adding 3 new exercises")
+        # Reading exercises
+        logger.info("Daily generation: adding 3 reading exercises")
         for _ in range(3):
             practice = practice_generator.generate_practice()
             if practice:
@@ -117,7 +118,31 @@ def daily_generate() -> None:
                     generated_date=datetime.utcnow(),
                 ))
         db.commit()
-        logger.info("Daily generation complete")
+        logger.info("Daily reading generation complete")
+
+        # Listening exercises
+        logger.info("Daily generation: adding 2 listening exercises")
+        recent = (
+            db.query(GeneratedPractice.topic)
+            .filter(GeneratedPractice.skill == "listening", GeneratedPractice.topic.isnot(None))
+            .order_by(GeneratedPractice.generated_date.desc())
+            .limit(15)
+            .all()
+        )
+        avoid_list = [r[0] for r in recent if r[0]]
+        topic_hint = f"avoid: {', '.join(avoid_list)}" if avoid_list else ""
+        for _ in range(2):
+            practice = listening_generator.generate(topic_hint)
+            if practice:
+                db.add(GeneratedPractice(
+                    skill="listening",
+                    topic=practice.get("meta", {}).get("topic", ""),
+                    content=json.dumps(practice),
+                    is_validated=True,
+                    generated_date=datetime.utcnow(),
+                ))
+        db.commit()
+        logger.info("Daily listening generation complete")
     except Exception as e:
         logger.error(f"Daily generation error: {e}")
     finally:
