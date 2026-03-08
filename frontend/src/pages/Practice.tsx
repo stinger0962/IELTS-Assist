@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft } from 'lucide-react';
+import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
 import { useAppStore } from '../store';
 import type {
-  SkillType, ListeningExercise, WritingTopic, SpeakingTopic,
-  AIReadingPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
+  SkillType, WritingTopic, SpeakingTopic,
+  AIReadingPractice, AIListeningPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
   MatchingHeadingData, MatchingAnswerItem,
 } from '../types';
 
@@ -242,7 +242,7 @@ function AIReadingExerciseView({
         setVocabWord(text);
         // Position popup BELOW the selection so it doesn't clash with the
         // browser's native Copy / Google Search toolbar which appears above
-        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom + window.scrollY });
+        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom });
       } catch { /* ignore */ }
     } else {
       setVocabPopupPos(null);
@@ -542,103 +542,305 @@ function AIReadingExerciseView({
   );
 }
 
-// ─── Listening Exercise View ─────────────────────────────────────────────────
+// ─── AI Listening Exercise View ──────────────────────────────────────────────
 
-function ListeningExerciseView({
+function AIListeningExerciseView({
   exercise,
   onComplete,
 }: {
-  exercise: ListeningExercise;
+  exercise: AIListeningPractice;
   onComplete: (correct: number, total: number) => void;
 }) {
   const { t } = useTranslation();
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [showResult, setShowResult] = useState(false);
-  const [answers, setAnswers] = useState<{ question: string; userAnswer: string; correctAnswer: string }[]>([]);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [submitted, setSubmitted] = useState(false);
   const [startTime] = useState(Date.now());
 
-  const question = exercise.questions[currentQuestion];
+  // Answer state: keyed by "comp_0", "mc_0", etc.
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
-  const handleAnswer = () => {
-    if (selectedAnswer === null) return;
-    const isCorrect = selectedAnswer === question.answer;
-    setAnswers(prev => [...prev, {
-      question: question.question,
-      userAnswer: question.options[selectedAnswer],
-      correctAnswer: question.options[question.answer],
-    }]);
-    setShowResult(true);
-    if (!isCorrect) {
-      mistakesAPI.create({
-        skill: 'listening', question: question.question,
-        user_answer: question.options[selectedAnswer],
-        correct_answer: question.options[question.answer],
-        mistake_type: 'listening_comprehension',
-      }).catch(() => {});
-    }
+  const completionQs = exercise.questions.completion ?? [];
+  const mcqQs = exercise.questions.multiple_choice ?? [];
+  const totalQuestions = completionQs.length + mcqQs.length;
+
+  // Audio URL — prepend VPS base if it's a relative path
+  const audioUrl = exercise.meta.audio_url?.startsWith('http')
+    ? exercise.meta.audio_url
+    : exercise.meta.audio_url; // relative URL served by nginx
+
+  // Audio controls
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) { audio.pause(); } else { audio.play(); }
   };
 
-  const handleNext = () => {
-    if (currentQuestion < exercise.questions.length - 1) {
-      setCurrentQuestion(q => q + 1);
-      setSelectedAnswer(null);
-      setShowResult(false);
-    } else {
-      const timeTaken = Math.round((Date.now() - startTime) / 1000);
-      const correct = answers.filter(a => a.userAnswer === a.correctAnswer).length +
-        (showResult && selectedAnswer === question.answer ? 1 : 0);
-      const total = exercise.questions.length;
-      practiceAPI.submit({
-        skill: 'listening', exercise_id: exercise.id,
-        score: (correct / total) * 100,
-        total_questions: total, correct_answers: correct, time_taken_seconds: timeTaken,
-      }).catch(() => {});
-      progressAPI.updateProgress({ skill: 'listening', total_questions: total, correct_answers: correct }).catch(() => {});
-      onComplete(correct, total);
-    }
+  const handleTimeUpdate = () => {
+    if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
   };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) setDuration(audioRef.current.duration);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (audioRef.current) { audioRef.current.currentTime = time; setCurrentTime(time); }
+  };
+
+  const changeSpeed = () => {
+    const speeds = [0.75, 1, 1.25];
+    const next = speeds[(speeds.indexOf(playbackRate) + 1) % speeds.length];
+    setPlaybackRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const replay = () => {
+    if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); }
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const setAnswer = (key: string, value: string) => {
+    setAnswers(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSubmit = async () => {
+    let correct = 0;
+
+    // Score completion questions
+    completionQs.forEach((q, i) => {
+      const userAns = (answers[`comp_${i}`] ?? '').trim().toLowerCase();
+      const correctAns = q.answer.trim().toLowerCase();
+      if (userAns === correctAns) correct++;
+    });
+
+    // Score MCQ questions
+    mcqQs.forEach((q, i) => {
+      const userAns = (answers[`mc_${i}`] ?? '').trim().toUpperCase();
+      if (userAns === q.answer) correct++;
+    });
+
+    setSubmitted(true);
+
+    // Submit to backend
+    if (exercise.practice_db_id) {
+      const score = Math.round((3.5 + (correct / totalQuestions) * 4.5) * 2) / 2;
+      practiceAPI.submitAIListening(
+        exercise.practice_db_id,
+        JSON.stringify(answers),
+        score,
+        correct,
+        totalQuestions,
+      ).catch(() => {});
+
+      const studyMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
+      progressAPI.updateProgress({
+        skill: 'listening',
+        correct_answers: correct,
+        total_questions: totalQuestions,
+        study_time_minutes: studyMinutes,
+        band_score: score,
+      }).catch(() => {});
+      progressAPI.createSession({ skill: 'listening', duration_minutes: studyMinutes }).catch(() => {});
+    }
+
+    // Log wrong answers to Mistakes
+    completionQs.forEach((q, i) => {
+      const userAns = (answers[`comp_${i}`] ?? '').trim();
+      if (userAns.toLowerCase() !== q.answer.trim().toLowerCase()) {
+        mistakesAPI.create({
+          skill: 'listening',
+          question: q.text,
+          user_answer: userAns || '(unanswered)',
+          correct_answer: q.answer,
+          mistake_type: 'completion',
+        }).catch(() => {});
+      }
+    });
+    mcqQs.forEach((q, i) => {
+      const userAns = (answers[`mc_${i}`] ?? '').trim().toUpperCase();
+      if (userAns !== q.answer) {
+        mistakesAPI.create({
+          skill: 'listening',
+          question: q.question,
+          user_answer: userAns || '(unanswered)',
+          correct_answer: q.answer,
+          mistake_type: 'multiple_choice',
+        }).catch(() => {});
+      }
+    });
+
+    onComplete(correct, totalQuestions);
+  };
+
+  // Merge all questions into a single list sorted by question_number for display
+  const allQuestions = [
+    ...completionQs.map((q, i) => ({ type: 'completion' as const, q, idx: i, num: q.question_number })),
+    ...mcqQs.map((q, i) => ({ type: 'mcq' as const, q, idx: i, num: q.question_number })),
+  ].sort((a, b) => a.num - b.num);
 
   return (
-    <div className="exercise-view">
-      <div className="exercise-passage">
-        <h3>{exercise.title}</h3>
-        <p>{exercise.script}</p>
+    <div className="ai-listening-view">
+      {/* Audio Player */}
+      <div className="audio-player">
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+        />
+        <div className="player-controls">
+          <button className="player-btn" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
+            {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+          </button>
+          <span className="player-time">{formatTime(currentTime)}</span>
+          <input
+            className="player-progress"
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={currentTime}
+            onChange={handleSeek}
+          />
+          <span className="player-time">{formatTime(duration)}</span>
+          <button className="player-btn speed-btn" onClick={changeSpeed} title="Change speed">
+            {playbackRate}x
+          </button>
+          <button className="player-btn" onClick={replay} title="Replay from start">
+            <RotateCcw size={16} />
+          </button>
+        </div>
+        <div className="player-info">
+          <span className="format-badge">{exercise.meta.format}</span>
+          <span className="topic-label">{exercise.meta.topic}</span>
+        </div>
       </div>
-      <div className="exercise-question">
-        <div className="question-header">
-          <span className="question-number">Question {currentQuestion + 1} of {exercise.questions.length}</span>
-        </div>
-        <p className="question-text">{question.question}</p>
-        <div className="options">
-          {question.options.map((option, index) => (
-            <button
-              key={index}
-              className={`option ${selectedAnswer === index ? 'selected' : ''} ${
-                showResult ? (index === question.answer ? 'correct' : selectedAnswer === index ? 'incorrect' : '') : ''
-              }`}
-              onClick={() => !showResult && setSelectedAnswer(index)}
-              disabled={showResult}
-            >
-              <span className="option-letter">{String.fromCharCode(65 + index)}</span>
-              <span className="option-text">{option}</span>
-              {showResult && index === question.answer && <Check size={16} className="result-icon correct" />}
-              {showResult && selectedAnswer === index && index !== question.answer && <X size={16} className="result-icon incorrect" />}
-            </button>
-          ))}
-        </div>
-        <div className="question-actions">
-          {!showResult ? (
-            <button className="btn btn-primary" onClick={handleAnswer} disabled={selectedAnswer === null}>
+
+      {/* Questions */}
+      <div className="listening-questions">
+        <h3>Questions (1–{totalQuestions})</h3>
+        {allQuestions.map(item => {
+          if (item.type === 'completion') {
+            const q = item.q;
+            const key = `comp_${item.idx}`;
+            const userAns = (answers[key] ?? '').trim().toLowerCase();
+            const correctAns = q.answer.trim().toLowerCase();
+            const isCorrect = submitted && userAns === correctAns;
+            const isWrong = submitted && userAns !== correctAns;
+            return (
+              <div key={key} className={`question-block ${isCorrect ? 'q-correct' : ''} ${isWrong ? 'q-wrong' : ''}`}>
+                <div className="q-number">{q.question_number}</div>
+                <div className="q-body">
+                  <p className="q-text">{q.text}</p>
+                  <input
+                    className={`completion-input ${isCorrect ? 'input-correct' : ''} ${isWrong ? 'input-wrong' : ''}`}
+                    type="text"
+                    placeholder="Type your answer…"
+                    value={answers[key] ?? ''}
+                    onChange={e => setAnswer(key, e.target.value)}
+                    disabled={submitted}
+                  />
+                  {isWrong && <span className="correct-label">Correct: {q.answer}</span>}
+                </div>
+                {submitted && (isCorrect
+                  ? <Check size={18} className="q-icon correct" />
+                  : <X size={18} className="q-icon incorrect" />)}
+              </div>
+            );
+          } else {
+            const q = item.q;
+            const key = `mc_${item.idx}`;
+            const userAns = (answers[key] ?? '').trim().toUpperCase();
+            const optionKeys = Object.keys(q.options);
+            return (
+              <div key={key} className={`question-block ${submitted && userAns === q.answer ? 'q-correct' : ''} ${submitted && userAns !== q.answer ? 'q-wrong' : ''}`}>
+                <div className="q-number">{q.question_number}</div>
+                <div className="q-body">
+                  <p className="q-text">{q.question}</p>
+                  <div className="mcq-options">
+                    {optionKeys.map(letter => {
+                      const selected = userAns === letter;
+                      const isCorrectOption = submitted && letter === q.answer;
+                      const isWrongSelection = submitted && selected && letter !== q.answer;
+                      return (
+                        <button
+                          key={letter}
+                          className={`option ${selected && !submitted ? 'selected' : ''} ${isCorrectOption ? 'correct' : ''} ${isWrongSelection ? 'incorrect' : ''}`}
+                          onClick={() => !submitted && setAnswer(key, letter)}
+                          disabled={submitted}
+                        >
+                          <span className="option-letter">{letter}</span>
+                          <span className="option-text">{q.options[letter]}</span>
+                          {isCorrectOption && <Check size={16} className="result-icon correct" />}
+                          {isWrongSelection && <X size={16} className="result-icon incorrect" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+        })}
+
+        {!submitted && (
+          <div className="submit-row">
+            <button className="btn btn-primary" onClick={handleSubmit}>
               {t('practice.submit')}
             </button>
-          ) : (
-            <button className="btn btn-primary" onClick={handleNext}>
-              {currentQuestion < exercise.questions.length - 1 ? t('practice.next') : t('practice.finish')}
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
+      <style>{`
+        .ai-listening-view { max-width: 800px; margin: 0 auto; }
+        .audio-player { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .player-controls { display: flex; align-items: center; gap: var(--spacing-sm); }
+        .player-btn { background: none; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--color-text-primary); transition: all var(--transition-fast); }
+        .player-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+        .speed-btn { font-size: 0.75rem; font-weight: 700; min-width: 40px; padding: 6px 8px; }
+        .player-time { font-size: 0.75rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; min-width: 36px; text-align: center; }
+        .player-progress { flex: 1; height: 4px; accent-color: var(--color-primary); cursor: pointer; }
+        .player-info { display: flex; align-items: center; gap: var(--spacing-sm); margin-top: var(--spacing-sm); }
+        .format-badge { background: rgba(16,185,129,0.12); color: #10B981; padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.7rem; font-weight: 700; text-transform: capitalize; }
+        .topic-label { font-size: 0.85rem; color: var(--color-text-secondary); }
+
+        .listening-questions { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
+        .listening-questions h3 { margin-bottom: var(--spacing-md); font-size: 1rem; }
+        .question-block { display: flex; align-items: flex-start; gap: var(--spacing-sm); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); border: 1px solid var(--color-border); background: var(--color-background); }
+        .question-block.q-correct { border-color: var(--color-success); background: rgba(16,185,129,0.05); }
+        .question-block.q-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.05); }
+        .q-number { width: 28px; height: 28px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+        .q-body { flex: 1; min-width: 0; }
+        .q-text { font-size: 0.9rem; color: var(--color-text-primary); margin-bottom: var(--spacing-sm); line-height: 1.5; }
+        .q-icon { flex-shrink: 0; margin-top: 4px; }
+        .q-icon.correct { color: var(--color-success); }
+        .q-icon.incorrect { color: var(--color-error); }
+
+        .completion-input { width: 100%; max-width: 300px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-primary); font-size: 0.875rem; }
+        .completion-input:focus { outline: none; border-color: var(--color-primary); }
+        .completion-input.input-correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
+        .completion-input.input-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+        .completion-input:disabled { opacity: 0.8; cursor: default; }
+        .correct-label { display: block; font-size: 0.8rem; color: var(--color-success); margin-top: 4px; font-weight: 600; }
+
+        .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+
+        .submit-row { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
+      `}</style>
     </div>
   );
 }
@@ -654,10 +856,14 @@ export default function Practice() {
   const [poolEmpty, setPoolEmpty] = useState(false);
   const [readingLoading, setReadingLoading] = useState(false);
 
-  const [listeningExercises, setListeningExercises] = useState<ListeningExercise[]>([]);
+  const [aiListeningExercises, setAIListeningExercises] = useState<AIListeningPractice[]>([]);
+  const [currentAIListening, setCurrentAIListening] = useState<AIListeningPractice | null>(null);
+  const [listeningLoading, setListeningLoading] = useState(false);
+  const [listeningGeneratingMore, setListeningGeneratingMore] = useState(false);
+  const [listeningPoolEmpty, setListeningPoolEmpty] = useState(false);
+
   const [writingTopics, setWritingTopics] = useState<WritingTopic[]>([]);
   const [speakingTopics, setSpeakingTopics] = useState<SpeakingTopic[]>([]);
-  const [currentExercise, setCurrentExercise] = useState<ListeningExercise | null>(null);
 
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<{ correct: number; total: number } | null>(null);
@@ -679,17 +885,30 @@ export default function Practice() {
     }
   };
 
+  const loadAIListeningExercises = async () => {
+    setListeningLoading(true);
+    try {
+      const res = await practiceAPI.getDailyListening();
+      const practices = res.data?.practices;
+      setAIListeningExercises(Array.isArray(practices) ? practices : []);
+      setListeningPoolEmpty(false);
+    } catch {
+      // keep existing list
+    } finally {
+      setListeningLoading(false);
+    }
+  };
+
   const loadExercises = async () => {
     setLoading(true);
     loadAIReadingExercises();
+    loadAIListeningExercises();
 
-    const [listening, writing, speaking] = await Promise.allSettled([
-      practiceAPI.getListening(),
+    const [writing, speaking] = await Promise.allSettled([
       practiceAPI.getWriting(),
       practiceAPI.getSpeaking(),
     ]);
 
-    if (listening.status === 'fulfilled') setListeningExercises(Array.isArray(listening.value.data) ? listening.value.data : []);
     if (writing.status === 'fulfilled') setWritingTopics(Array.isArray(writing.value.data) ? writing.value.data : []);
     if (speaking.status === 'fulfilled') setSpeakingTopics(Array.isArray(speaking.value.data) ? speaking.value.data : []);
     setLoading(false);
@@ -720,6 +939,30 @@ export default function Practice() {
     }
   };
 
+  const handleSelectAIListening = (ex: AIListeningPractice) => {
+    setCurrentAIListening(ex);
+  };
+
+  const handleGenerateMoreListening = async () => {
+    setListeningGeneratingMore(true);
+    try {
+      const res = await practiceAPI.generateMoreListening();
+      if (res.data?.pool_empty) {
+        setListeningPoolEmpty(true);
+      } else {
+        const newPractices: AIListeningPractice[] = res.data?.practices ?? [];
+        if (newPractices.length > 0) {
+          setAIListeningExercises(prev => [...prev, ...newPractices]);
+          setListeningPoolEmpty(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate more listening:', err);
+    } finally {
+      setListeningGeneratingMore(false);
+    }
+  };
+
   const handleComplete = (correct: number, total: number) => {
     setResult({ correct, total });
     setShowResult(true);
@@ -727,10 +970,11 @@ export default function Practice() {
 
   const handleBack = () => {
     setCurrentAIExercise(null);
-    setCurrentExercise(null);
+    setCurrentAIListening(null);
     setShowResult(false);
     setResult(null);
     loadAIReadingExercises();
+    loadAIListeningExercises();
   };
 
   // Result screen
@@ -767,12 +1011,12 @@ export default function Practice() {
     );
   }
 
-  // Listening exercise view
-  if (currentExercise) {
+  // AI Listening exercise view
+  if (currentAIListening) {
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
-        <ListeningExerciseView exercise={currentExercise} onComplete={handleComplete} />
+        <AIListeningExerciseView exercise={currentAIListening} onComplete={handleComplete} />
         <style>{sharedExerciseStyles}</style>
       </div>
     );
@@ -841,19 +1085,51 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* Listening */}
+          {/* Listening — AI */}
           <div className="practice-section">
             <div className="section-header" style={{ borderColor: skillConfig[1].color }}>
               <Headphones size={24} style={{ color: skillConfig[1].color }} />
               <h2>{t('practice.listening')}</h2>
+              <span className="ai-chip"><Sparkles size={11} /> AI</span>
             </div>
             <div className="exercise-list">
-              {listeningExercises.map(exercise => (
-                <button key={exercise.id} className="exercise-item" onClick={() => setCurrentExercise(exercise)}>
-                  <span className="exercise-title">{exercise.title}</span>
-                  <span className="exercise-meta">{exercise.questions.length} questions</span>
-                </button>
-              ))}
+              {listeningLoading ? (
+                <div className="generating-msg">
+                  <div className="loading-spinner-sm" />
+                  <span>Loading listening exercises…</span>
+                </div>
+              ) : aiListeningExercises.length === 0 ? (
+                <p className="empty-list">No exercises yet — click Generate below.</p>
+              ) : (
+                aiListeningExercises.map((ex, i) => (
+                  <button key={i} className="exercise-item" onClick={() => handleSelectAIListening(ex)}>
+                    <span className="exercise-title">{ex.meta.topic}</span>
+                    <span className="exercise-meta">
+                      {ex.meta.format} · {(ex.questions.completion?.length ?? 0) + (ex.questions.multiple_choice?.length ?? 0)}q
+                    </span>
+                  </button>
+                ))
+              )}
+              {aiListeningExercises.length < 3 && (
+                listeningPoolEmpty ? (
+                  <div className="pool-empty-msg">
+                    <span>Next exercise generating in background (~3 min)</span>
+                    <button className="retry-link" onClick={handleGenerateMoreListening} disabled={listeningGeneratingMore}>
+                      {listeningGeneratingMore ? 'Checking…' : 'Retry'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="generate-more-btn"
+                    onClick={handleGenerateMoreListening}
+                    disabled={listeningGeneratingMore}
+                  >
+                    {listeningGeneratingMore
+                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
+                      : <><RefreshCw size={13} /> Generate More</>}
+                  </button>
+                )
+              )}
             </div>
           </div>
 

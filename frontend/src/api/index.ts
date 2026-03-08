@@ -93,6 +93,21 @@ export const practiceAPI = {
     key: string; question_type: string; question: string;
     user_answer: string; correct_answer: string;
   }>) => api.post('/generate/explain-mistakes', { passage, wrong_answers }),
+  getDailyListening: () => api.get('/generate/daily-listening'),
+  generateMoreListening: () => api.post('/generate/generate-more-listening'),
+  submitAIListening: (
+    practiceId: number,
+    userAnswers: string,
+    score: number,
+    correctCount: number,
+    totalQuestions: number,
+  ) => api.post('/generate/submit-ai-listening', {
+    practice_id: practiceId,
+    user_answers: userAnswers,
+    score,
+    correct_count: correctCount,
+    total_questions: totalQuestions,
+  }),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),

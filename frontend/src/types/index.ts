@@ -187,6 +187,38 @@ export interface MatchingAnswerItem {
   answer: string;
 }
 
+// AI-generated listening practice types
+export interface AIListeningCompletionQuestion {
+  question_number: number;
+  text: string;
+  answer: string;
+}
+
+export interface AIListeningMCQQuestion {
+  question_number: number;
+  question: string;
+  options: Record<string, string>;
+  answer: string;
+}
+
+export interface AIListeningPractice {
+  practice_db_id?: number;
+  meta: {
+    module: string;
+    format: 'conversation' | 'monologue' | 'discussion' | 'lecture';
+    target_band: number;
+    word_count: number;
+    topic: string;
+    speakers: string[];
+    audio_url: string;
+  };
+  transcript: string;
+  questions: {
+    completion: AIListeningCompletionQuestion[];
+    multiple_choice: AIListeningMCQQuestion[];
+  };
+}
+
 export interface AIReadingPractice {
   practice_db_id?: number;  // injected by backend when dealt to user
   meta: {
