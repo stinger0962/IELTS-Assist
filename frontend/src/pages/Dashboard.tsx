@@ -424,9 +424,24 @@ export default function Dashboard() {
           }
           .skill-card {
             padding: var(--spacing-sm);
+            overflow: hidden;
           }
           .skill-progress {
-            gap: var(--spacing-sm);
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+          }
+          .skill-stats {
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+          }
+          .skill-stat-value {
+            font-size: 0.95rem;
+          }
+          .skill-stat-label {
+            font-size: 0.65rem;
+          }
+          .skill-band {
+            font-size: 1rem;
           }
         }
 
@@ -435,6 +450,8 @@ export default function Dashboard() {
           border: 1px solid var(--color-border);
           border-radius: var(--radius-lg);
           padding: var(--spacing-md);
+          min-width: 0;
+          overflow: hidden;
         }
 
         .skill-header {
@@ -463,6 +480,8 @@ export default function Dashboard() {
         .skill-stats {
           display: flex;
           gap: var(--spacing-md);
+          min-width: 0;
+          flex: 1;
         }
 
         .skill-stat {
