@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import random
 import time
 import uuid
 from datetime import datetime
@@ -131,8 +132,11 @@ def daily_generate() -> None:
         )
         avoid_list = [r[0] for r in recent if r[0]]
         topic_hint = f"avoid: {', '.join(avoid_list)}" if avoid_list else ""
-        for _ in range(2):
-            practice = listening_generator.generate(topic_hint)
+        # Generate 1 conversation/discussion + 1 monologue/lecture for format variety
+        formats = [random.choice(["conversation", "discussion"]),
+                   random.choice(["monologue", "lecture"])]
+        for fmt in formats:
+            practice = listening_generator.generate(topic_hint, format_hint=fmt)
             if practice:
                 db.add(GeneratedPractice(
                     skill="listening",

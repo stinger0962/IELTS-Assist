@@ -218,12 +218,15 @@ class ListeningGenerator:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = "gpt-4o-mini"
 
-    def generate(self, topic_hint: str = "") -> dict | None:
-        """Generate a listening exercise with validation, then synthesize audio."""
+    def generate(self, topic_hint: str = "", format_hint: str = "") -> dict | None:
+        """Generate a listening exercise with validation, then synthesize audio.
+
+        format_hint: if set, forces a specific format (conversation/monologue/discussion/lecture).
+        """
         date = datetime.now().strftime("%Y-%m-%d")
         seed = random.randint(1000, 9999)
 
-        result = self._generate(date, seed, topic_hint)
+        result = self._generate(date, seed, topic_hint, format_hint)
         if not result:
             return None
 
@@ -231,7 +234,7 @@ class ListeningGenerator:
         attempts = 0
         while not validation.get("valid", False) and attempts < 3:
             attempts += 1
-            result = self._generate(date, seed + attempts * 100, topic_hint)
+            result = self._generate(date, seed + attempts * 100, topic_hint, format_hint)
             if result:
                 validation = self._validate(result)
 
@@ -248,12 +251,14 @@ class ListeningGenerator:
 
         return result
 
-    def _generate(self, date: str, seed: int, topic_hint: str) -> dict | None:
+    def _generate(self, date: str, seed: int, topic_hint: str, format_hint: str = "") -> dict | None:
         prompt = LISTENING_PROMPT.format(
             date=date,
             seed=seed,
             topic_hint=topic_hint or "none — choose freely",
         )
+        if format_hint:
+            prompt = f'IMPORTANT: You MUST use format="{format_hint}" for this exercise. Do NOT choose a different format.\n\n' + prompt
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
