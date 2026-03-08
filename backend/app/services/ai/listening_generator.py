@@ -176,7 +176,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
     "target_band": 6.5,
     "word_count": integer,
     "topic": "short scenario label",
-    "speakers": ["Speaker1Name", "Speaker2Name"] or ["SpeakerName"]
+    "speakers": ["Speaker1Name (F)", "Speaker2Name (M)"] or ["SpeakerName (F)"]
   }},
   "transcript": "Full transcript with speaker labels.\\nSarah: Hi, I would like to...\\nReceptionist: Of course, let me...",
   "questions": {{
@@ -303,7 +303,29 @@ class ListeningGenerator:
 
         if fmt in ("conversation", "discussion") and len(speakers) >= 2:
             voice_pair = random.choice(VOICE_PAIRS)
-            return synthesize_dialogue(transcript, speakers, voice_pair)
+            # Match voice gender to speaker gender tags like "Lisa (F)", "Mark (M)"
+            genders = []
+            clean_speakers = []
+            for s in speakers:
+                s_stripped = s.strip()
+                if s_stripped.endswith("(F)") or s_stripped.endswith("(f)"):
+                    genders.append("F")
+                    clean_speakers.append(s_stripped[:-3].strip())
+                elif s_stripped.endswith("(M)") or s_stripped.endswith("(m)"):
+                    genders.append("M")
+                    clean_speakers.append(s_stripped[:-3].strip())
+                else:
+                    genders.append(None)
+                    clean_speakers.append(s_stripped)
+            # If we know genders, ensure female voice → female speaker
+            if len(genders) >= 2 and genders[0] and genders[1]:
+                pair_genders = ("F" if "female" in voice_pair[0] else "M",
+                                "F" if "female" in voice_pair[1] else "M")
+                if genders[0] != pair_genders[0] and genders[1] != pair_genders[1]:
+                    voice_pair = (voice_pair[1], voice_pair[0])  # swap
+            # Use clean names (without gender tags) for speaker matching
+            practice["meta"]["speakers"] = clean_speakers
+            return synthesize_dialogue(transcript, clean_speakers, voice_pair)
         else:
             # Single speaker — pick a random solo voice
             solo_voices = list(VOICES.keys())
