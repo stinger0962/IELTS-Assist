@@ -542,6 +542,43 @@ function AIReadingExerciseView({
   );
 }
 
+// ─── Number word ↔ digit matching helper ─────────────────────────────────────
+
+const WORD_TO_NUM: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90,
+};
+const MULTIPLIERS: Record<string, number> = { hundred: 100, thousand: 1000, million: 1_000_000 };
+
+/** Try to parse an English number phrase like "two hundred eighty" → 280. Returns NaN on failure. */
+function wordsToNumber(text: string): number {
+  const tokens = text.toLowerCase().replace(/-/g, ' ').replace(/\band\b/g, ' ').trim().split(/\s+/);
+  let total = 0, current = 0;
+  for (const t of tokens) {
+    if (WORD_TO_NUM[t] !== undefined) { current += WORD_TO_NUM[t]; }
+    else if (MULTIPLIERS[t]) {
+      current = (current === 0 ? 1 : current) * MULTIPLIERS[t];
+      if (MULTIPLIERS[t] >= 1000) { total += current; current = 0; }
+    } else { return NaN; }
+  }
+  return total + current;
+}
+
+/** Flexible match: case-insensitive string match OR numeric equivalence (digits ↔ words). */
+function completionMatch(userRaw: string, correctRaw: string): boolean {
+  const u = userRaw.trim().toLowerCase();
+  const c = correctRaw.trim().toLowerCase();
+  if (u === c) return true;
+  // Try numeric equivalence
+  const uNum = Number(u) || wordsToNumber(u);
+  const cNum = Number(c) || wordsToNumber(c);
+  if (!isNaN(uNum) && !isNaN(cNum) && uNum === cNum) return true;
+  return false;
+}
+
 // ─── AI Listening Exercise View ──────────────────────────────────────────────
 
 function AIListeningExerciseView({
@@ -621,12 +658,12 @@ function AIListeningExerciseView({
     type WrongEntry = { key: string; question_type: string; question: string; user_answer: string; correct_answer: string };
     const wrongAnswers: WrongEntry[] = [];
 
-    // Score completion questions
+    // Score completion questions (accept both number words and digits)
     completionQs.forEach((q, i) => {
       const key = `comp_${i}`;
       const userAns = (answers[key] ?? '').trim();
       const correctAns = q.answer.trim();
-      if (userAns.toLowerCase() === correctAns.toLowerCase()) {
+      if (completionMatch(userAns, correctAns)) {
         correct++;
       } else {
         wrongAnswers.push({ key, question_type: 'completion', question: q.text, user_answer: userAns || '(unanswered)', correct_answer: correctAns });
@@ -744,10 +781,10 @@ function AIListeningExerciseView({
           if (item.type === 'completion') {
             const q = item.q;
             const key = `comp_${item.idx}`;
-            const userAns = (answers[key] ?? '').trim().toLowerCase();
-            const correctAns = q.answer.trim().toLowerCase();
-            const isCorrect = submitted && userAns === correctAns;
-            const isWrong = submitted && userAns !== correctAns;
+            const userAns = (answers[key] ?? '').trim();
+            const matches = completionMatch(userAns, q.answer);
+            const isCorrect = submitted && matches;
+            const isWrong = submitted && !matches;
             return (
               <div key={key} className={`question-block ${isCorrect ? 'q-correct' : ''} ${isWrong ? 'q-wrong' : ''}`}>
                 <div className="q-number">{q.question_number}</div>
