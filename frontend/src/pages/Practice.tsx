@@ -701,7 +701,15 @@ function AIListeningExerciseView({
   })();
   useEffect(() => {
     if (activeLineIdx >= 0 && showTranscript) {
-      transcriptLineRefs.current[activeLineIdx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const el = transcriptLineRefs.current[activeLineIdx];
+      if (el) {
+        const container = el.closest('.transcript-content') as HTMLElement | null;
+        if (container) {
+          const elTop = el.offsetTop - container.offsetTop;
+          const target = elTop - container.clientHeight / 2 + el.clientHeight / 2;
+          container.scrollTo({ top: target, behavior: 'smooth' });
+        }
+      }
     }
   }, [activeLineIdx, showTranscript]);
 
@@ -1018,7 +1026,6 @@ function AIListeningExerciseView({
         .transcript-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); }
         .transcript-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
         .transcript-content { margin-top: var(--spacing-sm); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); max-height: 300px; overflow-y: auto; }
-        .transcript-content { scroll-behavior: smooth; }
         .transcript-line { font-size: 0.875rem; line-height: 1.7; color: var(--color-text-primary); margin-bottom: var(--spacing-xs); padding: 2px 6px; border-radius: var(--radius-sm); transition: background 0.2s, opacity 0.2s; }
         .transcript-clickable { cursor: pointer; }
         .transcript-clickable:hover { background: var(--color-border); }
