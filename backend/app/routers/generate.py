@@ -27,11 +27,17 @@ POOL_TARGET = 5
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _active_cards(user_id: int, db: Session) -> list:
-    return db.query(UserPractice).filter(
-        UserPractice.user_id == user_id,
-        UserPractice.submitted_at.is_(None)
-    ).all()
+def _active_cards(user_id: int, db: Session, skill: str = "reading") -> list:
+    return (
+        db.query(UserPractice)
+        .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
+        .filter(
+            UserPractice.user_id == user_id,
+            UserPractice.submitted_at.is_(None),
+            GeneratedPractice.skill == skill,
+        )
+        .all()
+    )
 
 
 def _available_for_user(user_id: int, db: Session, limit: int = None, exclude_topics: list = None):
