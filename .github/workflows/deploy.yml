@@ -56,8 +56,11 @@ jobs:
             cd ../frontend
             npm ci
             VITE_API_URL=/api npm run build
+            # Preserve audio/ directory (TTS-generated MP3s) during frontend deploy
+            mv /var/www/ielts-assist/audio /tmp/ielts-audio-backup 2>/dev/null || true
             rm -rf /var/www/ielts-assist/*
             cp -r dist/* /var/www/ielts-assist/
+            mv /tmp/ielts-audio-backup /var/www/ielts-assist/audio 2>/dev/null || true
             chown -R www-data:www-data /var/www/ielts-assist
             
             echo "Deploy complete!"
