@@ -558,7 +558,10 @@ function AIListeningExerciseView({
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [submitted, setSubmitted] = useState(false);
+  const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
   const [startTime] = useState(Date.now());
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [explanationsLoading, setExplanationsLoading] = useState(false);
 
   // Answer state: keyed by "comp_0", "mc_0", etc.
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -615,71 +618,76 @@ function AIListeningExerciseView({
 
   const handleSubmit = async () => {
     let correct = 0;
+    type WrongEntry = { key: string; question_type: string; question: string; user_answer: string; correct_answer: string };
+    const wrongAnswers: WrongEntry[] = [];
 
     // Score completion questions
     completionQs.forEach((q, i) => {
-      const userAns = (answers[`comp_${i}`] ?? '').trim().toLowerCase();
-      const correctAns = q.answer.trim().toLowerCase();
-      if (userAns === correctAns) correct++;
-    });
-
-    // Score MCQ questions
-    mcqQs.forEach((q, i) => {
-      const userAns = (answers[`mc_${i}`] ?? '').trim().toUpperCase();
-      if (userAns === q.answer) correct++;
-    });
-
-    setSubmitted(true);
-
-    // Submit to backend
-    if (exercise.practice_db_id) {
-      const score = Math.round((3.5 + (correct / totalQuestions) * 4.5) * 2) / 2;
-      practiceAPI.submitAIListening(
-        exercise.practice_db_id,
-        JSON.stringify(answers),
-        score,
-        correct,
-        totalQuestions,
-      ).catch(() => {});
-
-      const studyMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
-      progressAPI.updateProgress({
-        skill: 'listening',
-        correct_answers: correct,
-        total_questions: totalQuestions,
-        study_time_minutes: studyMinutes,
-        band_score: score,
-      }).catch(() => {});
-      progressAPI.createSession({ skill: 'listening', duration_minutes: studyMinutes }).catch(() => {});
-    }
-
-    // Log wrong answers to Mistakes
-    completionQs.forEach((q, i) => {
-      const userAns = (answers[`comp_${i}`] ?? '').trim();
-      if (userAns.toLowerCase() !== q.answer.trim().toLowerCase()) {
+      const key = `comp_${i}`;
+      const userAns = (answers[key] ?? '').trim();
+      const correctAns = q.answer.trim();
+      if (userAns.toLowerCase() === correctAns.toLowerCase()) {
+        correct++;
+      } else {
+        wrongAnswers.push({ key, question_type: 'completion', question: q.text, user_answer: userAns || '(unanswered)', correct_answer: correctAns });
         mistakesAPI.create({
-          skill: 'listening',
-          question: q.text,
-          user_answer: userAns || '(unanswered)',
-          correct_answer: q.answer,
+          skill: 'listening', question: q.text,
+          user_answer: userAns || '(unanswered)', correct_answer: correctAns,
           mistake_type: 'completion',
         }).catch(() => {});
       }
     });
+
+    // Score MCQ questions
     mcqQs.forEach((q, i) => {
-      const userAns = (answers[`mc_${i}`] ?? '').trim().toUpperCase();
-      if (userAns !== q.answer) {
+      const key = `mc_${i}`;
+      const userAns = (answers[key] ?? '').trim().toUpperCase();
+      if (userAns === q.answer) {
+        correct++;
+      } else {
+        const userLabel = userAns ? `${userAns}. ${q.options[userAns] ?? ''}` : '(unanswered)';
+        const correctLabel = `${q.answer}. ${q.options[q.answer] ?? ''}`;
+        wrongAnswers.push({ key, question_type: 'MCQ', question: q.question, user_answer: userLabel, correct_answer: correctLabel });
         mistakesAPI.create({
-          skill: 'listening',
-          question: q.question,
-          user_answer: userAns || '(unanswered)',
-          correct_answer: q.answer,
+          skill: 'listening', question: q.question,
+          user_answer: userLabel, correct_answer: correctLabel,
           mistake_type: 'multiple_choice',
         }).catch(() => {});
       }
     });
 
-    onComplete(correct, totalQuestions);
+    setScore({ correct, total: totalQuestions });
+    setSubmitted(true);
+
+    // Submit to backend
+    if (exercise.practice_db_id) {
+      const band = Math.round((3.5 + (correct / totalQuestions) * 4.5) * 2) / 2;
+      practiceAPI.submitAIListening(
+        exercise.practice_db_id, JSON.stringify(answers),
+        band, correct, totalQuestions,
+      ).catch(() => {});
+
+      const studyMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
+      progressAPI.updateProgress({
+        skill: 'listening', correct_answers: correct,
+        total_questions: totalQuestions, study_time_minutes: studyMinutes,
+        band_score: band,
+      }).catch(() => {});
+      progressAPI.createSession({ skill: 'listening', duration_minutes: studyMinutes }).catch(() => {});
+    }
+
+    // Fetch explanations for wrong answers
+    if (wrongAnswers.length > 0) {
+      setExplanationsLoading(true);
+      practiceAPI.explainMistakes(exercise.transcript, wrongAnswers)
+        .then(res => {
+          const map: Record<string, string> = {};
+          for (const item of (res.data.explanations ?? [])) map[item.key] = item.explanation;
+          setExplanations(map);
+        })
+        .catch(() => {})
+        .finally(() => setExplanationsLoading(false));
+    }
   };
 
   // Merge all questions into a single list sorted by question_number for display
@@ -754,6 +762,13 @@ function AIListeningExerciseView({
                     disabled={submitted}
                   />
                   {isWrong && <span className="correct-label">Correct: {q.answer}</span>}
+                  {isWrong && (
+                    explanations[key]
+                      ? <p className="answer-explanation">{explanations[key]}</p>
+                      : explanationsLoading
+                        ? <p className="explanation-loading">Explaining…</p>
+                        : null
+                  )}
                 </div>
                 {submitted && (isCorrect
                   ? <Check size={18} className="q-icon correct" />
@@ -790,16 +805,33 @@ function AIListeningExerciseView({
                       );
                     })}
                   </div>
+                  {submitted && userAns !== q.answer && (
+                    explanations[key]
+                      ? <p className="answer-explanation">{explanations[key]}</p>
+                      : explanationsLoading
+                        ? <p className="explanation-loading">Explaining…</p>
+                        : null
+                  )}
                 </div>
               </div>
             );
           }
         })}
 
-        {!submitted && (
+        {!submitted ? (
           <div className="submit-row">
             <button className="btn btn-primary" onClick={handleSubmit}>
               {t('practice.submit')}
+            </button>
+          </div>
+        ) : (
+          <div className="ai-result-summary">
+            <div className="ai-score">
+              <span className="score-big">{score?.correct}/{score?.total}</span>
+              <span className="score-sub">correct</span>
+            </div>
+            <button className="btn btn-primary" onClick={() => onComplete(score!.correct, score!.total)}>
+              Finish
             </button>
           </div>
         )}
@@ -840,6 +872,12 @@ function AIListeningExerciseView({
         .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
 
         .submit-row { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
+        .ai-result-summary { display: flex; align-items: center; justify-content: center; gap: var(--spacing-lg); margin-top: var(--spacing-lg); padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+        .ai-score { display: flex; flex-direction: column; align-items: center; }
+        .score-big { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+        .score-sub { font-size: 0.75rem; color: var(--color-text-secondary); }
+        .answer-explanation { font-size: 0.8rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); line-height: 1.5; border-left: 2px solid var(--color-primary); padding-left: var(--spacing-sm); }
+        .explanation-loading { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; margin-top: var(--spacing-xs); opacity: 0.7; }
       `}</style>
     </div>
   );
