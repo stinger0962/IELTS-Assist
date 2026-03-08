@@ -567,15 +567,63 @@ function wordsToNumber(text: string): number {
   return total + current;
 }
 
-/** Flexible match: case-insensitive string match OR numeric equivalence (digits ↔ words). */
+/** Normalize text for comparison: lowercase, strip punctuation/articles, collapse whitespace, normalize hyphens. */
+function normalize(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:!?'"()]/g, '')       // strip punctuation
+    .replace(/^(the|a|an)\s+/i, '')     // strip leading articles
+    .replace(/-/g, ' ')                 // hyphens → spaces
+    .replace(/\s+/g, ' ')              // collapse whitespace
+    .trim();
+}
+
+/** Simple plural match: "dollar" ≈ "dollars", "library" ≈ "libraries", "box" ≈ "boxes". */
+function pluralMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  // One is the other + "s"
+  if (a + 's' === b || b + 's' === a) return true;
+  // "es" suffix: box→boxes, class→classes
+  if (a + 'es' === b || b + 'es' === a) return true;
+  // "ies" ↔ "y": library→libraries
+  if (a.endsWith('y') && b === a.slice(0, -1) + 'ies') return true;
+  if (b.endsWith('y') && a === b.slice(0, -1) + 'ies') return true;
+  return false;
+}
+
+/** Levenshtein distance between two strings. */
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 2) return Math.abs(m - n); // early exit
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = i - 1;
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/** Flexible match: case-insensitive, punctuation/article tolerant, plural, number words, minor typo (1 edit). */
 function completionMatch(userRaw: string, correctRaw: string): boolean {
-  const u = userRaw.trim().toLowerCase();
-  const c = correctRaw.trim().toLowerCase();
+  const u = normalize(userRaw);
+  const c = normalize(correctRaw);
+  if (!u) return false;
+  // Exact after normalization
   if (u === c) return true;
-  // Try numeric equivalence
+  // Plural variants
+  if (pluralMatch(u, c)) return true;
+  // Numeric equivalence (digits ↔ words)
   const uNum = Number(u) || wordsToNumber(u);
   const cNum = Number(c) || wordsToNumber(c);
   if (!isNaN(uNum) && !isNaN(cNum) && uNum === cNum) return true;
+  // Minor typo: allow 1 edit for words ≥ 4 chars
+  if (c.length >= 4 && editDistance(u, c) <= 1) return true;
   return false;
 }
 
