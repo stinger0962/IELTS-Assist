@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw } from 'lucide-react';
+import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw, FileText } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
 import { useAppStore } from '../store';
 import type {
@@ -647,6 +647,7 @@ function AIListeningExerciseView({
   const [startTime] = useState(Date.now());
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explanationsLoading, setExplanationsLoading] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   // Answer state: keyed by "comp_0", "mc_0", etc.
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -822,6 +823,33 @@ function AIListeningExerciseView({
         </div>
       </div>
 
+      {/* Transcript (after submit) */}
+      {submitted && (
+        <div className="transcript-section">
+          <button className="transcript-toggle" onClick={() => setShowTranscript(!showTranscript)}>
+            <FileText size={16} />
+            {showTranscript ? 'Hide Transcript' : 'Show Transcript'}
+          </button>
+          {showTranscript && (
+            <div className="transcript-content">
+              {exercise.transcript.split('\n').filter(Boolean).map((line, i) => {
+                const colonIdx = line.indexOf(':');
+                if (colonIdx > 0 && colonIdx < 30) {
+                  const speaker = line.slice(0, colonIdx);
+                  const text = line.slice(colonIdx + 1).trim();
+                  return (
+                    <p key={i} className="transcript-line">
+                      <span className="transcript-speaker">{speaker}:</span> {text}
+                    </p>
+                  );
+                }
+                return <p key={i} className="transcript-line">{line}</p>;
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Questions */}
       <div className="listening-questions">
         <h3>Questions (1–{totalQuestions})</h3>
@@ -955,6 +983,13 @@ function AIListeningExerciseView({
         .correct-label { display: block; font-size: 0.8rem; color: var(--color-success); margin-top: 4px; font-weight: 600; }
 
         .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+
+        .transcript-section { margin-bottom: var(--spacing-lg); }
+        .transcript-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); }
+        .transcript-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
+        .transcript-content { margin-top: var(--spacing-sm); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); max-height: 300px; overflow-y: auto; }
+        .transcript-line { font-size: 0.875rem; line-height: 1.7; color: var(--color-text-primary); margin-bottom: var(--spacing-xs); }
+        .transcript-speaker { font-weight: 600; color: var(--color-primary); }
 
         .submit-row { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
         .ai-result-summary { display: flex; align-items: center; justify-content: center; gap: var(--spacing-lg); margin-top: var(--spacing-lg); padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
