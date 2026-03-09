@@ -1,163 +1,104 @@
 import json
 import random
-from datetime import datetime
 from openai import OpenAI
 from app.config import settings
 from app.services.tts import synthesize_monologue, synthesize_dialogue, VOICE_PAIRS, VOICES
+from app.services.ai.listening_config import (
+    generate_metadata, ACCENT_VOICE_PAIRS, ACCENT_SOLO_VOICES,
+)
 
-LISTENING_PROMPT = '''You are an IELTS Listening item writer.
+# ─── Step 2 Prompt: Generate Transcript ──────────────────────────────────────
 
-Your task is to generate ONE original IELTS Listening practice set
-targeting Band 6.5 difficulty.
+TRANSCRIPT_PROMPT = '''You are an expert IELTS Listening test writer.
+
+Write ONE original IELTS Listening transcript for this scenario:
+
+Topic: {topic}
+Format: {format} (IELTS Section {section})
+Speakers: {speakers_desc}
+Complication / twist: {complication}
+Detail focus: {detail_focus}
+Accent: {accent} — {accent_hints}
+Key numbers to embed in the dialogue: {numbers_desc}
 
 CRITICAL RULES:
-1. The transcript and questions MUST be completely original.
-2. Do NOT copy any known IELTS, Cambridge, or published material.
-3. Invent all names, institutions, locations, phone numbers, dates, and prices.
-4. The content must feel realistic but fictional.
-5. The output must follow the JSON schema exactly.
-6. Do not include explanations outside the JSON.
+1. The transcript MUST be completely original — do NOT copy any known IELTS material.
+2. Invent all names, institutions, locations, phone numbers, dates, and prices.
+3. Ensure all names, locations, and institutions are entirely fictional.
+4. Randomize all numerical values. AVOID round numbers like 100, 500, 1000, 1200.
+5. Use the specific numbers provided above where relevant.
+6. Difficulty: Band 6.5 — moderate vocabulary, clear sentence structures, natural conversational fillers.
 
-Generation Context:
-- Date: {date}
-- Random Seed: {seed}
-- Recently Used Topics (AVOID these): {topic_hint}
+{format_instructions}
 
-Use the random seed to drive ALL selection steps below.
-If "Recently Used Topics" lists any topics, do NOT choose them.
+IMPORTANT: The transcript must contain EXACT words/phrases that will become
+fill-in-the-blank answers. Key facts (names, numbers, dates, prices) must be
+heard literally in the audio — spread them evenly throughout.
 
---------------------------------------------------
+Return STRICT JSON only:
+{{
+  "transcript": "Full transcript with speaker labels.\\nSpeaker1: Hi...\\nSpeaker2: Of course...",
+  "speakers": ["Speaker1Name (F)", "Speaker2Name (M)"],
+  "topic": "short scenario label",
+  "word_count": integer
+}}
 
-STEP 1 — SELECT FORMAT
+DO NOT include explanations outside the JSON.'''
 
-Use the seed to pick exactly ONE format:
-
-  "conversation" → IELTS Part 1: 2 speakers in an everyday situation
-  "monologue"    → IELTS Part 2: 1 speaker giving practical information
-  "discussion"   → IELTS Part 3: 2 speakers in an academic context
-  "lecture"       → IELTS Part 4: 1 speaker on an academic subject
-
---------------------------------------------------
-
-STEP 2 — SELECT SCENARIO
-
-For "conversation" (everyday, 2 speakers), pick ONE:
-  Booking a hotel | Renting an apartment | Joining a gym |
-  Arranging travel | Registering for a course | Making a restaurant reservation |
-  Calling about a job | Booking a medical appointment | Enquiring about an event |
-  Arranging home repairs | Signing up for a library | Reporting a lost item |
-  Opening a bank account | Planning a birthday party | Buying a car
-
-For "monologue" (everyday, 1 speaker), pick ONE:
-  Tour guide describing a town | Museum audio guide |
-  Welcome talk at orientation | Radio segment about a local event |
-  Instructions for a competition | Speech at a community meeting |
-  Announcement about facility changes | Presentation about a charity project |
-  Talk about a historical site | Information about a transport service
-
-For "discussion" (academic, 2 speakers), pick ONE:
-  Reviewing a group project plan | Discussing research methodology |
-  Comparing essay approaches | Debating a case study conclusion |
-  Planning a field trip | Evaluating survey results |
-  Preparing for a seminar presentation | Choosing dissertation topics |
-  Analysing lab experiment data | Discussing internship experiences
-
-For "lecture" (academic, 1 speaker), pick ONE:
-  Introduction to marine ecosystems | History of urban planning |
-  Principles of behavioural economics | Developments in renewable energy |
-  Psychology of consumer decision-making | Climate change adaptation strategies |
-  Evolution of public health policy | Impact of social media on journalism |
-  Innovations in agricultural science | Archaeology and modern technology
-
---------------------------------------------------
-
-STEP 3 — SELECT COMPLICATION / TWIST
-
-Pick ONE to add realism and drive the dialogue:
-  Change of plan | Budget constraint | Time conflict |
-  Missing information | Special requirement | Unexpected closure |
-  Discount or promotion | Recommendation from a friend |
-  Medical or dietary need | Transport difficulty
-
---------------------------------------------------
-
-STEP 4 — SELECT DETAIL FOCUS
-
-Pick ONE category of specific facts to embed as answers:
-  Dates and times | Prices and payments | Names and addresses |
-  Phone numbers and emails | Room or seat numbers | Dietary preferences |
-  Transport schedules | Equipment and materials | Membership tiers |
-  Event schedules and deadlines
-
---------------------------------------------------
-
-Combine all 4 selections into a coherent listening scenario.
-Example: "Booking a hotel" + "Budget constraint" + "Dates and times"
-→ A conversation where a guest books a hotel but the preferred room is
-too expensive, so they negotiate dates to get a cheaper rate.
-
-If the combination feels forced, adjust internally until natural.
-
-The "topic" field should be a short scenario label (e.g. "Booking a hotel").
-
---------------------------------------------------
-
-STEP 5 — WRITE TRANSCRIPT
-
-For "conversation" or "discussion" (2 speakers):
-- Use realistic names (e.g. "Sarah", "Receptionist", "Dr. Wilson", "Tom")
+# Format-specific writing instructions
+FORMAT_INSTRUCTIONS = {
+    "conversation": '''TRANSCRIPT FORMAT (conversation — 2 speakers, everyday situation):
+- Use realistic names for the speakers (e.g. "Sarah", "Receptionist", "Tom")
 - Format EVERY line as: "SpeakerName: dialogue text"
 - Each line is one speaker turn — alternate speakers naturally
 - 600–800 words total
-- Use natural spoken English: contractions, fillers ("well", "actually",
-  "right", "so"), self-corrections ("I mean"), and brief hesitations
-- Spread key answer details (names, numbers, dates, prices) evenly
-  throughout the entire transcript — do NOT cluster them
-- For "discussion": use academic vocabulary and reasoning language
-  ("I think we should", "the data suggests", "on the other hand")
+- Use natural spoken English: contractions, fillers ("well", "actually", "right", "so"),
+  self-corrections ("I mean"), and brief hesitations
+- Spread key answer details evenly throughout the entire transcript''',
 
-For "monologue" or "lecture" (1 speaker):
-- Use a single speaker name (e.g. "Guide", "Professor Chen")
-- Format as: "SpeakerName: dialogue text" (can be one long block or
-  split into logical sections)
+    "discussion": '''TRANSCRIPT FORMAT (discussion — 2 speakers, academic context):
+- Use realistic names for the speakers (e.g. "Dr. Wilson", "Emma")
+- Format EVERY line as: "SpeakerName: dialogue text"
+- Each line is one speaker turn — alternate speakers naturally
+- 600–800 words total
+- Use academic vocabulary and reasoning language ("I think we should",
+  "the data suggests", "on the other hand")
+- Include natural fillers and self-corrections for realism''',
+
+    "monologue": '''TRANSCRIPT FORMAT (monologue — 1 speaker, practical information):
+- Use a single speaker name (e.g. "Guide", "Coordinator")
+- Format as: "SpeakerName: text" (split into logical paragraphs)
 - 700–900 words total
-- Organise into 2–3 clear sections with signpost language
+- Organise into 3–4 clear sections with signpost language
   ("First of all", "Moving on to", "Finally")
-- Use natural spoken style, not written essay style
-- For "lecture": include academic examples, studies, and data points
+- Use natural spoken style, not written essay style''',
 
-IMPORTANT: The transcript must contain EXACT words/phrases that become
-completion answers. Answers are heard literally in the audio.
+    "lecture": '''TRANSCRIPT FORMAT (lecture — 1 speaker, academic subject):
+- Use a single speaker name with academic title (e.g. "Professor Chen", "Dr. Patel")
+- Format as: "SpeakerName: text" (split into logical paragraphs)
+- 700–900 words total
+- Organise into 3–4 clear sections with signpost language
+- Include academic examples, studies, data points, and research references
+- Use natural spoken style with occasional asides to engage the audience''',
+}
 
---------------------------------------------------
+# Section number mapping
+FORMAT_SECTION = {
+    "conversation": 1,
+    "monologue": 2,
+    "discussion": 3,
+    "lecture": 4,
+}
 
-STEP 6 — GENERATE QUESTIONS
 
-Generate exactly 10 questions. The mix depends on the format:
+# ─── Step 3 Prompt: Generate Questions ───────────────────────────────────────
 
-For "conversation":
-  Questions 1–4: Completion
-  Questions 5–7: Matching (1 block, 3 stems)
-  Questions 8–10: Multiple Choice
+QUESTIONS_PROMPT = '''You are an expert IELTS Listening question writer.
 
-For "monologue":
-  Questions 1–4: Multiple Choice
-  Questions 5–7: Matching (1 block, 3 stems)
-  Questions 8–10: Completion
+Given the transcript below, generate exactly 10 questions.
 
-For "discussion":
-  Questions 1–3: Multiple Choice
-  Questions 4–6: Matching (1 block, 3 stems)
-  Questions 7–10: Completion
-
-For "lecture":
-  Questions 1–4: Completion
-  Questions 5–7: Matching (1 block, 3 stems)
-  Questions 8–10: Multiple Choice
-
-Rules for ALL questions:
-- Questions follow the ORDER of information in the transcript
-- Answers are spread evenly — not all from the first or last paragraph
+QUESTION DISTRIBUTION for "{format}" format:
+{question_distribution}
 
 Rules for Completion:
 - Answer is 1–2 words OR a number/date heard EXACTLY in the transcript
@@ -172,28 +113,22 @@ Rules for Multiple Choice:
 Rules for Matching:
 - One block of 3 stems + 5 labelled options (A–E)
 - Each stem maps to one option; 2 options are distractors (unused)
-- Options are short phrases (2–5 words) — e.g. features, categories, people, locations
-- The instruction describes what students should match (e.g. "Match each facility to its location")
+- Options are short phrases (2–5 words)
+- The instruction describes what students should match
 - Answers come from the transcript (paraphrased in stems, literal or near-literal in options)
 
---------------------------------------------------
+Rules for ALL questions:
+- Questions follow the ORDER of information in the transcript
+- Answers are spread evenly — not all from the first or last paragraph
 
-OUTPUT FORMAT (STRICT JSON ONLY):
+TRANSCRIPT:
+{transcript}
 
+Return STRICT JSON only:
 {{
-  "meta": {{
-    "module": "IELTS Listening",
-    "format": "conversation" or "monologue" or "discussion" or "lecture",
-    "target_band": 6.5,
-    "word_count": integer,
-    "topic": "short scenario label",
-    "speakers": ["Speaker1Name (F)", "Speaker2Name (M)"] or ["SpeakerName (F)"]
-  }},
-  "transcript": "Full transcript with speaker labels.\\nSarah: Hi, I would like to...\\nReceptionist: Of course, let me...",
   "questions": {{
     "completion": [
-      {{"question_number": 1, "text": "The guest surname is ___.", "answer": "Henderson"}},
-      {{"question_number": 2, "text": "Check-in date: ___ of March.", "answer": "14th"}}
+      {{"question_number": 1, "text": "The guest surname is ___.", "answer": "Henderson"}}
     ],
     "matching": [
       {{
@@ -220,8 +155,29 @@ OUTPUT FORMAT (STRICT JSON ONLY):
   }}
 }}
 
-DO NOT include explanations, rationales, or extra commentary.
-Return JSON only.'''
+DO NOT include explanations outside the JSON.'''
+
+# Question distribution per format
+QUESTION_DISTRIBUTIONS = {
+    "conversation": """Questions 1–4: Completion (fill the blank with 1–2 words or a number)
+Questions 5–7: Matching (1 block, 3 stems, 5 options A–E)
+Questions 8–10: Multiple Choice (3 options: A, B, C)""",
+
+    "monologue": """Questions 1–4: Multiple Choice (3 options: A, B, C)
+Questions 5–7: Matching (1 block, 3 stems, 5 options A–E)
+Questions 8–10: Completion (fill the blank with 1–2 words or a number)""",
+
+    "discussion": """Questions 1–3: Multiple Choice (3 options: A, B, C)
+Questions 4–6: Matching (1 block, 3 stems, 5 options A–E)
+Questions 7–10: Completion (fill the blank with 1–2 words or a number)""",
+
+    "lecture": """Questions 1–4: Completion (fill the blank with 1–2 words or a number)
+Questions 5–7: Matching (1 block, 3 stems, 5 options A–E)
+Questions 8–10: Multiple Choice (3 options: A, B, C)""",
+}
+
+
+# ─── Validation Prompt ───────────────────────────────────────────────────────
 
 LISTENING_VALIDATION_PROMPT = '''Evaluate this IELTS Listening practice for:
 1. Every completion answer appears VERBATIM in the transcript
@@ -245,27 +201,54 @@ class ListeningGenerator:
         self.model = "gpt-4o-mini"
 
     def generate(self, topic_hint: str = "", format_hint: str = "") -> dict | None:
-        """Generate a listening exercise with validation, then synthesize audio.
+        """Generate a listening exercise via 3-step pipeline, then synthesize audio.
 
-        format_hint: if set, forces a specific format (conversation/monologue/discussion/lecture).
+        Steps:
+        1. generate_metadata() — pure Python randomization (instant, free)
+        2. _generate_transcript(metadata) — GPT call #1
+        3. _generate_questions(metadata, transcript) — GPT call #2
+        Then: _validate() + _synthesize_audio()
+
+        topic_hint: comma-separated list of recently used topics to avoid.
+        format_hint: if set, forces a specific format.
         """
-        date = datetime.now().strftime("%Y-%m-%d")
-        seed = random.randint(1000, 9999)
+        # Parse avoid topics from hint string
+        avoid_topics = []
+        if topic_hint:
+            raw = topic_hint.replace("avoid:", "").strip()
+            avoid_topics = [t.strip() for t in raw.split(",") if t.strip()]
 
-        result = self._generate(date, seed, topic_hint, format_hint)
+        # Step 1: Metadata (pure Python — instant)
+        metadata = generate_metadata(avoid_topics=avoid_topics, format_hint=format_hint)
+
+        # Step 2: Transcript (GPT call #1)
+        transcript_data = self._generate_transcript(metadata)
+        if not transcript_data:
+            return None
+
+        # Step 3: Questions (GPT call #2)
+        result = self._generate_questions(metadata, transcript_data)
         if not result:
             return None
 
+        # Validate
         validation = self._validate(result)
         attempts = 0
         while not validation.get("valid", False) and attempts < 3:
             attempts += 1
-            result = self._generate(date, seed + attempts * 100, topic_hint, format_hint)
-            if result:
-                validation = self._validate(result)
+            # Regenerate with fresh metadata
+            metadata = generate_metadata(avoid_topics=avoid_topics, format_hint=format_hint)
+            transcript_data = self._generate_transcript(metadata)
+            if transcript_data:
+                result = self._generate_questions(metadata, transcript_data)
+                if result:
+                    validation = self._validate(result)
 
         if not result:
             return None
+
+        # Store accent in meta for TTS voice selection
+        result["meta"]["accent"] = metadata.get("accent", "")
 
         # Synthesize audio from transcript
         try:
@@ -277,14 +260,37 @@ class ListeningGenerator:
 
         return result
 
-    def _generate(self, date: str, seed: int, topic_hint: str, format_hint: str = "") -> dict | None:
-        prompt = LISTENING_PROMPT.format(
-            date=date,
-            seed=seed,
-            topic_hint=topic_hint or "none — choose freely",
+    def _generate_transcript(self, metadata: dict) -> dict | None:
+        """Step 2: Generate transcript via GPT. Returns {transcript, speakers, topic, word_count}."""
+        fmt = metadata["format"]
+
+        # Build speakers description
+        roles = metadata["speaker_roles"]
+        if len(roles) == 2:
+            speakers_desc = f"{roles[0]} and {roles[1]} (assign realistic names with gender tags like 'Sarah (F)', 'Tom (M)')"
+        else:
+            speakers_desc = f"{roles[0]} (assign a realistic name with gender tag)"
+
+        # Build numbers description
+        nums = metadata["numbers"]
+        if nums:
+            numbers_desc = ", ".join(f"{k.replace('_', ' ')} = {v}" for k, v in nums.items())
+        else:
+            numbers_desc = "Generate realistic numbers — avoid round values like 100, 500, 1000"
+
+        prompt = TRANSCRIPT_PROMPT.format(
+            topic=metadata["topic"],
+            format=fmt,
+            section=FORMAT_SECTION.get(fmt, 1),
+            speakers_desc=speakers_desc,
+            complication=metadata["complication"],
+            detail_focus=metadata["detail_focus"],
+            accent=metadata["accent"],
+            accent_hints=metadata["accent_hints"],
+            numbers_desc=numbers_desc,
+            format_instructions=FORMAT_INSTRUCTIONS.get(fmt, ""),
         )
-        if format_hint:
-            prompt = f'IMPORTANT: You MUST use format="{format_hint}" for this exercise. Do NOT choose a different format.\n\n' + prompt
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -292,17 +298,72 @@ class ListeningGenerator:
                     {"role": "system", "content": "You are an expert IELTS test writer. Generate valid JSON only."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.8,
-                max_tokens=5000,
+                temperature=0.85,
+                max_tokens=3500,
             )
             content = response.choices[0].message.content
+            return self._parse_json(content)
+        except Exception as e:
+            print(f"Transcript generation error: {e}")
+            return None
+
+    def _generate_questions(self, metadata: dict, transcript_data: dict) -> dict | None:
+        """Step 3: Generate questions based on transcript. Returns full practice dict."""
+        fmt = metadata["format"]
+        transcript = transcript_data.get("transcript", "")
+
+        prompt = QUESTIONS_PROMPT.format(
+            format=fmt,
+            question_distribution=QUESTION_DISTRIBUTIONS.get(fmt, QUESTION_DISTRIBUTIONS["conversation"]),
+            transcript=transcript,
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert IELTS test question writer. Generate valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=2500,
+            )
+            content = response.choices[0].message.content
+            questions_data = self._parse_json(content)
+            if not questions_data:
+                return None
+
+            # Assemble final practice dict
+            questions = questions_data.get("questions", questions_data)
+            return {
+                "meta": {
+                    "module": "IELTS Listening",
+                    "format": fmt,
+                    "target_band": 6.5,
+                    "word_count": transcript_data.get("word_count", 0),
+                    "topic": transcript_data.get("topic", metadata["topic"]),
+                    "speakers": transcript_data.get("speakers", []),
+                },
+                "transcript": transcript,
+                "questions": {
+                    "completion": questions.get("completion", []),
+                    "multiple_choice": questions.get("multiple_choice", []),
+                    "matching": questions.get("matching", []),
+                },
+            }
+        except Exception as e:
+            print(f"Question generation error: {e}")
+            return None
+
+    def _parse_json(self, content: str) -> dict | None:
+        """Extract JSON from GPT response text."""
+        try:
             json_start = content.find("{")
             json_end = content.rfind("}") + 1
             if json_start >= 0 and json_end > json_start:
                 return json.loads(content[json_start:json_end])
             return None
-        except Exception as e:
-            print(f"Listening generation error: {e}")
+        except (json.JSONDecodeError, Exception):
             return None
 
     def _validate(self, practice: dict) -> dict:
@@ -317,11 +378,7 @@ class ListeningGenerator:
                 max_tokens=500,
             )
             content = response.choices[0].message.content
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                return json.loads(content[json_start:json_end])
-            return {"valid": False, "issues": ["Failed to parse validation response"]}
+            return self._parse_json(content) or {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Listening validation error: {e}")
             return {"valid": False, "issues": [str(e)]}
@@ -343,7 +400,6 @@ class ListeningGenerator:
         "richard", "charles", "thomas", "kevin", "brian", "steven", "eric",
         "patrick", "timothy", "jason", "jeffrey", "scott", "nicholas",
     }
-    # Role-based names that are gender-neutral — skip inference
     ROLE_NAMES = {
         "receptionist", "agent", "advisor", "tutor", "professor", "guide",
         "instructor", "manager", "assistant", "librarian", "operator",
@@ -364,9 +420,15 @@ class ListeningGenerator:
         transcript = practice.get("transcript", "")
         speakers = practice.get("meta", {}).get("speakers", [])
         fmt = practice.get("meta", {}).get("format", "monologue")
+        accent = practice.get("meta", {}).get("accent", "")
 
         if fmt in ("conversation", "discussion") and len(speakers) >= 2:
-            voice_pair = random.choice(VOICE_PAIRS)
+            # Use accent-matched voice pair if available, else random
+            if accent and accent in ACCENT_VOICE_PAIRS:
+                voice_pair = ACCENT_VOICE_PAIRS[accent]
+            else:
+                voice_pair = random.choice(VOICE_PAIRS)
+
             # Parse gender tags like "Lisa (F)" or infer from name
             genders = []
             clean_speakers = []
@@ -379,7 +441,6 @@ class ListeningGenerator:
                     genders.append("M")
                     clean_speakers.append(s_stripped[:-3].strip())
                 else:
-                    # Fallback: infer gender from common names
                     genders.append(self._infer_gender(s_stripped))
                     clean_speakers.append(s_stripped)
             # If we know both genders, ensure female voice → female speaker
@@ -393,9 +454,11 @@ class ListeningGenerator:
             practice["line_timestamps"] = timestamps
             return audio_url
         else:
-            # Single speaker — pick a random solo voice
-            solo_voices = list(VOICES.keys())
-            voice_key = random.choice(solo_voices)
+            # Single speaker — use accent-matched voice or random
+            if accent and accent in ACCENT_SOLO_VOICES:
+                voice_key = random.choice(ACCENT_SOLO_VOICES[accent])
+            else:
+                voice_key = random.choice(list(VOICES.keys()))
             # Strip speaker labels for cleaner TTS
             clean_lines = [
                 line.split(":", 1)[1].strip() if ":" in line else line
