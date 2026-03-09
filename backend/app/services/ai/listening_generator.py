@@ -108,7 +108,7 @@ For "conversation" or "discussion" (2 speakers):
 - Use realistic names (e.g. "Sarah", "Receptionist", "Dr. Wilson", "Tom")
 - Format EVERY line as: "SpeakerName: dialogue text"
 - Each line is one speaker turn — alternate speakers naturally
-- 400–500 words total
+- 600–800 words total
 - Use natural spoken English: contractions, fillers ("well", "actually",
   "right", "so"), self-corrections ("I mean"), and brief hesitations
 - Spread key answer details (names, numbers, dates, prices) evenly
@@ -120,7 +120,7 @@ For "monologue" or "lecture" (1 speaker):
 - Use a single speaker name (e.g. "Guide", "Professor Chen")
 - Format as: "SpeakerName: dialogue text" (can be one long block or
   split into logical sections)
-- 450–550 words total
+- 700–900 words total
 - Organise into 2–3 clear sections with signpost language
   ("First of all", "Moving on to", "Finally")
 - Use natural spoken style, not written essay style
@@ -293,7 +293,7 @@ class ListeningGenerator:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.8,
-                max_tokens=4000,
+                max_tokens=5000,
             )
             content = response.choices[0].message.content
             json_start = content.find("{")

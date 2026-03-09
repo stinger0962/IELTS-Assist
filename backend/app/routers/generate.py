@@ -80,7 +80,7 @@ def _replenish(user_id: int) -> None:
             db.query(GeneratedPractice.topic)
             .filter(GeneratedPractice.skill == "reading", GeneratedPractice.topic.isnot(None))
             .order_by(GeneratedPractice.generated_date.desc())
-            .limit(15)
+            .limit(100)
             .all()
         )
         avoid_list = [r[0] for r in recent if r[0]]
@@ -127,7 +127,7 @@ def daily_generate() -> None:
             db.query(GeneratedPractice.topic)
             .filter(GeneratedPractice.skill == "listening", GeneratedPractice.topic.isnot(None))
             .order_by(GeneratedPractice.generated_date.desc())
-            .limit(15)
+            .limit(100)
             .all()
         )
         avoid_list = [r[0] for r in recent if r[0]]
@@ -490,7 +490,7 @@ def _replenish_listening(user_id: int) -> None:
             db.query(GeneratedPractice.topic)
             .filter(GeneratedPractice.skill == "listening", GeneratedPractice.topic.isnot(None))
             .order_by(GeneratedPractice.generated_date.desc())
-            .limit(15)
+            .limit(100)
             .all()
         )
         avoid_list = [r[0] for r in recent if r[0]]
