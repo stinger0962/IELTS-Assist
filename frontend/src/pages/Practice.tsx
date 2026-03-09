@@ -927,7 +927,7 @@ function AIListeningExerciseView({
       {/* Questions */}
       <div className="listening-questions">
         <h3>Questions (1–{totalQuestions})</h3>
-        {allQuestions.map(item => {
+        {allQuestions.map((item, allIdx) => {
           if (item.type === 'completion') {
             const q = item.q;
             const key = `comp_${item.idx}`;
@@ -935,32 +935,46 @@ function AIListeningExerciseView({
             const matches = completionMatch(userAns, q.answer);
             const isCorrect = submitted && matches;
             const isWrong = submitted && !matches;
+            // Show group_title header for form/table/note subtypes (first in group)
+            const groupTitle = q.group_title;
+            const subtype = q.subtype || 'sentence';
+            const prevItem = allIdx > 0 ? allQuestions[allIdx - 1] : null;
+            const showGroupTitle = groupTitle && (
+              !prevItem || prevItem.type !== 'completion' || prevItem.q.group_title !== groupTitle
+            );
             return (
-              <div key={key} className={`question-block ${isCorrect ? 'q-correct' : ''} ${isWrong ? 'q-wrong' : ''}`}>
-                <div className="q-number">{q.question_number}</div>
-                <div className="q-body">
-                  <p className="q-text">{q.text}</p>
-                  <input
-                    className={`completion-input ${isCorrect ? 'input-correct' : ''} ${isWrong ? 'input-wrong' : ''}`}
-                    type="text"
-                    placeholder="Type your answer…"
-                    value={answers[key] ?? ''}
-                    onChange={e => setAnswer(key, e.target.value)}
-                    disabled={submitted}
-                  />
-                  {isWrong && <span className="correct-label">Correct: {q.answer}</span>}
-                  {isWrong && (
-                    explanations[key]
-                      ? <p className="answer-explanation">{explanations[key]}</p>
-                      : explanationsLoading
-                        ? <p className="explanation-loading">Explaining…</p>
-                        : null
-                  )}
+              <React.Fragment key={key}>
+                {showGroupTitle && (
+                  <div className={`completion-group-header completion-group-${subtype}`}>
+                    {groupTitle}
+                  </div>
+                )}
+                <div className={`question-block ${subtype !== 'sentence' ? `qb-${subtype}` : ''} ${isCorrect ? 'q-correct' : ''} ${isWrong ? 'q-wrong' : ''}`}>
+                  <div className="q-number">{q.question_number}</div>
+                  <div className="q-body">
+                    <p className="q-text">{q.text}</p>
+                    <input
+                      className={`completion-input ${isCorrect ? 'input-correct' : ''} ${isWrong ? 'input-wrong' : ''}`}
+                      type="text"
+                      placeholder="Type your answer…"
+                      value={answers[key] ?? ''}
+                      onChange={e => setAnswer(key, e.target.value)}
+                      disabled={submitted}
+                    />
+                    {isWrong && <span className="correct-label">Correct: {q.answer}</span>}
+                    {isWrong && (
+                      explanations[key]
+                        ? <p className="answer-explanation">{explanations[key]}</p>
+                        : explanationsLoading
+                          ? <p className="explanation-loading">Explaining…</p>
+                          : null
+                    )}
+                  </div>
+                  {submitted && (isCorrect
+                    ? <Check size={18} className="q-icon correct" />
+                    : <X size={18} className="q-icon incorrect" />)}
                 </div>
-                {submitted && (isCorrect
-                  ? <Check size={18} className="q-icon correct" />
-                  : <X size={18} className="q-icon incorrect" />)}
-              </div>
+              </React.Fragment>
             );
           } else if (item.type === 'mcq') {
             const q = item.q;
@@ -1110,6 +1124,12 @@ function AIListeningExerciseView({
         .completion-input.input-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
         .completion-input:disabled { opacity: 0.8; cursor: default; }
         .correct-label { display: block; font-size: 0.8rem; color: var(--color-success); margin-top: 4px; font-weight: 600; }
+
+        .completion-group-header { background: var(--color-primary); color: white; padding: 8px 14px; border-radius: var(--radius-md) var(--radius-md) 0 0; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 0; }
+        .completion-group-header + .question-block { border-top-left-radius: 0; border-top-right-radius: 0; }
+        .qb-form .q-text, .qb-note .q-text { font-family: var(--font-mono, monospace); font-size: 0.85rem; }
+        .qb-note .q-text { padding-left: 8px; border-left: 2px solid var(--color-primary); }
+        .qb-table .q-text { font-size: 0.85rem; color: var(--color-text-secondary); }
 
         .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
 

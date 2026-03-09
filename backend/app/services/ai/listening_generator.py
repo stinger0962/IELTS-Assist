@@ -100,10 +100,14 @@ Given the transcript below, generate exactly 10 questions.
 QUESTION DISTRIBUTION for "{format}" format:
 {question_distribution}
 
+Completion subtype for this exercise: "{completion_subtype}"
+{completion_subtype_instructions}
+
 Rules for Completion:
 - Answer is 1–2 words OR a number/date heard EXACTLY in the transcript
 - The question text paraphrases the context but the answer is verbatim
 - Use "___" for the blank
+- Each completion question MUST include: "subtype": "{completion_subtype}" and "group_title": "{completion_group_title}"
 
 Rules for Multiple Choice:
 - 3 options (A, B, C) — one correct, two plausible distractors
@@ -128,7 +132,7 @@ Return STRICT JSON only:
 {{
   "questions": {{
     "completion": [
-      {{"question_number": 1, "text": "The guest surname is ___.", "answer": "Henderson"}}
+      {{"question_number": 1, "text": "The guest surname is ___.", "answer": "Henderson", "subtype": "{completion_subtype}", "group_title": "{completion_group_title}"}}
     ],
     "matching": [
       {{
@@ -175,6 +179,40 @@ Questions 7–10: Completion (fill the blank with 1–2 words or a number)""",
 Questions 5–7: Matching (1 block, 3 stems, 5 options A–E)
 Questions 8–10: Multiple Choice (3 options: A, B, C)""",
 }
+
+# Completion subtype weights by format
+COMPLETION_SUBTYPE_WEIGHTS = {
+    "conversation": [("form", 50), ("sentence", 50)],
+    "monologue": [("note", 40), ("summary", 30), ("sentence", 30)],
+    "discussion": [("summary", 50), ("sentence", 50)],
+    "lecture": [("note", 40), ("table", 30), ("summary", 30)],
+}
+
+COMPLETION_SUBTYPE_INSTRUCTIONS = {
+    "form": 'Format completion questions as form fields. The "text" should look like a labelled form field, e.g. "Surname: ___", "Check-in date: ___", "Room type: ___". The group_title should be a form name like "BOOKING FORM" or "REGISTRATION FORM".',
+    "table": 'Format completion questions as table cells. The "text" should reference a row/column context, e.g. "Morning session: ___", "Building A — capacity: ___". The group_title should be a table heading like "SCHEDULE" or "FACILITY DETAILS".',
+    "note": 'Format completion questions as bullet-point notes. The "text" should look like note entries, e.g. "• Main topic: ___", "• Recommended by: ___". The group_title should be a note heading like "LECTURE NOTES" or "MEETING NOTES".',
+    "summary": 'Format completion questions as sentences in a summary paragraph. The "text" should be a flowing sentence with a blank, e.g. "The researcher found that ___ was the main factor." The group_title should be "SUMMARY".',
+    "sentence": 'Format completion questions as standalone sentences with blanks. The "text" should be a complete sentence, e.g. "The total cost is ___ per month." No group_title needed.',
+}
+
+COMPLETION_SUBTYPE_GROUP_TITLES = {
+    "form": ["BOOKING FORM", "REGISTRATION FORM", "APPLICATION FORM", "ENQUIRY FORM", "MEMBERSHIP FORM", "ORDER FORM"],
+    "table": ["SCHEDULE", "FACILITY DETAILS", "COURSE INFORMATION", "COMPARISON TABLE", "PRICE LIST"],
+    "note": ["LECTURE NOTES", "MEETING NOTES", "RESEARCH NOTES", "TOUR INFORMATION", "BRIEFING NOTES"],
+    "summary": ["SUMMARY"],
+    "sentence": [""],
+}
+
+
+def _pick_completion_subtype(fmt: str) -> tuple[str, str]:
+    """Pick a completion subtype and group_title based on format weights."""
+    weights = COMPLETION_SUBTYPE_WEIGHTS.get(fmt, [("sentence", 100)])
+    subtypes, wts = zip(*weights)
+    subtype = random.choices(subtypes, weights=wts, k=1)[0]
+    titles = COMPLETION_SUBTYPE_GROUP_TITLES.get(subtype, [""])
+    group_title = random.choice(titles)
+    return subtype, group_title
 
 
 # ─── Validation Prompt ───────────────────────────────────────────────────────
@@ -312,10 +350,16 @@ class ListeningGenerator:
         fmt = metadata["format"]
         transcript = transcript_data.get("transcript", "")
 
+        # Pick completion subtype
+        completion_subtype, completion_group_title = _pick_completion_subtype(fmt)
+
         prompt = QUESTIONS_PROMPT.format(
             format=fmt,
             question_distribution=QUESTION_DISTRIBUTIONS.get(fmt, QUESTION_DISTRIBUTIONS["conversation"]),
             transcript=transcript,
+            completion_subtype=completion_subtype,
+            completion_group_title=completion_group_title,
+            completion_subtype_instructions=COMPLETION_SUBTYPE_INSTRUCTIONS.get(completion_subtype, ""),
         )
 
         try:

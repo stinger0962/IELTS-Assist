@@ -192,6 +192,8 @@ export interface AIListeningCompletionQuestion {
   question_number: number;
   text: string;
   answer: string;
+  subtype?: 'form' | 'table' | 'note' | 'summary' | 'sentence';
+  group_title?: string;
 }
 
 export interface AIListeningMCQQuestion {
