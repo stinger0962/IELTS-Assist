@@ -156,7 +156,7 @@ function AIReadingExerciseView({
         scoreVal, correct, total,
       ).catch(() => {});
     }
-    const studyMinutes = Math.max(1, Math.round(timeTaken / 60));
+    const studyMinutes = Math.max(1, Math.min(30, Math.round(timeTaken / 60)));
     const estimatedBand = total > 0 ? Math.round((3.5 + (correct / total) * 4.5) * 2) / 2 : 0;
     progressAPI.updateProgress({
       skill: 'reading',
@@ -572,7 +572,9 @@ function normalize(raw: string): string {
   return raw
     .trim()
     .toLowerCase()
+    .replace(/[$£€]/g, '')              // strip currency symbols
     .replace(/[.,;:!?'"()]/g, '')       // strip punctuation
+    .replace(/\b(dollars?|pounds?|euros?|cents?|pence)\b/g, '') // strip currency words
     .replace(/^(the|a|an)\s+/i, '')     // strip leading articles
     .replace(/-/g, ' ')                 // hyphens → spaces
     .replace(/\s+/g, ' ')              // collapse whitespace
@@ -797,7 +799,7 @@ function AIListeningExerciseView({
         band, correct, totalQuestions,
       ).catch(() => {});
 
-      const studyMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
+      const studyMinutes = Math.max(1, Math.min(30, Math.round((Date.now() - startTime) / 60000)));
       progressAPI.updateProgress({
         skill: 'listening', correct_answers: correct,
         total_questions: totalQuestions, study_time_minutes: studyMinutes,
