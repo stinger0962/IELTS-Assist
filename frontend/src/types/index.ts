@@ -201,6 +201,15 @@ export interface AIListeningMCQQuestion {
   answer: string;
 }
 
+export interface AIListeningMatchingBlock {
+  question_number_start: number;
+  question_number_end: number;
+  instruction: string;
+  stems: { question_number: number; text: string }[];
+  options: string[];
+  answers: Record<string, string>;
+}
+
 export interface AIListeningPractice {
   practice_db_id?: number;
   meta: {
@@ -217,6 +226,7 @@ export interface AIListeningPractice {
   questions: {
     completion: AIListeningCompletionQuestion[];
     multiple_choice: AIListeningMCQQuestion[];
+    matching?: AIListeningMatchingBlock[];
   };
 }
 

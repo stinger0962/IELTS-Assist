@@ -136,20 +136,24 @@ STEP 6 — GENERATE QUESTIONS
 Generate exactly 10 questions. The mix depends on the format:
 
 For "conversation":
-  Questions 1–6: Completion (fill the blank with 1–2 words or a number)
-  Questions 7–10: Multiple Choice (3 options: A, B, C)
+  Questions 1–4: Completion
+  Questions 5–7: Matching (1 block, 3 stems)
+  Questions 8–10: Multiple Choice
 
 For "monologue":
-  Questions 1–5: Multiple Choice (3 options: A, B, C)
-  Questions 6–10: Completion (fill the blank with 1–2 words or a number)
+  Questions 1–4: Multiple Choice
+  Questions 5–7: Matching (1 block, 3 stems)
+  Questions 8–10: Completion
 
 For "discussion":
-  Questions 1–4: Multiple Choice (3 options: A, B, C)
-  Questions 5–10: Completion (fill the blank with 1–2 words or a number)
+  Questions 1–3: Multiple Choice
+  Questions 4–6: Matching (1 block, 3 stems)
+  Questions 7–10: Completion
 
 For "lecture":
-  Questions 1–5: Completion (fill the blank with 1–2 words or a number)
-  Questions 6–10: Multiple Choice (3 options: A, B, C)
+  Questions 1–4: Completion
+  Questions 5–7: Matching (1 block, 3 stems)
+  Questions 8–10: Multiple Choice
 
 Rules for ALL questions:
 - Questions follow the ORDER of information in the transcript
@@ -164,6 +168,13 @@ Rules for Multiple Choice:
 - 3 options (A, B, C) — one correct, two plausible distractors
 - Distractors may use words from the transcript but in wrong context
 - No trick questions
+
+Rules for Matching:
+- One block of 3 stems + 5 labelled options (A–E)
+- Each stem maps to one option; 2 options are distractors (unused)
+- Options are short phrases (2–5 words) — e.g. features, categories, people, locations
+- The instruction describes what students should match (e.g. "Match each facility to its location")
+- Answers come from the transcript (paraphrased in stems, literal or near-literal in options)
 
 --------------------------------------------------
 
@@ -184,9 +195,23 @@ OUTPUT FORMAT (STRICT JSON ONLY):
       {{"question_number": 1, "text": "The guest surname is ___.", "answer": "Henderson"}},
       {{"question_number": 2, "text": "Check-in date: ___ of March.", "answer": "14th"}}
     ],
+    "matching": [
+      {{
+        "question_number_start": 5,
+        "question_number_end": 7,
+        "instruction": "Match each facility to its location.",
+        "stems": [
+          {{"question_number": 5, "text": "Swimming pool"}},
+          {{"question_number": 6, "text": "Restaurant"}},
+          {{"question_number": 7, "text": "Gift shop"}}
+        ],
+        "options": ["A. Ground floor", "B. First floor", "C. Second floor", "D. Basement", "E. Rooftop"],
+        "answers": {{"5": "D", "6": "B", "7": "A"}}
+      }}
+    ],
     "multiple_choice": [
       {{
-        "question_number": 7,
+        "question_number": 8,
         "question": "Why does the guest prefer the ground floor?",
         "options": {{"A": "It is cheaper", "B": "She has heavy luggage", "C": "She is afraid of heights"}},
         "answer": "B"
@@ -202,8 +227,9 @@ LISTENING_VALIDATION_PROMPT = '''Evaluate this IELTS Listening practice for:
 1. Every completion answer appears VERBATIM in the transcript
 2. Questions follow the order of information in the transcript
 3. MCQ has exactly one correct answer and two plausible distractors
-4. Answer distribution is spread across the transcript (not clustered)
-5. Schema compliance (question_number, text/question, answer fields)
+4. Matching block has 3 stems, 5 options (A–E), and each answer is a valid option letter
+5. Answer distribution is spread across the transcript (not clustered)
+6. Schema compliance (question_number, text/question, answer fields; matching has question_number_start/end, stems, options, answers)
 
 Return JSON only:
 {{

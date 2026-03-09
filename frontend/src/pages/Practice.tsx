@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw, FileText } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
 import { useAppStore } from '../store';
 import type {
   SkillType, WritingTopic, SpeakingTopic,
-  AIReadingPractice, AIListeningPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
+  AIReadingPractice, AIListeningPractice, AIListeningMatchingBlock, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
   MatchingHeadingData, MatchingAnswerItem,
 } from '../types';
 
@@ -655,7 +655,9 @@ function AIListeningExerciseView({
 
   const completionQs = exercise.questions.completion ?? [];
   const mcqQs = exercise.questions.multiple_choice ?? [];
-  const totalQuestions = completionQs.length + mcqQs.length;
+  const matchingBlocks = exercise.questions.matching ?? [];
+  const matchingStemCount = matchingBlocks.reduce((sum, m) => sum + m.stems.length, 0);
+  const totalQuestions = completionQs.length + mcqQs.length + matchingStemCount;
 
   // Audio URL — prepend VPS base if it's a relative path
   const audioUrl = exercise.meta.audio_url?.startsWith('http')
@@ -763,6 +765,27 @@ function AIListeningExerciseView({
       }
     });
 
+    // Score matching questions
+    matchingBlocks.forEach((block, bIdx) => {
+      block.stems.forEach(stem => {
+        const key = `match_${bIdx}_${stem.question_number}`;
+        const userAns = (answers[key] ?? '').trim().toUpperCase();
+        const correctAns = (block.answers[String(stem.question_number)] ?? '').trim().toUpperCase();
+        if (userAns && userAns === correctAns) {
+          correct++;
+        } else {
+          const correctOption = block.options.find(o => o.startsWith(correctAns)) ?? correctAns;
+          const userOption = userAns ? (block.options.find(o => o.startsWith(userAns)) ?? userAns) : '(unanswered)';
+          wrongAnswers.push({ key, question_type: 'matching', question: `${block.instruction}: ${stem.text}`, user_answer: userOption, correct_answer: correctOption });
+          mistakesAPI.create({
+            skill: 'listening', question: `${block.instruction}: ${stem.text}`,
+            user_answer: userOption, correct_answer: correctOption,
+            mistake_type: 'matching',
+          }).catch(() => {});
+        }
+      });
+    });
+
     setScore({ correct, total: totalQuestions });
     setSubmitted(true);
 
@@ -798,9 +821,12 @@ function AIListeningExerciseView({
   };
 
   // Merge all questions into a single list sorted by question_number for display
-  const allQuestions = [
+  const allQuestions: { type: 'completion' | 'mcq' | 'matching'; q: any; idx: number; num: number; blockIdx?: number }[] = [
     ...completionQs.map((q, i) => ({ type: 'completion' as const, q, idx: i, num: q.question_number })),
     ...mcqQs.map((q, i) => ({ type: 'mcq' as const, q, idx: i, num: q.question_number })),
+    ...matchingBlocks.flatMap((block, bIdx) =>
+      block.stems.map(stem => ({ type: 'matching' as const, q: { ...stem, block }, idx: bIdx, num: stem.question_number, blockIdx: bIdx }))
+    ),
   ].sort((a, b) => a.num - b.num);
 
   return (
@@ -934,7 +960,7 @@ function AIListeningExerciseView({
                   : <X size={18} className="q-icon incorrect" />)}
               </div>
             );
-          } else {
+          } else if (item.type === 'mcq') {
             const q = item.q;
             const key = `mc_${item.idx}`;
             const userAns = (answers[key] ?? '').trim().toUpperCase();
@@ -973,6 +999,61 @@ function AIListeningExerciseView({
                   )}
                 </div>
               </div>
+            );
+          } else {
+            // Matching question
+            const stem = item.q;
+            const block = stem.block as AIListeningMatchingBlock;
+            const bIdx = item.blockIdx!;
+            const key = `match_${bIdx}_${stem.question_number}`;
+            const userAns = (answers[key] ?? '').trim().toUpperCase();
+            const correctAns = (block.answers[String(stem.question_number)] ?? '').trim().toUpperCase();
+            const isCorrect = submitted && userAns === correctAns;
+            const isWrong = submitted && userAns !== correctAns;
+            // Show instruction header for the first stem in a block
+            const isFirstInBlock = stem.question_number === block.question_number_start;
+            return (
+              <React.Fragment key={key}>
+                {isFirstInBlock && (
+                  <div className="matching-instruction">
+                    <p>{block.instruction}</p>
+                    <div className="matching-options-pool">
+                      {block.options.map((opt, oi) => (
+                        <span key={oi} className="matching-option-tag">{opt}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className={`question-block ${isCorrect ? 'q-correct' : ''} ${isWrong ? 'q-wrong' : ''}`}>
+                  <div className="q-number">{stem.question_number}</div>
+                  <div className="q-body">
+                    <p className="q-text">{stem.text}</p>
+                    <select
+                      className={`matching-select ${isCorrect ? 'input-correct' : ''} ${isWrong ? 'input-wrong' : ''}`}
+                      value={answers[key] ?? ''}
+                      onChange={e => setAnswer(key, e.target.value)}
+                      disabled={submitted}
+                    >
+                      <option value="">— Select —</option>
+                      {block.options.map((opt, oi) => {
+                        const letter = opt.split('.')[0]?.trim() || opt.charAt(0);
+                        return <option key={oi} value={letter}>{opt}</option>;
+                      })}
+                    </select>
+                    {isWrong && <span className="correct-label">Correct: {block.options.find(o => o.startsWith(correctAns)) ?? correctAns}</span>}
+                    {isWrong && (
+                      explanations[key]
+                        ? <p className="answer-explanation">{explanations[key]}</p>
+                        : explanationsLoading
+                          ? <p className="explanation-loading">Explaining…</p>
+                          : null
+                    )}
+                  </div>
+                  {submitted && (isCorrect
+                    ? <Check size={18} className="q-icon correct" />
+                    : <X size={18} className="q-icon incorrect" />)}
+                </div>
+              </React.Fragment>
             );
           }
         })}
@@ -1029,6 +1110,16 @@ function AIListeningExerciseView({
         .correct-label { display: block; font-size: 0.8rem; color: var(--color-success); margin-top: 4px; font-weight: 600; }
 
         .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+
+        .matching-instruction { background: var(--color-surface); border: 1px solid var(--color-primary); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-sm); }
+        .matching-instruction p { font-size: 0.9rem; font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-xs); }
+        .matching-options-pool { display: flex; flex-wrap: wrap; gap: 6px; }
+        .matching-option-tag { background: rgba(79,70,229,0.08); color: var(--color-primary); padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 500; border: 1px solid rgba(79,70,229,0.2); }
+        .matching-select { width: 100%; max-width: 300px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-primary); font-size: 0.875rem; cursor: pointer; }
+        .matching-select:focus { outline: none; border-color: var(--color-primary); }
+        .matching-select.input-correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
+        .matching-select.input-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+        .matching-select:disabled { opacity: 0.8; cursor: default; }
 
         .transcript-section { margin-bottom: var(--spacing-lg); }
         .transcript-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 6px 14px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); }
