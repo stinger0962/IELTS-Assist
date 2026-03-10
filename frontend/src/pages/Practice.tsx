@@ -81,15 +81,15 @@ function AIReadingExerciseView({
   const getNewFormatAnswerMap = (): Record<string, { answer: string; explanation?: string }> => {
     const map: Record<string, { answer: string; explanation?: string }> = {};
     if (!isNewFormat) return map;
-    for (const group of exercise.questions.groups!) {
+    for (let gi = 0; gi < exercise.questions.groups!.length; gi++) {
+      const group = exercise.questions.groups![gi];
       if (group.type === 'matching_headings') {
         for (const ans of (group.answers ?? [])) {
-          map[`mh_${ans.paragraph_number}`] = { answer: ans.answer, explanation: ans.explanation };
+          map[`mh_${gi}_${ans.paragraph_number}`] = { answer: ans.answer, explanation: ans.explanation };
         }
       } else {
         for (const item of group.items) {
-          const qn = item.question_number;
-          map[`q_${qn}`] = { answer: item.answer, explanation: item.explanation };
+          map[`q_${gi}_${item.question_number}`] = { answer: item.answer, explanation: item.explanation };
         }
       }
     }
@@ -118,14 +118,15 @@ function AIReadingExerciseView({
 
     if (isNewFormat) {
       // Score new format
-      for (const group of exercise.questions.groups!) {
+      for (let gi = 0; gi < exercise.questions.groups!.length; gi++) {
+        const group = exercise.questions.groups![gi];
         const gtype = group.type;
 
         if (gtype === 'matching_headings') {
           const answers = group.answers ?? [];
           for (const ans of answers) {
             total++;
-            const key = `mh_${ans.paragraph_number}`;
+            const key = `mh_${gi}_${ans.paragraph_number}`;
             const userAns = userAnswers[key] ?? '';
             if (userAns === ans.answer) {
               correct++;
@@ -134,7 +135,7 @@ function AIReadingExerciseView({
         } else {
           for (const item of group.items) {
             total++;
-            const key = `q_${item.question_number}`;
+            const key = `q_${gi}_${item.question_number}`;
             const userAns = userAnswers[key] ?? '';
             const correctAns = item.answer ?? '';
 
@@ -385,7 +386,7 @@ function AIReadingExerciseView({
         <h4 className="section-title">{rangeLabel}: {label}</h4>
 
         {gtype === 'true_false_not_given' && items.map((item: any) => {
-          const key = `q_${item.question_number}`;
+          const key = `q_${groupIdx}_${item.question_number}`;
           const userAns = userAnswers[key];
           const correctAns = item.answer;
           const isCorrect = userAns === correctAns;
@@ -418,7 +419,7 @@ function AIReadingExerciseView({
         })}
 
         {gtype === 'multiple_choice' && items.map((item: any) => {
-          const key = `q_${item.question_number}`;
+          const key = `q_${groupIdx}_${item.question_number}`;
           const userAns = userAnswers[key];
           const correctAns = item.answer;
           const opts = item.options ?? {};
@@ -467,7 +468,7 @@ function AIReadingExerciseView({
                 ))}
               </div>
               {paras.map((para: any) => {
-                const key = `mh_${para.number}`;
+                const key = `mh_${groupIdx}_${para.number}`;
                 const userAns = userAnswers[key] ?? '';
                 const correctAns = answers.find((a: any) => a.paragraph_number === para.number)?.answer;
                 const explanation = answers.find((a: any) => a.paragraph_number === para.number)?.explanation;
@@ -497,7 +498,7 @@ function AIReadingExerciseView({
         })()}
 
         {gtype === 'matching_information' && items.map((item: any) => {
-          const key = `q_${item.question_number}`;
+          const key = `q_${groupIdx}_${item.question_number}`;
           const userAns = userAnswers[key] ?? '';
           const correctAns = item.answer;
           const paraLabels = paragraphs.map((_, i) => String.fromCharCode(65 + i));
@@ -524,7 +525,7 @@ function AIReadingExerciseView({
         })}
 
         {gtype === 'sentence_completion' && items.map((item: any) => {
-          const key = `q_${item.question_number}`;
+          const key = `q_${groupIdx}_${item.question_number}`;
           const userAns = userAnswers[key] ?? '';
           const correctAns = item.answer;
           const isCorrect = submitted && completionMatch(userAns, correctAns);
@@ -564,7 +565,7 @@ function AIReadingExerciseView({
                   if (blankMatch) {
                     const qn = parseInt(blankMatch[1]);
                     const item = items.find((it: any) => it.question_number === qn);
-                    const key = `q_${qn}`;
+                    const key = `q_${groupIdx}_${qn}`;
                     const userAns = userAnswers[key] ?? '';
                     const correctAns = item?.answer ?? '';
                     const isCorrect = submitted && completionMatch(userAns, correctAns);
@@ -586,7 +587,7 @@ function AIReadingExerciseView({
                 })}
               </div>
               {submitted && items.map((item: any) => {
-                const key = `q_${item.question_number}`;
+                const key = `q_${groupIdx}_${item.question_number}`;
                 const userAns = userAnswers[key] ?? '';
                 const isCorrect = completionMatch(userAns, item.answer);
                 return !isCorrect && item.explanation ? (
@@ -598,7 +599,7 @@ function AIReadingExerciseView({
         })()}
 
         {gtype === 'short_answer' && items.map((item: any) => {
-          const key = `q_${item.question_number}`;
+          const key = `q_${groupIdx}_${item.question_number}`;
           const userAns = userAnswers[key] ?? '';
           const correctAns = item.answer;
           const isCorrect = submitted && completionMatch(userAns, correctAns);

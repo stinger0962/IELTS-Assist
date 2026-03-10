@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:/Users/sting/AppData/Local/Temp/release_v041.json\":*)",
+      "Read(//c/Users/sting/**)"
+    ]
+  }
+}
