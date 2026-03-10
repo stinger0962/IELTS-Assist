@@ -6,7 +6,7 @@ import { useAppStore } from '../store';
 import type {
   SkillType, WritingTopic, SpeakingTopic,
   AIReadingPractice, AIListeningPractice, AIListeningMatchingBlock, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
-  MatchingHeadingData, MatchingAnswerItem,
+  MatchingHeadingData, MatchingAnswerItem, ReadingQuestionGroup,
 } from '../types';
 
 const skillConfig = [
@@ -63,17 +63,48 @@ function AIReadingExerciseView({
   const [vocabDuplicate, setVocabDuplicate] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
 
+  // Detect format: new (groups) vs legacy (true_false_not_given + second_type)
+  const isNewFormat = !!(exercise.questions.groups && exercise.questions.groups.length > 0);
+
+  // Legacy format helpers
   const tfngQuestions = exercise.questions.true_false_not_given ?? [];
   const secondType = exercise.questions.second_type;
   const isMCQ = secondType?.type === 'multiple_choice';
-  const mcqItems = isMCQ ? (secondType.items as MCQQuestionItem[]) : [];
-  const matchingData = !isMCQ ? (secondType.items as MatchingHeadingData) : null;
+  const mcqItems = isMCQ ? (secondType!.items as MCQQuestionItem[]) : [];
+  const matchingData = (!isMCQ && secondType) ? (secondType.items as MatchingHeadingData) : null;
 
   const setAnswer = (key: string, value: string) => {
     if (!submitted) setUserAnswers(prev => ({ ...prev, [key]: value }));
   };
 
+  // ── Collect all answer keys for new format ──
+  const getNewFormatAnswerMap = (): Record<string, { answer: string; explanation?: string }> => {
+    const map: Record<string, { answer: string; explanation?: string }> = {};
+    if (!isNewFormat) return map;
+    for (const group of exercise.questions.groups!) {
+      if (group.type === 'matching_headings') {
+        for (const ans of (group.answers ?? [])) {
+          map[`mh_${ans.paragraph_number}`] = { answer: ans.answer, explanation: ans.explanation };
+        }
+      } else {
+        for (const item of group.items) {
+          const qn = item.question_number;
+          map[`q_${qn}`] = { answer: item.answer, explanation: item.explanation };
+        }
+      }
+    }
+    return map;
+  };
+
   const allAnswered = () => {
+    if (isNewFormat) {
+      const answerMap = getNewFormatAnswerMap();
+      return Object.keys(answerMap).every(key => {
+        const val = userAnswers[key];
+        return val !== undefined && val !== '';
+      });
+    }
+    // Legacy
     const tfngDone = tfngQuestions.every(q => userAnswers[`tfng_${q.question_number}`]);
     if (isMCQ) return tfngDone && mcqItems.every((_, idx) => userAnswers[`mc_${idx}`]);
     return tfngDone && (matchingData?.paragraphs ?? []).every(p => userAnswers[`mh_${p.number}`]);
@@ -81,63 +112,117 @@ function AIReadingExerciseView({
 
   const handleSubmit = () => {
     let correct = 0;
+    let total = 0;
     type WrongEntry = { key: string; question_type: string; question: string; user_answer: string; correct_answer: string };
     const wrongAnswers: WrongEntry[] = [];
 
-    // Score T/F/NG
-    tfngQuestions.forEach(q => {
-      const key = `tfng_${q.question_number}`;
-      const userAns = userAnswers[key];
-      const correctAns = (exercise.answer_key.true_false_not_given as TFNGAnswerItem[]).find(
-        a => a.question_number === q.question_number
-      )?.answer;
-      if (userAns === correctAns) {
-        correct++;
-      } else {
-        wrongAnswers.push({ key, question_type: 'T/F/NG', question: q.statement, user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '' });
-        mistakesAPI.create({
-          skill: 'reading', question: q.statement,
-          user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '',
-          mistake_type: 'true_false_not_given',
-        }).catch(() => {});
-      }
-    });
+    if (isNewFormat) {
+      // Score new format
+      for (const group of exercise.questions.groups!) {
+        const gtype = group.type;
 
-    // Score second type
-    const secondAnswers = exercise.answer_key.second_type_answers;
-    if (isMCQ) {
-      mcqItems.forEach((item, idx) => {
-        const key = `mc_${idx}`;
+        if (gtype === 'matching_headings') {
+          const answers = group.answers ?? [];
+          for (const ans of answers) {
+            total++;
+            const key = `mh_${ans.paragraph_number}`;
+            const userAns = userAnswers[key] ?? '';
+            if (userAns === ans.answer) {
+              correct++;
+            }
+          }
+        } else {
+          for (const item of group.items) {
+            total++;
+            const key = `q_${item.question_number}`;
+            const userAns = userAnswers[key] ?? '';
+            const correctAns = item.answer ?? '';
+
+            if (gtype === 'true_false_not_given' || gtype === 'multiple_choice' || gtype === 'matching_information') {
+              if (userAns === correctAns) {
+                correct++;
+              } else {
+                const qText = item.statement || item.question || `Question ${item.question_number}`;
+                wrongAnswers.push({ key, question_type: gtype, question: qText, user_answer: userAns || '(unanswered)', correct_answer: correctAns });
+                mistakesAPI.create({
+                  skill: 'reading', question: qText,
+                  user_answer: userAns || '(unanswered)', correct_answer: correctAns,
+                  mistake_type: gtype,
+                }).catch(() => {});
+              }
+            } else {
+              // Text input types: sentence_completion, summary_completion, short_answer
+              if (completionMatch(userAns, correctAns)) {
+                correct++;
+              } else {
+                const qText = item.text || item.question || `Question ${item.question_number}`;
+                wrongAnswers.push({ key, question_type: gtype, question: qText, user_answer: userAns || '(unanswered)', correct_answer: correctAns });
+                mistakesAPI.create({
+                  skill: 'reading', question: qText,
+                  user_answer: userAns || '(unanswered)', correct_answer: correctAns,
+                  mistake_type: gtype,
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Score legacy format
+      tfngQuestions.forEach(q => {
+        total++;
+        const key = `tfng_${q.question_number}`;
         const userAns = userAnswers[key];
-        const correctAns = (secondAnswers as MCQAnswerItem[]).find(
-          a => a.question_number === item.question_number
+        const correctAns = (exercise.answer_key!.true_false_not_given as TFNGAnswerItem[]).find(
+          a => a.question_number === q.question_number
         )?.answer;
         if (userAns === correctAns) {
           correct++;
         } else {
-          const opts = item.options ?? {};
-          const userLabel = userAns ? `${userAns}. ${opts[userAns] ?? ''}` : '(unanswered)';
-          const correctLabel = correctAns ? `${correctAns}. ${opts[correctAns] ?? ''}` : '';
-          wrongAnswers.push({ key, question_type: 'MCQ', question: item.question, user_answer: userLabel, correct_answer: correctLabel });
+          wrongAnswers.push({ key, question_type: 'T/F/NG', question: q.statement, user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '' });
           mistakesAPI.create({
-            skill: 'reading', question: item.question,
-            user_answer: userLabel, correct_answer: correctLabel,
-            mistake_type: 'multiple_choice',
+            skill: 'reading', question: q.statement,
+            user_answer: userAns ?? '(unanswered)', correct_answer: correctAns ?? '',
+            mistake_type: 'true_false_not_given',
           }).catch(() => {});
         }
       });
-    } else if (matchingData) {
-      matchingData.paragraphs.forEach(para => {
-        const userAns = userAnswers[`mh_${para.number}`];
-        const correctAns = (secondAnswers as MatchingAnswerItem[]).find(
-          a => a.paragraph_number === para.number
-        )?.answer;
-        if (userAns === correctAns) correct++;
-      });
+
+      const secondAnswers = exercise.answer_key!.second_type_answers;
+      if (isMCQ) {
+        mcqItems.forEach((item, idx) => {
+          total++;
+          const key = `mc_${idx}`;
+          const userAns = userAnswers[key];
+          const correctAns = (secondAnswers as MCQAnswerItem[]).find(
+            a => a.question_number === item.question_number
+          )?.answer;
+          if (userAns === correctAns) {
+            correct++;
+          } else {
+            const opts = item.options ?? {};
+            const userLabel = userAns ? `${userAns}. ${opts[userAns] ?? ''}` : '(unanswered)';
+            const correctLabel = correctAns ? `${correctAns}. ${opts[correctAns] ?? ''}` : '';
+            wrongAnswers.push({ key, question_type: 'MCQ', question: item.question, user_answer: userLabel, correct_answer: correctLabel });
+            mistakesAPI.create({
+              skill: 'reading', question: item.question,
+              user_answer: userLabel, correct_answer: correctLabel,
+              mistake_type: 'multiple_choice',
+            }).catch(() => {});
+          }
+        });
+      } else if (matchingData) {
+        matchingData.paragraphs.forEach(para => {
+          total++;
+          const userAns = userAnswers[`mh_${para.number}`];
+          const correctAns = (secondAnswers as MatchingAnswerItem[]).find(
+            a => a.paragraph_number === para.number
+          )?.answer;
+          if (userAns === correctAns) correct++;
+        });
+      }
     }
 
-    const secondCount = isMCQ ? mcqItems.length : (matchingData?.paragraphs.length ?? 0);
-    const total = tfngQuestions.length + secondCount;
     setScore({ correct, total });
     setSubmitted(true);
 
@@ -168,8 +253,8 @@ function AIReadingExerciseView({
     progressAPI.createSession({ skill: 'reading', duration_minutes: studyMinutes }).catch(() => {});
     practiceAPI.extractVocabulary(exercise.passage, exercise.meta.topic).catch(() => {});
 
-    // Fetch one-sentence explanations for every wrong answer
-    if (wrongAnswers.length > 0) {
+    // Fetch explanations for wrong answers (legacy only — new format has inline explanations)
+    if (!isNewFormat && wrongAnswers.length > 0) {
       setExplanationsLoading(true);
       practiceAPI.explainMistakes(exercise.passage, wrongAnswers)
         .then(res => {
@@ -182,12 +267,13 @@ function AIReadingExerciseView({
     }
   };
 
+  // Legacy helpers
   const tfngCorrect = (qNum: number) =>
-    (exercise.answer_key.true_false_not_given as TFNGAnswerItem[]).find(a => a.question_number === qNum)?.answer;
+    (exercise.answer_key?.true_false_not_given as TFNGAnswerItem[] | undefined)?.find(a => a.question_number === qNum)?.answer;
   const mcqCorrect = (qNum: number) =>
-    (exercise.answer_key.second_type_answers as MCQAnswerItem[]).find(a => a.question_number === qNum)?.answer;
+    (exercise.answer_key?.second_type_answers as MCQAnswerItem[] | undefined)?.find(a => a.question_number === qNum)?.answer;
   const matchingCorrect = (paraNum: number) =>
-    (exercise.answer_key.second_type_answers as MatchingAnswerItem[]).find(a => a.paragraph_number === paraNum)?.answer;
+    (exercise.answer_key?.second_type_answers as MatchingAnswerItem[] | undefined)?.find(a => a.paragraph_number === paraNum)?.answer;
 
   const paragraphs = exercise.passage.split(/\n\n+/).filter(Boolean);
 
@@ -240,8 +326,6 @@ function AIReadingExerciseView({
       try {
         const rect = sel!.getRangeAt(0).getBoundingClientRect();
         setVocabWord(text);
-        // Position popup BELOW the selection so it doesn't clash with the
-        // browser's native Copy / Google Search toolbar which appears above
         setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom });
       } catch { /* ignore */ }
     } else {
@@ -249,7 +333,6 @@ function AIReadingExerciseView({
     }
   };
 
-  // Listen on document so mobile handle-drag selections are also detected
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const onSelChange = () => {
@@ -277,6 +360,273 @@ function AIReadingExerciseView({
     }
   };
 
+  // ── Render a question group (new format) ──
+  const renderGroup = (group: ReadingQuestionGroup, groupIdx: number) => {
+    const gtype = group.type;
+    const label = gtype.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const items = group.items ?? [];
+
+    // Compute question number range for section header
+    let qStart = 0, qEnd = 0;
+    if (gtype === 'matching_headings') {
+      const answers = group.answers ?? [];
+      if (answers.length > 0) {
+        qStart = answers[0].paragraph_number;
+        qEnd = answers[answers.length - 1].paragraph_number;
+      }
+    } else if (items.length > 0) {
+      qStart = items[0].question_number;
+      qEnd = items[items.length - 1].question_number;
+    }
+    const rangeLabel = qStart === qEnd ? `Question ${qStart}` : `Questions ${qStart}–${qEnd}`;
+
+    return (
+      <div key={groupIdx} className="question-section">
+        <h4 className="section-title">{rangeLabel}: {label}</h4>
+
+        {gtype === 'true_false_not_given' && items.map((item: any) => {
+          const key = `q_${item.question_number}`;
+          const userAns = userAnswers[key];
+          const correctAns = item.answer;
+          const isCorrect = userAns === correctAns;
+          return (
+            <div key={item.question_number} className={`tfng-row ${submitted ? (isCorrect ? 'row-correct' : 'row-wrong') : ''}`}>
+              <div className="tfng-statement">
+                <span className="q-num">{item.question_number}.</span>
+                <span>{item.statement}</span>
+              </div>
+              <div className="tfng-btns">
+                {(['TRUE', 'FALSE', 'NOT GIVEN'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    className={`tfng-btn ${userAns === opt ? 'selected' : ''} ${
+                      submitted ? (opt === correctAns ? 'btn-correct' : userAns === opt ? 'btn-wrong' : '') : ''
+                    }`}
+                    onClick={() => setAnswer(key, opt)}
+                    disabled={submitted}
+                  >
+                    {opt === 'NOT GIVEN' ? 'NG' : opt.charAt(0)}
+                  </button>
+                ))}
+              </div>
+              {submitted && !isCorrect && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+              {submitted && !isCorrect && item.explanation && (
+                <p className="answer-explanation">{item.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+
+        {gtype === 'multiple_choice' && items.map((item: any) => {
+          const key = `q_${item.question_number}`;
+          const userAns = userAnswers[key];
+          const correctAns = item.answer;
+          const opts = item.options ?? {};
+          return (
+            <div key={item.question_number} className="mcq-question">
+              <p className="q-text">
+                <span className="q-num">{item.question_number}.</span> {item.question}
+              </p>
+              <div className="options">
+                {Object.entries(opts).map(([letter, text]) => (
+                  <button
+                    key={letter}
+                    className={`option ${userAns === letter ? 'selected' : ''} ${
+                      submitted ? (letter === correctAns ? 'correct' : userAns === letter ? 'incorrect' : '') : ''
+                    }`}
+                    onClick={() => setAnswer(key, letter)}
+                    disabled={submitted}
+                  >
+                    <span className="option-letter">{letter}</span>
+                    <span className="option-text">{text as string}</span>
+                    {submitted && letter === correctAns && <Check size={14} className="result-icon correct" />}
+                    {submitted && userAns === letter && letter !== correctAns && <X size={14} className="result-icon incorrect" />}
+                  </button>
+                ))}
+              </div>
+              {submitted && userAns !== correctAns && item.explanation && (
+                <p className="answer-explanation">{item.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+
+        {gtype === 'matching_headings' && (() => {
+          const headingsData = items as any;
+          const headings = headingsData.headings ?? [];
+          const paras = headingsData.paragraphs ?? [];
+          const answers = group.answers ?? [];
+          return (
+            <div className="matching-section">
+              <div className="headings-bank">
+                <h5>Headings Bank</h5>
+                {headings.map((h: any) => (
+                  <div key={h.id} className="heading-entry">
+                    <strong>{h.id}.</strong> {h.text}
+                  </div>
+                ))}
+              </div>
+              {paras.map((para: any) => {
+                const key = `mh_${para.number}`;
+                const userAns = userAnswers[key] ?? '';
+                const correctAns = answers.find((a: any) => a.paragraph_number === para.number)?.answer;
+                const explanation = answers.find((a: any) => a.paragraph_number === para.number)?.explanation;
+                return (
+                  <div key={para.number} className={`match-row ${submitted ? (userAns === correctAns ? 'row-correct' : 'row-wrong') : ''}`}>
+                    <span className="para-label">Paragraph {para.number}: <em>{para.title}</em></span>
+                    <select
+                      value={userAns}
+                      onChange={e => setAnswer(key, e.target.value)}
+                      disabled={submitted}
+                      className={submitted ? (userAns === correctAns ? 'select-correct' : 'select-wrong') : ''}
+                    >
+                      <option value="">Select...</option>
+                      {headings.map((h: any) => (
+                        <option key={h.id} value={h.id}>{h.id}</option>
+                      ))}
+                    </select>
+                    {submitted && userAns !== correctAns && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+                    {submitted && userAns !== correctAns && explanation && (
+                      <p className="answer-explanation">{explanation}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {gtype === 'matching_information' && items.map((item: any) => {
+          const key = `q_${item.question_number}`;
+          const userAns = userAnswers[key] ?? '';
+          const correctAns = item.answer;
+          const paraLabels = paragraphs.map((_, i) => String.fromCharCode(65 + i));
+          return (
+            <div key={item.question_number} className={`match-row ${submitted ? (userAns === correctAns ? 'row-correct' : 'row-wrong') : ''}`}>
+              <span className="para-label"><span className="q-num">{item.question_number}.</span> {item.statement}</span>
+              <select
+                value={userAns}
+                onChange={e => setAnswer(key, e.target.value)}
+                disabled={submitted}
+                className={submitted ? (userAns === correctAns ? 'select-correct' : 'select-wrong') : ''}
+              >
+                <option value="">Select...</option>
+                {paraLabels.map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+              {submitted && userAns !== correctAns && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+              {submitted && userAns !== correctAns && item.explanation && (
+                <p className="answer-explanation">{item.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+
+        {gtype === 'sentence_completion' && items.map((item: any) => {
+          const key = `q_${item.question_number}`;
+          const userAns = userAnswers[key] ?? '';
+          const correctAns = item.answer;
+          const isCorrect = submitted && completionMatch(userAns, correctAns);
+          const parts = (item.text ?? '').split('___');
+          return (
+            <div key={item.question_number} className={`completion-row ${submitted ? (isCorrect ? 'row-correct' : 'row-wrong') : ''}`}>
+              <div className="completion-sentence">
+                <span className="q-num">{item.question_number}.</span>
+                <span>
+                  {parts[0]}
+                  <input
+                    type="text"
+                    className={`completion-input ${submitted ? (isCorrect ? 'input-correct' : 'input-wrong') : ''}`}
+                    value={userAns}
+                    onChange={e => setAnswer(key, e.target.value)}
+                    disabled={submitted}
+                    placeholder={item.word_limit ? `(${item.word_limit} words max)` : '___'}
+                  />
+                  {parts[1] ?? ''}
+                </span>
+              </div>
+              {submitted && !isCorrect && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+              {submitted && !isCorrect && item.explanation && (
+                <p className="answer-explanation">{item.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+
+        {gtype === 'summary_completion' && (() => {
+          const summaryText = group.summary_text ?? '';
+          return (
+            <div className="summary-block">
+              <div className="summary-text">
+                {summaryText.split(/(___\d+___)/).map((segment, si) => {
+                  const blankMatch = segment.match(/___(\d+)___/);
+                  if (blankMatch) {
+                    const qn = parseInt(blankMatch[1]);
+                    const item = items.find((it: any) => it.question_number === qn);
+                    const key = `q_${qn}`;
+                    const userAns = userAnswers[key] ?? '';
+                    const correctAns = item?.answer ?? '';
+                    const isCorrect = submitted && completionMatch(userAns, correctAns);
+                    return (
+                      <React.Fragment key={si}>
+                        <input
+                          type="text"
+                          className={`completion-input inline-blank ${submitted ? (isCorrect ? 'input-correct' : 'input-wrong') : ''}`}
+                          value={userAns}
+                          onChange={e => setAnswer(key, e.target.value)}
+                          disabled={submitted}
+                          placeholder={`(${qn})`}
+                        />
+                        {submitted && !isCorrect && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+                      </React.Fragment>
+                    );
+                  }
+                  return <span key={si}>{segment}</span>;
+                })}
+              </div>
+              {submitted && items.map((item: any) => {
+                const key = `q_${item.question_number}`;
+                const userAns = userAnswers[key] ?? '';
+                const isCorrect = completionMatch(userAns, item.answer);
+                return !isCorrect && item.explanation ? (
+                  <p key={item.question_number} className="answer-explanation">Q{item.question_number}: {item.explanation}</p>
+                ) : null;
+              })}
+            </div>
+          );
+        })()}
+
+        {gtype === 'short_answer' && items.map((item: any) => {
+          const key = `q_${item.question_number}`;
+          const userAns = userAnswers[key] ?? '';
+          const correctAns = item.answer;
+          const isCorrect = submitted && completionMatch(userAns, correctAns);
+          return (
+            <div key={item.question_number} className={`completion-row ${submitted ? (isCorrect ? 'row-correct' : 'row-wrong') : ''}`}>
+              <div className="completion-sentence">
+                <span className="q-num">{item.question_number}.</span>
+                <span>{item.question}</span>
+              </div>
+              <input
+                type="text"
+                className={`completion-input ${submitted ? (isCorrect ? 'input-correct' : 'input-wrong') : ''}`}
+                value={userAns}
+                onChange={e => setAnswer(key, e.target.value)}
+                disabled={submitted}
+                placeholder={item.word_limit ? `(${item.word_limit} words max)` : 'Type answer...'}
+              />
+              {submitted && !isCorrect && <span className="inline-hint">{'\u2192'} {correctAns}</span>}
+              {submitted && !isCorrect && item.explanation && (
+                <p className="answer-explanation">{item.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="ai-exercise-view">
       {/* Floating "Add to Vocab" popup on text selection */}
@@ -300,11 +650,11 @@ function AIReadingExerciseView({
             <input className="vocab-input" value={vocabWord} onChange={e => setVocabWord(e.target.value)} />
             <label className="vocab-label">
               Definition
-              {vocabDefLoading && <span className="vocab-loading-hint"> · Looking up…</span>}
+              {vocabDefLoading && <span className="vocab-loading-hint"> · Looking up...</span>}
             </label>
             <textarea
               className="vocab-textarea"
-              placeholder={vocabDefLoading ? 'Looking up definition…' : 'Edit or enter a definition…'}
+              placeholder={vocabDefLoading ? 'Looking up definition...' : 'Edit or enter a definition...'}
               value={vocabDef}
               onChange={e => setVocabDef(e.target.value)}
               rows={3}
@@ -314,7 +664,7 @@ function AIReadingExerciseView({
             <div className="vocab-modal-actions">
               <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); setVocabDuplicate(false); }}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || vocabDefLoading || !vocabDef.trim()}>
-                {vocabSaving ? 'Saving…' : 'Save'}
+                {vocabSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
@@ -322,7 +672,7 @@ function AIReadingExerciseView({
       )}
 
       {/* Vocab saved toast */}
-      {vocabSaved && <div className="vocab-toast">✓ Added to vocabulary!</div>}
+      {vocabSaved && <div className="vocab-toast">Added to vocabulary!</div>}
 
       {/* Passage */}
       <div className="exercise-passage">
@@ -338,129 +688,135 @@ function AIReadingExerciseView({
       {/* Questions panel */}
       <div className="exercise-questions">
 
-        {/* Section 1: T/F/NG */}
-        <div className="question-section">
-          <h4 className="section-title">Section 1 — True / False / Not Given</h4>
-          {tfngQuestions.map(q => {
-            const key = `tfng_${q.question_number}`;
-            const userAns = userAnswers[key];
-            const correct = tfngCorrect(q.question_number);
-            return (
-              <div key={q.question_number} className={`tfng-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
-                <div className="tfng-statement">
-                  <span className="q-num">{q.question_number}.</span>
-                  <span>{q.statement}</span>
-                </div>
-                <div className="tfng-btns">
-                  {(['TRUE', 'FALSE', 'NOT GIVEN'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      className={`tfng-btn ${userAns === opt ? 'selected' : ''} ${
-                        submitted ? (opt === correct ? 'btn-correct' : userAns === opt ? 'btn-wrong' : '') : ''
-                      }`}
-                      onClick={() => setAnswer(key, opt)}
-                      disabled={submitted}
-                    >
-                      {opt === 'NOT GIVEN' ? 'NG' : opt.charAt(0)}
-                    </button>
-                  ))}
-                </div>
-                {submitted && userAns !== correct && (
-                  <span className="inline-hint">→ {correct}</span>
-                )}
-                {submitted && userAns !== correct && (
-                  explanations[key]
-                    ? <p className="answer-explanation">{explanations[key]}</p>
-                    : explanationsLoading
-                      ? <p className="explanation-loading">Explaining…</p>
-                      : null
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Section 2: MCQ or Matching */}
-        <div className="question-section">
-          <h4 className="section-title">
-            Section 2 — {isMCQ ? 'Multiple Choice' : 'Matching Headings'}
-          </h4>
-
-          {isMCQ && mcqItems.map((item, idx) => {
-            const key = `mc_${idx}`;
-            const userAns = userAnswers[key];
-            const correct = submitted ? mcqCorrect(item.question_number) : undefined;
-            const opts = item.options ?? {};
-            return (
-              <div key={idx} className="mcq-question">
-                <p className="q-text">
-                  <span className="q-num">{item.question_number}.</span> {item.question}
-                </p>
-                <div className="options">
-                  {Object.entries(opts).map(([letter, text]) => (
-                    <button
-                      key={letter}
-                      className={`option ${userAns === letter ? 'selected' : ''} ${
-                        submitted ? (letter === correct ? 'correct' : userAns === letter ? 'incorrect' : '') : ''
-                      }`}
-                      onClick={() => setAnswer(key, letter)}
-                      disabled={submitted}
-                    >
-                      <span className="option-letter">{letter}</span>
-                      <span className="option-text">{text}</span>
-                      {submitted && letter === correct && <Check size={14} className="result-icon correct" />}
-                      {submitted && userAns === letter && letter !== correct && <X size={14} className="result-icon incorrect" />}
-                    </button>
-                  ))}
-                </div>
-                {submitted && userAns !== correct && (
-                  explanations[key]
-                    ? <p className="answer-explanation">{explanations[key]}</p>
-                    : explanationsLoading
-                      ? <p className="explanation-loading">Explaining…</p>
-                      : null
-                )}
-              </div>
-            );
-          })}
-
-          {!isMCQ && matchingData && (
-            <div className="matching-section">
-              <div className="headings-bank">
-                <h5>Headings Bank</h5>
-                {(matchingData.headings ?? []).map(h => (
-                  <div key={h.id} className="heading-entry">
-                    <strong>{h.id}.</strong> {h.text}
-                  </div>
-                ))}
-              </div>
-              {(matchingData.paragraphs ?? []).map(para => {
-                const key = `mh_${para.number}`;
+        {isNewFormat ? (
+          // New format: render each group
+          exercise.questions.groups!.map((group, idx) => renderGroup(group, idx))
+        ) : (
+          // Legacy format: T/F/NG + MCQ or Matching
+          <>
+            <div className="question-section">
+              <h4 className="section-title">Section 1 — True / False / Not Given</h4>
+              {tfngQuestions.map(q => {
+                const key = `tfng_${q.question_number}`;
                 const userAns = userAnswers[key];
-                const correct = submitted ? matchingCorrect(para.number) : undefined;
+                const correct = tfngCorrect(q.question_number);
                 return (
-                  <div key={para.number} className={`match-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
-                    <span className="para-label">Paragraph {para.number}: <em>{para.title}</em></span>
-                    <select
-                      value={userAns ?? ''}
-                      onChange={e => setAnswer(key, e.target.value)}
-                      disabled={submitted}
-                      className={submitted ? (userAns === correct ? 'select-correct' : 'select-wrong') : ''}
-                    >
-                      <option value="">Select…</option>
-                      {(matchingData.headings ?? []).map(h => (
-                        <option key={h.id} value={h.id}>{h.id}</option>
+                  <div key={q.question_number} className={`tfng-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
+                    <div className="tfng-statement">
+                      <span className="q-num">{q.question_number}.</span>
+                      <span>{q.statement}</span>
+                    </div>
+                    <div className="tfng-btns">
+                      {(['TRUE', 'FALSE', 'NOT GIVEN'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          className={`tfng-btn ${userAns === opt ? 'selected' : ''} ${
+                            submitted ? (opt === correct ? 'btn-correct' : userAns === opt ? 'btn-wrong' : '') : ''
+                          }`}
+                          onClick={() => setAnswer(key, opt)}
+                          disabled={submitted}
+                        >
+                          {opt === 'NOT GIVEN' ? 'NG' : opt.charAt(0)}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                     {submitted && userAns !== correct && (
-                      <span className="inline-hint">→ {correct}</span>
+                      <span className="inline-hint">{'\u2192'} {correct}</span>
+                    )}
+                    {submitted && userAns !== correct && (
+                      explanations[key]
+                        ? <p className="answer-explanation">{explanations[key]}</p>
+                        : explanationsLoading
+                          ? <p className="explanation-loading">Explaining...</p>
+                          : null
                     )}
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+
+            <div className="question-section">
+              <h4 className="section-title">
+                Section 2 — {isMCQ ? 'Multiple Choice' : 'Matching Headings'}
+              </h4>
+
+              {isMCQ && mcqItems.map((item, idx) => {
+                const key = `mc_${idx}`;
+                const userAns = userAnswers[key];
+                const correct = submitted ? mcqCorrect(item.question_number) : undefined;
+                const opts = item.options ?? {};
+                return (
+                  <div key={idx} className="mcq-question">
+                    <p className="q-text">
+                      <span className="q-num">{item.question_number}.</span> {item.question}
+                    </p>
+                    <div className="options">
+                      {Object.entries(opts).map(([letter, text]) => (
+                        <button
+                          key={letter}
+                          className={`option ${userAns === letter ? 'selected' : ''} ${
+                            submitted ? (letter === correct ? 'correct' : userAns === letter ? 'incorrect' : '') : ''
+                          }`}
+                          onClick={() => setAnswer(key, letter)}
+                          disabled={submitted}
+                        >
+                          <span className="option-letter">{letter}</span>
+                          <span className="option-text">{text}</span>
+                          {submitted && letter === correct && <Check size={14} className="result-icon correct" />}
+                          {submitted && userAns === letter && letter !== correct && <X size={14} className="result-icon incorrect" />}
+                        </button>
+                      ))}
+                    </div>
+                    {submitted && userAns !== correct && (
+                      explanations[key]
+                        ? <p className="answer-explanation">{explanations[key]}</p>
+                        : explanationsLoading
+                          ? <p className="explanation-loading">Explaining...</p>
+                          : null
+                    )}
+                  </div>
+                );
+              })}
+
+              {!isMCQ && matchingData && (
+                <div className="matching-section">
+                  <div className="headings-bank">
+                    <h5>Headings Bank</h5>
+                    {(matchingData.headings ?? []).map(h => (
+                      <div key={h.id} className="heading-entry">
+                        <strong>{h.id}.</strong> {h.text}
+                      </div>
+                    ))}
+                  </div>
+                  {(matchingData.paragraphs ?? []).map(para => {
+                    const key = `mh_${para.number}`;
+                    const userAns = userAnswers[key];
+                    const correct = submitted ? matchingCorrect(para.number) : undefined;
+                    return (
+                      <div key={para.number} className={`match-row ${submitted ? (userAns === correct ? 'row-correct' : 'row-wrong') : ''}`}>
+                        <span className="para-label">Paragraph {para.number}: <em>{para.title}</em></span>
+                        <select
+                          value={userAns ?? ''}
+                          onChange={e => setAnswer(key, e.target.value)}
+                          disabled={submitted}
+                          className={submitted ? (userAns === correct ? 'select-correct' : 'select-wrong') : ''}
+                        >
+                          <option value="">Select...</option>
+                          {(matchingData.headings ?? []).map(h => (
+                            <option key={h.id} value={h.id}>{h.id}</option>
+                          ))}
+                        </select>
+                        {submitted && userAns !== correct && (
+                          <span className="inline-hint">{'\u2192'} {correct}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Submit / Finish */}
         <div className="question-actions">
@@ -518,6 +874,17 @@ function AIReadingExerciseView({
         select { padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-primary); font-size: 0.875rem; }
         select.select-correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
         select.select-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+        .completion-row { margin-bottom: var(--spacing-md); padding: var(--spacing-sm); border-radius: var(--radius-md); }
+        .completion-row.row-correct { background: rgba(16,185,129,0.08); }
+        .completion-row.row-wrong { background: rgba(239,68,68,0.08); }
+        .completion-sentence { display: flex; gap: var(--spacing-sm); font-size: 0.9rem; line-height: 1.8; margin-bottom: var(--spacing-xs); flex-wrap: wrap; align-items: baseline; }
+        .completion-input { padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.875rem; width: 160px; font-family: inherit; }
+        .completion-input.inline-blank { width: 120px; margin: 0 4px; display: inline; }
+        .completion-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+        .completion-input.input-correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
+        .completion-input.input-wrong { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+        .summary-block { margin-bottom: var(--spacing-md); }
+        .summary-text { font-size: 0.9rem; line-height: 2; color: var(--color-text-primary); }
         .ai-result-summary { display: flex; align-items: center; gap: var(--spacing-lg); }
         .ai-score { display: flex; flex-direction: column; }
         .score-big { font-size: 2rem; font-weight: 700; color: var(--color-primary); line-height: 1; }
@@ -1375,8 +1742,10 @@ export default function Practice() {
                     <span className="exercise-title">{ex.meta.topic}</span>
                     <span className="exercise-meta">
                       {ex.meta.word_count}w · {
-                        ex.questions.true_false_not_given.length +
-                        (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type.items.length : 3)
+                        ex.questions.groups
+                          ? ex.questions.groups.reduce((n, g) => n + (g.answers?.length ?? g.items?.length ?? 0), 0)
+                          : (ex.questions.true_false_not_given?.length ?? 0) +
+                            (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type!.items.length : 3)
                       }q
                     </span>
                   </button>

@@ -232,6 +232,53 @@ export interface AIListeningPractice {
   };
 }
 
+// New flexible question group structure for reading
+export type ReadingQuestionType =
+  | 'true_false_not_given'
+  | 'multiple_choice'
+  | 'matching_headings'
+  | 'matching_information'
+  | 'sentence_completion'
+  | 'summary_completion'
+  | 'short_answer';
+
+export interface ReadingQuestionGroup {
+  type: ReadingQuestionType;
+  items: any[];  // type-specific items
+  summary_text?: string;  // only for summary_completion
+  answers?: any[];  // for matching_headings
+}
+
+export interface ReadingSentenceCompletionItem {
+  question_number: number;
+  text: string;
+  answer: string;
+  word_limit?: number;
+  explanation?: string;
+}
+
+export interface ReadingSummaryCompletionItem {
+  question_number: number;
+  answer: string;
+  word_limit?: number;
+  explanation?: string;
+}
+
+export interface ReadingMatchingInfoItem {
+  question_number: number;
+  statement: string;
+  answer: string;
+  explanation?: string;
+}
+
+export interface ReadingShortAnswerItem {
+  question_number: number;
+  question: string;
+  answer: string;
+  word_limit?: number;
+  explanation?: string;
+}
+
 export interface AIReadingPractice {
   practice_db_id?: number;  // injected by backend when dealt to user
   meta: {
@@ -242,13 +289,17 @@ export interface AIReadingPractice {
   };
   passage: string;
   questions: {
-    true_false_not_given: TFNGQuestionItem[];
-    second_type: {
+    // Legacy format (backward compat)
+    true_false_not_given?: TFNGQuestionItem[];
+    second_type?: {
       type: 'multiple_choice' | 'matching_headings';
       items: MCQQuestionItem[] | MatchingHeadingData;
     };
+    // New flexible format
+    groups?: ReadingQuestionGroup[];
   };
-  answer_key: {
+  // Legacy only; new format has answers inline
+  answer_key?: {
     true_false_not_given: TFNGAnswerItem[];
     second_type_answers: MCQAnswerItem[] | MatchingAnswerItem[];
   };
