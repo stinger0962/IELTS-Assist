@@ -5,6 +5,8 @@ from openai import OpenAI
 from app.config import settings
 from app.services.ai.reading_config import generate_metadata
 
+# ─── Step 1: Passage Generation ─────────────────────────────────────────────
+
 PASSAGE_PROMPT = '''You are an expert IELTS Academic Reading passage writer.
 
 Write an IELTS Academic reading passage with these requirements:
@@ -43,94 +45,11 @@ Return STRICT JSON only:
 
 Do not include explanations outside the JSON.'''
 
-VALIDATION_PROMPT = '''Validate this IELTS Reading practice output. Check:
-- passage tone is IELTS-appropriate
-- difficulty is close to Band 6.5
-- questions are answerable from the passage
-- no excessive wording overlap between passage and questions
-- question types are varied
-- answers are unambiguous
-- word limits are respected for completion/short answer questions
+# ─── Step 2: Question Generation ─────────────────────────────────────────────
 
-Return JSON only:
-{{
-  "valid": boolean,
-  "issues": ["issue1", "issue2"],
-  "estimated_band": number
-}}'''
+QUESTIONS_PROMPT = '''You are an expert IELTS Academic Reading question writer.
 
-
-class PracticeGenerator:
-    def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
-
-    def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None) -> dict:
-        """Generate a single practice with validation.
-
-        Args:
-            topic_hint: Legacy parameter (ignored if avoid_topics provided).
-            avoid_topics: List of recently used topics to avoid.
-        """
-        # Build avoidance list from either parameter
-        if avoid_topics is None and topic_hint and topic_hint.startswith("avoid:"):
-            avoid_topics = [t.strip() for t in topic_hint.replace("avoid:", "").split(",") if t.strip()]
-
-        attempts = 0
-        while attempts < 3:
-            attempts += 1
-            metadata = generate_metadata(avoid_topics=avoid_topics)
-            result = self._generate(metadata)
-            if not result:
-                continue
-
-            validation = self._validate(result)
-            if validation.get("valid", False):
-                return result
-
-        # Return last result even if validation didn't pass (better than nothing)
-        return result if result else None
-
-    def _generate(self, metadata: dict) -> dict:
-        """Single GPT call: generate passage + questions using pre-selected metadata."""
-        # Format numbers for prompt
-        numbers_str = ", ".join(
-            f"{k.replace('_', ' ')} = {v}" for k, v in metadata["numbers"].items()
-        )
-
-        # Format blueprint
-        blueprint_str = " → ".join(metadata["blueprint"])
-
-        # Format question composition description
-        comp_parts = []
-        for qtype, count in metadata["question_composition"]:
-            label = qtype.replace("_", " ").title()
-            comp_parts.append(f"{count} {label}")
-        comp_str = ", ".join(comp_parts)
-        total_q = metadata["total_questions"]
-
-        # Format synonym distances
-        distances = metadata["synonym_distances"]
-        dist_str = ", ".join(f"Q{i+1}=L{d}" for i, d in enumerate(distances))
-
-        prompt = PASSAGE_PROMPT.format(
-            topic=metadata["topic"],
-            angle=metadata["angle"],
-            structure=metadata["structure"],
-            region=metadata["region"],
-            research=metadata["research"],
-            stakeholder=metadata["stakeholder"],
-            evidence=metadata["evidence"],
-            blueprint=blueprint_str,
-            numbers=numbers_str,
-        )
-
-        # Append question generation instructions to same call (Phase 1: still single call)
-        prompt += f'''
-
----
-
-Now generate questions for the passage you wrote.
+Given this IELTS Academic Reading passage, generate questions following these steps.
 
 STEP 1 — Create paraphrase anchors
 Identify 6 to 8 key factual anchor statements from the passage.
@@ -141,7 +60,7 @@ Each anchor must:
 - support a definitive answer
 
 STEP 2 — Plan the questions
-Create {total_q} questions using this mix: {comp_str}
+Create {total_questions} questions using this mix: {composition}
 
 Question rules:
 - Questions should generally follow passage order unless the question type naturally does not
@@ -169,7 +88,7 @@ For Sentence Completion:
 - Provide a sentence with ___ blank, answer is 1-3 words from the passage
 
 For Summary Completion:
-- Provide a summary paragraph with numbered blanks (___6___, ___7___), answers are 1-3 words from passage
+- Provide a summary paragraph with numbered blanks (___N___), answers are 1-3 words from passage
 
 For Short Answer:
 - Provide a question, answer in 1-3 words from the passage
@@ -181,7 +100,7 @@ For each question, paraphrase the anchor using a controlled distance level:
 - Level 4: structural paraphrase
 - Level 5: conceptual paraphrase
 
-Question synonym distances: {dist_str}
+Question synonym distances: {distances}
 Avoid overly obvious wording overlap.
 
 STEP 4 — Generate the answer key
@@ -189,33 +108,27 @@ For each question provide:
 - the correct answer
 - a brief explanation showing why the answer is correct
 
+Passage:
+{passage}
+
 ---
 
-Return the COMPLETE output as STRICT JSON:
+Return STRICT JSON only:
 {{
-  "meta": {{
-    "module": "IELTS Academic Reading",
-    "target_band": 6.5,
-    "word_count": integer,
-    "topic": "string"
-  }},
-  "passage": "Full passage text with paragraph breaks as \\n\\n",
-  "questions": {{
-    "groups": [
-      {{
-        "type": "true_false_not_given",
-        "items": [
-          {{"question_number": 1, "statement": "string", "answer": "TRUE or FALSE or NOT GIVEN", "explanation": "string"}}
-        ]
-      }},
-      {{
-        "type": "multiple_choice",
-        "items": [
-          {{"question_number": N, "question": "string", "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}, "answer": "A or B or C or D", "explanation": "string"}}
-        ]
-      }}
-    ]
-  }}
+  "groups": [
+    {{
+      "type": "true_false_not_given",
+      "items": [
+        {{"question_number": 1, "statement": "string", "answer": "TRUE or FALSE or NOT GIVEN", "explanation": "string"}}
+      ]
+    }},
+    {{
+      "type": "multiple_choice",
+      "items": [
+        {{"question_number": N, "question": "string", "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}, "answer": "A or B or C or D", "explanation": "string"}}
+      ]
+    }}
+  ]
 }}
 
 For summary_completion groups, use this format:
@@ -264,35 +177,155 @@ For short_answer groups:
 Do NOT include anchors, reasoning, or commentary outside the JSON.
 Return JSON only.'''
 
+# ─── Validation ──────────────────────────────────────────────────────────────
+
+VALIDATION_PROMPT = '''Validate this IELTS Reading practice output. Check:
+- passage tone is IELTS-appropriate
+- difficulty is close to Band 6.5
+- questions are answerable from the passage
+- no excessive wording overlap between passage and questions
+- question types are varied
+- answers are unambiguous
+- word limits are respected for completion/short answer questions
+
+Return JSON only:
+{{
+  "valid": boolean,
+  "issues": ["issue1", "issue2"],
+  "estimated_band": number
+}}'''
+
+
+class PracticeGenerator:
+    def __init__(self):
+        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.model = "gpt-4o-mini"
+
+    def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None) -> dict:
+        """Generate a single reading practice via 2-step pipeline + validation.
+
+        Step 1: Generate passage (GPT call #1)
+        Step 2: Generate questions with paraphrase anchors (GPT call #2)
+        Step 3: Validate (GPT call #3)
+        """
+        if avoid_topics is None and topic_hint and topic_hint.startswith("avoid:"):
+            avoid_topics = [t.strip() for t in topic_hint.replace("avoid:", "").split(",") if t.strip()]
+
+        result = None
+        for attempt in range(3):
+            metadata = generate_metadata(avoid_topics=avoid_topics)
+
+            # Step 1: Generate passage
+            passage_data = self._generate_passage(metadata)
+            if not passage_data or not passage_data.get("passage"):
+                continue
+
+            # Step 2: Generate questions
+            questions_data = self._generate_questions(metadata, passage_data["passage"])
+            if not questions_data:
+                continue
+
+            # Merge into final result
+            result = {
+                "meta": {
+                    "module": "IELTS Academic Reading",
+                    "target_band": 6.5,
+                    "word_count": passage_data.get("meta", {}).get("word_count", 0),
+                    "topic": metadata["topic"],
+                },
+                "passage": passage_data["passage"],
+                "questions": {
+                    "groups": questions_data.get("groups", []),
+                },
+            }
+
+            # Step 3: Validate
+            validation = self._validate(result)
+            if validation.get("valid", False):
+                return result
+
+        return result
+
+    def _generate_passage(self, metadata: dict) -> dict | None:
+        """GPT call #1: Generate the reading passage."""
+        numbers_str = ", ".join(
+            f"{k.replace('_', ' ')} = {v}" for k, v in metadata["numbers"].items()
+        )
+        blueprint_str = " → ".join(metadata["blueprint"])
+
+        prompt = PASSAGE_PROMPT.format(
+            topic=metadata["topic"],
+            angle=metadata["angle"],
+            structure=metadata["structure"],
+            region=metadata["region"],
+            research=metadata["research"],
+            stakeholder=metadata["stakeholder"],
+            evidence=metadata["evidence"],
+            blueprint=blueprint_str,
+            numbers=numbers_str,
+        )
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert IELTS test writer. Generate valid JSON only."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an expert IELTS passage writer. Generate valid JSON only."},
+                    {"role": "user", "content": prompt},
                 ],
-                temperature=0.8,
-                max_tokens=6000
+                temperature=0.85,
+                max_tokens=3500,
             )
-            content = response.choices[0].message.content
-            return self._parse_json(content)
+            return self._parse_json(response.choices[0].message.content)
         except Exception as e:
-            print(f"Generation error: {e}")
+            print(f"Passage generation error: {e}")
+            return None
+
+    def _generate_questions(self, metadata: dict, passage: str) -> dict | None:
+        """GPT call #2: Generate questions with paraphrase anchors + synonym distance."""
+        comp_parts = []
+        for qtype, count in metadata["question_composition"]:
+            label = qtype.replace("_", " ").title()
+            comp_parts.append(f"{count} {label}")
+        comp_str = ", ".join(comp_parts)
+
+        distances = metadata["synonym_distances"]
+        dist_str = ", ".join(f"Q{i+1}=L{d}" for i, d in enumerate(distances))
+
+        prompt = QUESTIONS_PROMPT.format(
+            total_questions=metadata["total_questions"],
+            composition=comp_str,
+            distances=dist_str,
+            passage=passage,
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert IELTS question writer. Generate valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=3000,
+            )
+            return self._parse_json(response.choices[0].message.content)
+        except Exception as e:
+            print(f"Question generation error: {e}")
             return None
 
     def _validate(self, practice: dict) -> dict:
+        """GPT call #3: Validate the complete practice."""
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS test validator. Return valid JSON only."},
-                    {"role": "user", "content": f"{VALIDATION_PROMPT}\n\nPractice to evaluate:\n{json.dumps(practice)}"}
+                    {"role": "user", "content": f"{VALIDATION_PROMPT}\n\nPractice to evaluate:\n{json.dumps(practice)}"},
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=500,
             )
-            content = response.choices[0].message.content
-            result = self._parse_json(content)
+            result = self._parse_json(response.choices[0].message.content)
             return result if result else {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Validation error: {e}")
