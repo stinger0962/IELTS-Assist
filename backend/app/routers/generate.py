@@ -84,9 +84,8 @@ def _replenish(user_id: int) -> None:
             .all()
         )
         avoid_list = [r[0] for r in recent if r[0]]
-        topic_hint = f"avoid: {', '.join(avoid_list)}" if avoid_list else ""
         for _ in range(needed):
-            practice = practice_generator.generate_practice(topic_hint)
+            practice = practice_generator.generate_practice(avoid_topics=avoid_list)
             if practice:
                 db.add(GeneratedPractice(
                     skill="reading",
@@ -108,8 +107,16 @@ def daily_generate() -> None:
     try:
         # Reading exercises
         logger.info("Daily generation: adding 3 reading exercises")
+        recent_reading = (
+            db.query(GeneratedPractice.topic)
+            .filter(GeneratedPractice.skill == "reading", GeneratedPractice.topic.isnot(None))
+            .order_by(GeneratedPractice.generated_date.desc())
+            .limit(100)
+            .all()
+        )
+        reading_avoid = [r[0] for r in recent_reading if r[0]]
         for _ in range(3):
-            practice = practice_generator.generate_practice()
+            practice = practice_generator.generate_practice(avoid_topics=reading_avoid)
             if practice:
                 db.add(GeneratedPractice(
                     skill="reading",
@@ -636,9 +643,10 @@ def generate_reading_practice(
     current_user: User = Depends(get_current_user),
 ):
     """Admin: force-generate N exercises into global pool."""
+    avoid_topics = [t.strip() for t in topic_hint.replace("avoid:", "").split(",") if t.strip()] if topic_hint else None
     generated = []
     for _ in range(count):
-        practice = practice_generator.generate_practice(topic_hint)
+        practice = practice_generator.generate_practice(avoid_topics=avoid_topics)
         if practice:
             db.add(GeneratedPractice(
                 skill="reading",

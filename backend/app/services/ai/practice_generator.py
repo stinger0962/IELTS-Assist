@@ -3,187 +3,195 @@ import random
 from datetime import datetime
 from openai import OpenAI
 from app.config import settings
+from app.services.ai.reading_config import generate_metadata
 
-GENERATION_PROMPT = '''You are an IELTS Academic Reading item writer.
+PASSAGE_PROMPT = '''You are an expert IELTS Academic Reading passage writer.
 
-Your task is to generate ONE original mini IELTS Academic Reading practice set
-targeting Band 6.5 difficulty.
+Write an IELTS Academic reading passage with these requirements:
+- 550 to 700 words
+- 5 paragraphs
+- Band 6.5 difficulty
+- neutral academic tone
+- B2 to low C1 vocabulary
+- include at least one comparison
+- include at least one research finding
+- include at least one cause-effect relationship
+- include realistic details and numerical data where natural
+- do not make the passage overly technical or overly simple
 
-CRITICAL RULES:
-1. The passage and questions MUST be completely original.
-2. Do NOT copy or paraphrase any known IELTS, Cambridge, or published material.
-3. Invent all names, institutions, locations, statistics, and studies.
-4. The content must feel realistic but fictional.
-5. The output must follow the JSON schema exactly.
-6. Do not include explanations outside the JSON.
+Context (pre-selected by system):
+- Topic: {topic}
+- Angle: {angle}
+- Text structure: {structure}
+- Geographic context: {region}
+- Research context: {research}
+- Stakeholder perspective: {stakeholder}
+- Evidence type: {evidence}
+- Paragraph blueprint: {blueprint}
+- Key data to embed: {numbers}
 
-Generation Context:
-- Date: {date}
-- Random Seed: {seed}
-- Recently Used Topics (AVOID these): {topic_hint}
+All names, institutions, locations must be fictional but realistic.
 
-Use the random seed to drive ALL four selection steps below.
-If "Recently Used Topics" lists any topics, do NOT choose them — pick something different.
+Return STRICT JSON only:
+{{
+  "passage": "Full passage text with paragraph breaks as \\n\\n",
+  "meta": {{
+    "word_count": integer,
+    "topic": "string (the main topic name)"
+  }}
+}}
 
---------------------------------------------------
+Do not include explanations outside the JSON.'''
 
-STEP 1 — SELECT ONE MAIN TOPIC
+VALIDATION_PROMPT = '''Validate this IELTS Reading practice output. Check:
+- passage tone is IELTS-appropriate
+- difficulty is close to Band 6.5
+- questions are answerable from the passage
+- no excessive wording overlap between passage and questions
+- question types are varied
+- answers are unambiguous
+- word limits are respected for completion/short answer questions
 
-Use the seed to pick exactly ONE topic from the pool below.
-Do NOT repeat any topic listed in "Recently Used Topics" above.
+Return JSON only:
+{{
+  "valid": boolean,
+  "issues": ["issue1", "issue2"],
+  "estimated_band": number
+}}'''
 
-TOPIC POOL (100 topics):
 
-Urban & Infrastructure:
-  1. Urban heat island effects, 2. Smart city planning,
-  3. Public transportation policy, 4. Affordable housing strategies,
-  5. Green roof implementation, 6. Pedestrian-friendly city design,
-  7. Urban waste management systems, 8. Disaster-resilient infrastructure,
-  9. Coastal city flood defenses, 10. Mixed-use development models
+class PracticeGenerator:
+    def __init__(self):
+        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.model = "gpt-4o-mini"
 
-Environment & Sustainability:
-  11. Rewilding initiatives, 12. Ocean plastic mitigation,
-  13. Carbon offset programs, 14. Sustainable agriculture models,
-  15. Soil degradation research, 16. Deforestation monitoring,
-  17. Biodiversity corridors, 18. Urban tree canopy impact,
-  19. Water conservation technologies, 20. Climate migration patterns
+    def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None) -> dict:
+        """Generate a single practice with validation.
 
-Psychology & Behavioural Science:
-  21. Habit formation research, 22. Decision fatigue theory,
-  23. Social conformity experiments, 24. Risk perception studies,
-  25. Memory retention techniques, 26. Emotional regulation strategies,
-  27. Attention span in the digital age, 28. Motivation in workplace settings,
-  29. Cognitive bias in policymaking, 30. Group dynamics research
+        Args:
+            topic_hint: Legacy parameter (ignored if avoid_topics provided).
+            avoid_topics: List of recently used topics to avoid.
+        """
+        # Build avoidance list from either parameter
+        if avoid_topics is None and topic_hint and topic_hint.startswith("avoid:"):
+            avoid_topics = [t.strip() for t in topic_hint.replace("avoid:", "").split(",") if t.strip()]
 
-Education Systems:
-  31. Online vs traditional learning, 32. Assessment reform policies,
-  33. Early childhood literacy, 34. Bilingual education models,
-  35. Teacher training reforms, 36. Educational technology adoption,
-  37. Standardized testing debates, 38. Lifelong learning initiatives,
-  39. STEM curriculum development, 40. Academic performance inequality
+        attempts = 0
+        while attempts < 3:
+            attempts += 1
+            metadata = generate_metadata(avoid_topics=avoid_topics)
+            result = self._generate(metadata)
+            if not result:
+                continue
 
-Workplace & Economics:
-  41. Remote work productivity, 42. Gig economy regulation,
-  43. Workplace automation, 44. Corporate sustainability reporting,
-  45. Organizational leadership styles, 46. Employee well-being programs,
-  47. Small business resilience, 48. Innovation management theory,
-  49. Gender pay gap studies, 50. Economic impact of tourism
+            validation = self._validate(result)
+            if validation.get("valid", False):
+                return result
 
-Technology & Society:
-  51. Data privacy regulations, 52. Artificial intelligence ethics,
-  53. Social media misinformation, 54. Digital divide research,
-  55. Cybersecurity awareness, 56. Biometric authentication systems,
-  57. Smart home technology adoption, 58. E-commerce consumer behavior,
-  59. Algorithmic bias, 60. Virtual reality in education
+        # Return last result even if validation didn't pass (better than nothing)
+        return result if result else None
 
-Public Health & Medicine:
-  61. Vaccination outreach strategies, 62. Mental health stigma reduction,
-  63. Aging population challenges, 64. Preventative healthcare models,
-  65. Urban air pollution health impact, 66. Nutritional policy reforms,
-  67. Sleep research findings, 68. Workplace stress interventions,
-  69. Community fitness initiatives, 70. Telemedicine expansion
+    def _generate(self, metadata: dict) -> dict:
+        """Single GPT call: generate passage + questions using pre-selected metadata."""
+        # Format numbers for prompt
+        numbers_str = ", ".join(
+            f"{k.replace('_', ' ')} = {v}" for k, v in metadata["numbers"].items()
+        )
 
-Science & Research:
-  71. Citizen science projects, 72. Interdisciplinary research models,
-  73. Research funding allocation, 74. Scientific peer review systems,
-  75. Space exploration funding debates, 76. Renewable battery innovation,
-  77. Water purification breakthroughs, 78. Agricultural biotechnology,
-  79. Wildlife tracking technology, 80. Archaeological excavation methods
+        # Format blueprint
+        blueprint_str = " → ".join(metadata["blueprint"])
 
-Society & Culture:
-  81. Language preservation efforts, 82. Cultural heritage tourism,
-  83. Migration integration policies, 84. Aging rural communities,
-  85. Urban youth subcultures, 86. Volunteerism trends,
-  87. Public art programs, 88. Community gardening projects,
-  89. Media influence on public opinion, 90. Cultural adaptation in global cities
+        # Format question composition description
+        comp_parts = []
+        for qtype, count in metadata["question_composition"]:
+            label = qtype.replace("_", " ").title()
+            comp_parts.append(f"{count} {label}")
+        comp_str = ", ".join(comp_parts)
+        total_q = metadata["total_questions"]
 
-Policy & Governance:
-  91. Evidence-based policymaking, 92. Public consultation models,
-  93. Regulatory reform processes, 94. International climate agreements,
-  95. Local governance innovation, 96. Transparency initiatives,
-  97. Disaster response coordination, 98. Education funding distribution,
-  99. Public housing allocation, 100. Infrastructure investment priorities
+        # Format synonym distances
+        distances = metadata["synonym_distances"]
+        dist_str = ", ".join(f"Q{i+1}=L{d}" for i, d in enumerate(distances))
 
---------------------------------------------------
+        prompt = PASSAGE_PROMPT.format(
+            topic=metadata["topic"],
+            angle=metadata["angle"],
+            structure=metadata["structure"],
+            region=metadata["region"],
+            research=metadata["research"],
+            stakeholder=metadata["stakeholder"],
+            evidence=metadata["evidence"],
+            blueprint=blueprint_str,
+            numbers=numbers_str,
+        )
 
-STEP 2 — SELECT ONE SUB-ANGLE
+        # Append question generation instructions to same call (Phase 1: still single call)
+        prompt += f'''
 
-Use the seed to pick ONE analytical angle:
-  Policy impact | Economic consequences | Psychological effects |
-  Technological influence | Social implications | Environmental impact |
-  Historical evolution | Ethical debate | Implementation challenges |
-  Long-term projections
+---
 
---------------------------------------------------
+Now generate questions for the passage you wrote.
 
-STEP 3 — SELECT ONE REGION CONTEXT
+STEP 1 — Create paraphrase anchors
+Identify 6 to 8 key factual anchor statements from the passage.
+Each anchor must:
+- be clearly supported by the passage
+- be important enough to test
+- be paraphrasable
+- support a definitive answer
 
-Use the seed to pick ONE region:
-  Mid-sized European city | Rapidly developing Asian country |
-  Coastal North American city | Rural South American community |
-  Sub-Saharan African urban center | Australian regional town |
-  Scandinavian capital | Middle Eastern metropolitan area |
-  Small island nation | Fictional but realistic global setting
+STEP 2 — Plan the questions
+Create {total_q} questions using this mix: {comp_str}
 
---------------------------------------------------
+Question rules:
+- Questions should generally follow passage order unless the question type naturally does not
+- Do not repeat more than three consecutive words from the passage
+- Questions must be based on anchor statements
+- Include plausible distractors where needed
+- Completion questions must include strict word limits when appropriate
 
-STEP 4 — SELECT ONE RESEARCH FRAMING
+For True / False / Not Given:
+- TRUE = directly supported by the passage
+- FALSE = directly contradicted by the passage
+- NOT GIVEN = cannot be confirmed or denied from the passage
+- Include a mix (not all TRUE or all FALSE)
 
-Use the seed to pick ONE research element:
-  University-led longitudinal study | Government policy trial |
-  NGO field report | Private sector pilot program |
-  Comparative international study | Survey of 1,000+ participants |
-  Historical data analysis | Experimental lab-based study |
-  Community-based intervention | Meta-analysis of previous findings
+For Multiple Choice:
+- 4 options (A-D), one clearly correct, plausible distractors
 
---------------------------------------------------
+For Matching Headings:
+- Provide a pool of headings (count + 2 distractors), student matches to paragraphs
 
-Combine all 4 selections into a coherent academic passage.
-Example: "Urban heat island effects" + "Policy impact" + "Mid-sized European city"
-+ "University-led longitudinal study" → a passage about a university study
-examining how urban heat island policy reduced temperatures in a mid-sized
-European city.
+For Matching Information:
+- Provide statements, student matches each to a paragraph label (A, B, C, D, E)
 
-If the combination feels too abstract or too narrow, regenerate internally
-until you reach an appropriate, Band 6.5-suitable combination.
+For Sentence Completion:
+- Provide a sentence with ___ blank, answer is 1-3 words from the passage
 
-The "topic" field in the JSON meta should be the MAIN TOPIC name from Step 1
-(e.g. "Urban heat island effects"), not a sentence.
+For Summary Completion:
+- Provide a summary paragraph with numbered blanks (___6___, ___7___), answers are 1-3 words from passage
 
---------------------------------------------------
+For Short Answer:
+- Provide a question, answer in 1-3 words from the passage
 
-TARGET SPECIFICATIONS (Band 6.5):
+STEP 3 — Apply synonym distance control
+For each question, paraphrase the anchor using a controlled distance level:
+- Level 2: standard synonym substitution
+- Level 3: grammatical transformation
+- Level 4: structural paraphrase
+- Level 5: conceptual paraphrase
 
-Passage:
-- Length: 380-450 words
-- Academic tone but accessible
-- Clear paragraph structure (4-6 paragraphs)
-- Moderate paraphrasing density
-- Include at least 6 paraphrase relationships, 2 hedging expressions
-  (e.g. "may", "appears to", "suggests"), and 1 contrast structure
-  (however, although, while)
+Question synonym distances: {dist_str}
+Avoid overly obvious wording overlap.
 
-Question Types (include EXACTLY 2 types):
-1) TRUE / FALSE / NOT GIVEN (5 questions)
-2) Matching Headings OR Multiple Choice (3 questions)
+STEP 4 — Generate the answer key
+For each question provide:
+- the correct answer
+- a brief explanation showing why the answer is correct
 
-Requirements for T/F/NG:
-- Exactly: 2 TRUE, 2 FALSE, 1 NOT GIVEN
-- The NOT GIVEN must be plausible but not stated.
-- FALSE answers must contradict explicitly.
+---
 
-Requirements for Multiple Choice (if selected):
-- 3 questions, 4 options each (A-D)
-- One clearly correct, 2 plausible distractors, 1 obviously wrong
-
-Requirements for Matching Headings (if selected):
-- 5 headings total (A-E), only 3 are correct matches, 2 are distractors
-- 3 paragraph titles for the reader to match
-
---------------------------------------------------
-
-OUTPUT FORMAT (STRICT JSON ONLY):
-
+Return the COMPLETE output as STRICT JSON:
 {{
   "meta": {{
     "module": "IELTS Academic Reading",
@@ -193,121 +201,69 @@ OUTPUT FORMAT (STRICT JSON ONLY):
   }},
   "passage": "Full passage text with paragraph breaks as \\n\\n",
   "questions": {{
-    "true_false_not_given": [
-      {{"question_number": 1, "statement": "string"}},
-      {{"question_number": 2, "statement": "string"}},
-      {{"question_number": 3, "statement": "string"}},
-      {{"question_number": 4, "statement": "string"}},
-      {{"question_number": 5, "statement": "string"}}
-    ],
-    "second_type": {{
-      "type": "multiple_choice OR matching_headings",
-      "items": "SEE EXACT FORMAT BELOW"
-    }}
-  }},
-  "answer_key": {{
-    "true_false_not_given": [
-      {{"question_number": 1, "answer": "TRUE or FALSE or NOT GIVEN"}}
-    ],
-    "second_type_answers": "SEE EXACT FORMAT BELOW"
+    "groups": [
+      {{
+        "type": "true_false_not_given",
+        "items": [
+          {{"question_number": 1, "statement": "string", "answer": "TRUE or FALSE or NOT GIVEN", "explanation": "string"}}
+        ]
+      }},
+      {{
+        "type": "multiple_choice",
+        "items": [
+          {{"question_number": N, "question": "string", "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}, "answer": "A or B or C or D", "explanation": "string"}}
+        ]
+      }}
+    ]
   }}
 }}
 
-EXACT FORMAT when second_type is "multiple_choice":
+For summary_completion groups, use this format:
+{{
+  "type": "summary_completion",
+  "summary_text": "paragraph with ___N___ blanks",
   "items": [
-    {{
-      "question_number": 6,
-      "question": "string",
-      "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}
-    }},
-    {{
-      "question_number": 7,
-      "question": "string",
-      "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}
-    }},
-    {{
-      "question_number": 8,
-      "question": "string",
-      "options": {{"A": "string", "B": "string", "C": "string", "D": "string"}}
-    }}
+    {{"question_number": N, "answer": "string", "word_limit": 3, "explanation": "string"}}
   ]
-  "second_type_answers": [
-    {{"question_number": 6, "answer": "A or B or C or D"}},
-    {{"question_number": 7, "answer": "A or B or C or D"}},
-    {{"question_number": 8, "answer": "A or B or C or D"}}
-  ]
+}}
 
-EXACT FORMAT when second_type is "matching_headings":
+For sentence_completion groups:
+{{
+  "type": "sentence_completion",
+  "items": [
+    {{"question_number": N, "text": "sentence with ___", "answer": "string", "word_limit": 3, "explanation": "string"}}
+  ]
+}}
+
+For matching_headings groups:
+{{
+  "type": "matching_headings",
   "items": {{
-    "headings": [
-      {{"id": "A", "text": "string"}},
-      {{"id": "B", "text": "string"}},
-      {{"id": "C", "text": "string"}},
-      {{"id": "D", "text": "string"}},
-      {{"id": "E", "text": "string"}}
-    ],
-    "paragraphs": [
-      {{"number": 1, "title": "string (first few words of the paragraph)"}},
-      {{"number": 2, "title": "string"}},
-      {{"number": 3, "title": "string"}}
-    ]
-  }}
-  "second_type_answers": [
-    {{"paragraph_number": 1, "answer": "A or B or C or D or E"}},
-    {{"paragraph_number": 2, "answer": "A or B or C or D or E"}},
-    {{"paragraph_number": 3, "answer": "A or B or C or D or E"}}
-  ]
+    "headings": [{{"id": "A", "text": "string"}}, ...],
+    "paragraphs": [{{"number": 1, "title": "first few words of paragraph"}}]
+  }},
+  "answers": [{{"paragraph_number": 1, "answer": "A", "explanation": "string"}}]
+}}
 
-DO NOT include explanations, rationales, or extra commentary.
+For matching_information groups:
+{{
+  "type": "matching_information",
+  "items": [
+    {{"question_number": N, "statement": "string", "answer": "A or B or C or D or E", "explanation": "string"}}
+  ]
+}}
+
+For short_answer groups:
+{{
+  "type": "short_answer",
+  "items": [
+    {{"question_number": N, "question": "string", "answer": "string", "word_limit": 3, "explanation": "string"}}
+  ]
+}}
+
+Do NOT include anchors, reasoning, or commentary outside the JSON.
 Return JSON only.'''
 
-VALIDATION_PROMPT = '''Evaluate this IELTS Reading practice for:
-1. Ambiguity in T/F/NG answers
-2. Incorrect T/F/NG distribution (must be exactly 2 TRUE, 2 FALSE, 1 NOT GIVEN)
-3. Missing explicit contradiction for FALSE answers
-4. Whether NOT GIVEN is truly unstated in the passage
-5. Schema compliance (items format matches the declared type)
-
-Return JSON only:
-{{
-  "valid": boolean,
-  "issues": ["issue1", "issue2"],
-  "estimated_band": number,
-  "recommendations": ["rec1"]
-}}'''
-
-
-class PracticeGenerator:
-    def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
-
-    def generate_practice(self, topic_hint: str = "") -> dict:
-        """Generate a single practice with two-round validation"""
-        date = datetime.now().strftime("%Y-%m-%d")
-        seed = random.randint(1000, 9999)
-
-        generation_result = self._generate(date, seed, topic_hint)
-        if not generation_result:
-            return None
-
-        validation_result = self._validate(generation_result)
-
-        attempts = 0
-        while not validation_result.get("valid", False) and attempts < 3:
-            attempts += 1
-            generation_result = self._generate(date, seed + attempts * 100, topic_hint)
-            if generation_result:
-                validation_result = self._validate(generation_result)
-
-        return generation_result
-
-    def _generate(self, date: str, seed: int, topic_hint: str) -> dict:
-        prompt = GENERATION_PROMPT.format(
-            date=date,
-            seed=seed,
-            topic_hint=topic_hint or "none — choose freely from the 100-topic pool"
-        )
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -316,14 +272,10 @@ class PracticeGenerator:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.8,
-                max_tokens=4000
+                max_tokens=6000
             )
             content = response.choices[0].message.content
-            json_start = content.find('{')
-            json_end = content.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                return json.loads(content[json_start:json_end])
-            return None
+            return self._parse_json(content)
         except Exception as e:
             print(f"Generation error: {e}")
             return None
@@ -340,14 +292,25 @@ class PracticeGenerator:
                 max_tokens=500
             )
             content = response.choices[0].message.content
-            json_start = content.find('{')
-            json_end = content.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                return json.loads(content[json_start:json_end])
-            return {"valid": False, "issues": ["Failed to parse validation response"]}
+            result = self._parse_json(content)
+            return result if result else {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Validation error: {e}")
             return {"valid": False, "issues": [str(e)]}
+
+    @staticmethod
+    def _parse_json(text: str) -> dict | None:
+        """Extract JSON from GPT response text."""
+        if not text:
+            return None
+        json_start = text.find('{')
+        json_end = text.rfind('}') + 1
+        if json_start >= 0 and json_end > json_start:
+            try:
+                return json.loads(text[json_start:json_end])
+            except json.JSONDecodeError:
+                return None
+        return None
 
 
 # Singleton instance
