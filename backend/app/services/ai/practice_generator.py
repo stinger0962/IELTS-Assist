@@ -66,6 +66,7 @@ Question rules:
 - Questions should generally follow passage order unless the question type naturally does not
 - Do not repeat more than three consecutive words from the passage
 - Questions must be based on anchor statements
+- Each question must test a DIFFERENT anchor — no two questions across any groups may share the same answer or test the same fact
 - Include plausible distractors where needed
 - Completion questions must include strict word limits when appropriate
 
@@ -105,7 +106,7 @@ Avoid overly obvious wording overlap.
 
 STEP 4 — Generate the answer key
 For each question provide:
-- the correct answer
+- the correct answer (must be unique — no two questions should have the same answer text)
 - a brief explanation showing why the answer is correct
 
 Passage:
