@@ -65,10 +65,16 @@ Create {total_questions} questions using this mix: {composition}
 Question rules:
 - Questions should generally follow passage order unless the question type naturally does not
 - Do not repeat more than three consecutive words from the passage
+- Do not create questions that repeat the same noun phrase appearing next to the answer in the passage
 - Questions must be based on anchor statements
 - Each question must test a DIFFERENT anchor — no two questions across any groups may share the same answer or test the same fact
 - Include plausible distractors where needed
 - Completion questions must include strict word limits when appropriate
+
+Rules for numeric information:
+- Do NOT ask direct short-answer questions for numbers, percentages, dates, or quantities (e.g. "What percentage increase occurred?")
+- Numbers should only be tested inside sentence completion, summary completion, or table completion where the surrounding wording is paraphrased
+- At least one question should test the meaning or implication of numerical data rather than asking for the number itself
 
 For True / False / Not Given:
 - TRUE = directly supported by the passage
@@ -93,6 +99,7 @@ For Summary Completion:
 
 For Short Answer:
 - Provide a question, answer in 1-3 words from the passage
+- Do NOT ask for a number, percentage, date, or quantity as a short answer
 
 STEP 3 — Apply synonym distance control
 For each question, paraphrase the anchor using a controlled distance level:
