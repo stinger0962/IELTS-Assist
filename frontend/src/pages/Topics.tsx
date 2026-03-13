@@ -29,6 +29,7 @@ const skillColors: Record<string, string> = {
   listening: '#10B981',
   writing: '#F59E0B',
   speaking: '#EF4444',
+  grammar: '#8B5CF6',
 };
 
 export default function Topics() {
@@ -242,7 +243,7 @@ export default function Topics() {
           <div className="header-row">
             <h1>{t('topics.flashcards')}</h1>
             <button className="btn btn-secondary" onClick={() => setMode('list')}>
-              {t('topics.vocabulary')}
+              Browse Topics
             </button>
           </div>
         </header>
@@ -253,7 +254,7 @@ export default function Topics() {
           <div className="empty-state">
             <GraduationCap size={48} />
             <p>No cards due for review</p>
-            <button className="btn btn-secondary" onClick={() => setMode('list')}>Browse vocabulary</button>
+            <button className="btn btn-secondary" onClick={() => setMode('list')}>Browse topics</button>
           </div>
         ) : (
           <div className="flashcard-container">
@@ -499,7 +500,7 @@ const flashcardStyles = `
   .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--spacing-xl); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; box-sizing: border-box; padding-top: 48px; }
   .flashcard-back { transform: rotateY(180deg); }
   .card-skill { position: absolute; top: var(--spacing-md); left: var(--spacing-md); padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-full); font-size: 0.625rem; font-weight: 600; color: white; text-transform: uppercase; }
-  .card-title { font-size: 1.5rem; margin-bottom: var(--spacing-xs); text-align: center; }
+  .card-title { font-size: 1.5rem; margin-bottom: var(--spacing-xs); text-align: center; white-space: pre-line; }
   .card-phonetic { font-size: 0.875rem; color: var(--color-text-secondary); font-style: italic; margin-bottom: var(--spacing-md); }
   .card-pronounce-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 5px 14px; border-radius: var(--radius-md); font-size: 0.8rem; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-sm); }
   .card-pronounce-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
@@ -545,11 +546,11 @@ const listStyles = `
   .topic-skill { padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.625rem; font-weight: 600; color: white; text-transform: uppercase; }
   .topic-category { font-size: 0.75rem; color: var(--color-text-secondary); }
   .topic-title-row { display: flex; align-items: center; gap: var(--spacing-xs); margin-bottom: 2px; }
-  .topic-title { font-size: 1rem; margin: 0; }
+  .topic-title { font-size: 1rem; margin: 0; white-space: pre-line; }
   .topic-phonetic { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; margin-bottom: var(--spacing-sm); display: block; }
   .pronounce-btn { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; border-radius: var(--radius-sm); transition: color var(--transition-fast); flex-shrink: 0; }
   .pronounce-btn:hover { color: var(--color-primary); }
-  .topic-content { font-size: 0.875rem; line-height: 1.6; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex: 1; }
+  .topic-content { font-size: 0.875rem; line-height: 1.6; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex: 1; white-space: pre-line; }
   .topic-example { font-size: 0.75rem; padding: var(--spacing-sm); background: var(--color-background); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); }
   .topic-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: var(--spacing-sm); }
   .topic-footer-actions { display: flex; align-items: center; gap: var(--spacing-xs); }

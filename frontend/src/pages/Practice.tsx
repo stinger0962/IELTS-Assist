@@ -1190,7 +1190,9 @@ function AIGrammarExerciseView({
             cardTitle = item.sentence.replace('___', `___ (${item.hint})`);
             cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
           } else if (group.type === 'grammar_mcq') {
-            cardTitle = item.question;
+            // Include options in title so user can attempt the question
+            const optLines = Object.entries(item.options || {}).map(([k, v]) => `${k}) ${v}`).join('  ');
+            cardTitle = `${item.question}\n${optLines}`;
             const correctText = item.options?.[item.answer] || item.answer;
             cardContent = `✓ ${item.answer}) ${correctText}\n\n${item.explanation}`;
           }
@@ -1391,7 +1393,7 @@ function AIGrammarExerciseView({
       {vocabPopupPos && !showVocabModal && (
         <div
           className="vocab-popup"
-          style={{ position: 'fixed', left: vocabPopupPos.x, top: vocabPopupPos.y + 10 }}
+          style={{ left: vocabPopupPos.x, top: vocabPopupPos.y + 10 }}
           onMouseDown={e => { e.preventDefault(); openVocabModal(vocabWord); }}
           onTouchEnd={e => { e.preventDefault(); openVocabModal(vocabWord); }}
         >
