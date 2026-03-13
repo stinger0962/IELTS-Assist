@@ -304,3 +304,50 @@ export interface AIReadingPractice {
     second_type_answers: MCQAnswerItem[] | MatchingAnswerItem[];
   };
 }
+
+// AI-generated grammar practice types
+export interface GrammarErrorCorrectionItem {
+  question_number: number;
+  sentence: string;
+  answer: string;
+  error_description: string;
+  explanation: string;
+}
+
+export interface GrammarGapFillItem {
+  question_number: number;
+  sentence: string;
+  hint: string;
+  answer: string;
+  explanation: string;
+}
+
+export interface GrammarMCQItem {
+  question_number: number;
+  question: string;
+  options: Record<string, string>;
+  answer: string;
+  explanation: string;
+}
+
+export type GrammarQuestionType = 'error_correction' | 'gap_fill' | 'grammar_mcq';
+
+export interface GrammarQuestionGroup {
+  type: GrammarQuestionType;
+  items: GrammarErrorCorrectionItem[] | GrammarGapFillItem[] | GrammarMCQItem[];
+}
+
+export interface AIGrammarPractice {
+  practice_db_id?: number;
+  meta: {
+    module: string;
+    grammar_topic: string;
+    band_level: string;
+    context_theme: string;
+    question_count: number;
+  };
+  context: string;
+  questions: {
+    groups: GrammarQuestionGroup[];
+  };
+}

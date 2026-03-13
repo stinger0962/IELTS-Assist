@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw, FileText } from 'lucide-react';
+import { BookOpen, Headphones, Pen, MessageCircle, Check, X, Sparkles, RefreshCw, ChevronLeft, Play, Pause, RotateCcw, FileText, Type } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../api';
 import { useAppStore } from '../store';
 import type {
   SkillType, WritingTopic, SpeakingTopic,
   AIReadingPractice, AIListeningPractice, AIListeningMatchingBlock, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
-  MatchingHeadingData, MatchingAnswerItem, ReadingQuestionGroup,
+  MatchingHeadingData, MatchingAnswerItem, ReadingQuestionGroup, AIGrammarPractice,
 } from '../types';
 
 const skillConfig = [
@@ -997,6 +997,307 @@ function completionMatch(userRaw: string, correctRaw: string): boolean {
   return false;
 }
 
+// ─── AI Grammar Exercise View ───────────────────────────────────────────────
+
+function AIGrammarExerciseView({
+  exercise,
+  onComplete,
+}: {
+  exercise: AIGrammarPractice;
+  onComplete: (correct: number, total: number) => void;
+}) {
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
+  const [startTime] = useState(Date.now());
+
+  const groups = exercise.questions?.groups ?? [];
+
+  const handleSubmit = async () => {
+    let correct = 0;
+    let total = 0;
+
+    for (const group of groups) {
+      for (const item of group.items as any[]) {
+        total++;
+        const key = `${group.type}_${item.question_number}`;
+        const userAns = (userAnswers[key] || '').trim();
+
+        if (group.type === 'error_correction') {
+          // Compare corrected sentence — flexible: case-insensitive, trim punctuation
+          const expected = (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+          const given = userAns.toLowerCase().replace(/[.!?]+$/, '');
+          if (given === expected) correct++;
+        } else if (group.type === 'gap_fill') {
+          // Compare answer word(s) — case-insensitive
+          if (userAns.toLowerCase() === (item.answer || '').trim().toLowerCase()) correct++;
+        } else if (group.type === 'grammar_mcq') {
+          if (userAns === item.answer) correct++;
+        }
+      }
+    }
+
+    setScore({ correct, total });
+    setSubmitted(true);
+
+    // Calculate band score and submit
+    const accuracy = total > 0 ? correct / total : 0;
+    const bandScore = Math.round((3.5 + accuracy * 4.5) * 2) / 2;
+    const minutes = Math.min(30, Math.round((Date.now() - startTime) / 60000));
+
+    if (exercise.practice_db_id) {
+      try {
+        await practiceAPI.submitAIGrammar(
+          exercise.practice_db_id,
+          JSON.stringify(userAnswers),
+          bandScore,
+          correct,
+          total,
+        );
+        await progressAPI.updateProgress({
+          skill: 'writing',  // grammar contributes to writing band
+          band_score: bandScore,
+          study_time_minutes: minutes,
+          correct_answers: correct,
+          total_questions: total,
+        });
+        await progressAPI.createSession({
+          skill: 'writing',
+          duration_minutes: minutes,
+          notes: `Grammar: ${exercise.meta.grammar_topic} (${exercise.meta.band_level}) — ${correct}/${total}`,
+        });
+      } catch {}
+    }
+
+    onComplete(correct, total);
+  };
+
+  const isCorrect = (groupType: string, item: any) => {
+    const key = `${groupType}_${item.question_number}`;
+    const userAns = (userAnswers[key] || '').trim();
+    if (groupType === 'error_correction') {
+      return userAns.toLowerCase().replace(/[.!?]+$/, '') === (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+    } else if (groupType === 'gap_fill') {
+      return userAns.toLowerCase() === (item.answer || '').trim().toLowerCase();
+    } else if (groupType === 'grammar_mcq') {
+      return userAns === item.answer;
+    }
+    return false;
+  };
+
+  return (
+    <div className="grammar-exercise">
+      {/* Header */}
+      <div className="grammar-header">
+        <h2>{exercise.meta.grammar_topic}</h2>
+        <span className="grammar-band-badge">{exercise.meta.band_level}</span>
+      </div>
+
+      {/* Context paragraph */}
+      <div className="grammar-context">
+        <h3>Context</h3>
+        <p>{exercise.context}</p>
+      </div>
+
+      {/* Question groups */}
+      <div className="grammar-questions">
+        {groups.map((group, gi) => (
+          <div key={gi} className="grammar-group">
+            <h3 className="group-type-label">
+              {group.type === 'error_correction' && 'Error Correction'}
+              {group.type === 'gap_fill' && 'Gap Fill'}
+              {group.type === 'grammar_mcq' && 'Multiple Choice'}
+            </h3>
+            {group.type === 'error_correction' && (
+              <p className="group-instruction">Find and correct the grammatical error in each sentence.</p>
+            )}
+            {group.type === 'gap_fill' && (
+              <p className="group-instruction">Fill in the blank with the correct form of the word in parentheses.</p>
+            )}
+            {group.type === 'grammar_mcq' && (
+              <p className="group-instruction">Choose the correct option.</p>
+            )}
+
+            {(group.items as any[]).map((item, qi) => {
+              const key = `${group.type}_${item.question_number}`;
+              const correct = submitted ? isCorrect(group.type, item) : null;
+
+              return (
+                <div key={qi} className={`grammar-q ${submitted ? (correct ? 'correct' : 'incorrect') : ''}`}>
+                  <span className="q-number">{item.question_number}</span>
+
+                  {group.type === 'error_correction' && (
+                    <div className="q-body">
+                      <p className="q-sentence">{item.sentence}</p>
+                      <input
+                        type="text"
+                        className="grammar-input"
+                        placeholder="Type the corrected sentence…"
+                        value={userAnswers[key] || ''}
+                        onChange={e => setUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                        disabled={submitted}
+                      />
+                      {submitted && (
+                        <div className="q-feedback">
+                          {correct
+                            ? <span className="feedback-correct"><Check size={14} /> Correct</span>
+                            : <span className="feedback-incorrect"><X size={14} /> {item.error_description}</span>}
+                          {!correct && <p className="correct-answer">Correct: {item.answer}</p>}
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'gap_fill' && (
+                    <div className="q-body">
+                      <p className="q-sentence">
+                        {item.sentence.split('___').map((part: string, pi: number, arr: string[]) => (
+                          <React.Fragment key={pi}>
+                            {part}
+                            {pi < arr.length - 1 && (
+                              <input
+                                type="text"
+                                className="gap-input"
+                                placeholder={item.hint}
+                                value={userAnswers[key] || ''}
+                                onChange={e => setUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                                disabled={submitted}
+                              />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </p>
+                      {submitted && (
+                        <div className="q-feedback">
+                          {correct
+                            ? <span className="feedback-correct"><Check size={14} /> Correct</span>
+                            : <span className="feedback-incorrect"><X size={14} /> Answer: <strong>{item.answer}</strong></span>}
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'grammar_mcq' && (
+                    <div className="q-body">
+                      <p className="q-sentence">{item.question}</p>
+                      <div className="mcq-options">
+                        {Object.entries(item.options as Record<string, string>).map(([letter, text]) => {
+                          const selected = userAnswers[key] === letter;
+                          const isRight = item.answer === letter;
+                          let cls = 'mcq-opt';
+                          if (submitted) {
+                            if (isRight) cls += ' correct';
+                            else if (selected && !isRight) cls += ' incorrect';
+                          } else if (selected) {
+                            cls += ' selected';
+                          }
+                          return (
+                            <button
+                              key={letter}
+                              className={cls}
+                              onClick={() => !submitted && setUserAnswers(prev => ({ ...prev, [key]: letter }))}
+                              disabled={submitted}
+                            >
+                              <span className="mcq-letter">{letter}</span>
+                              <span>{text}</span>
+                              {submitted && isRight && <Check size={14} className="mcq-icon correct" />}
+                              {submitted && selected && !isRight && <X size={14} className="mcq-icon incorrect" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {submitted && (
+                        <div className="q-feedback">
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Submit / Score */}
+      {!submitted ? (
+        <div className="grammar-actions">
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={handleSubmit}
+            disabled={Object.keys(userAnswers).length === 0}
+          >
+            Submit Answers
+          </button>
+        </div>
+      ) : score && (
+        <div className="grammar-score">
+          <div className="score-summary">
+            <span className="score-num">{score.correct}/{score.total}</span>
+            <span className="score-label">correct</span>
+            <span className="score-band">Band {Math.round((3.5 + (score.correct / score.total) * 4.5) * 2) / 2}</span>
+          </div>
+        </div>
+      )}
+
+      <style>{grammarStyles}</style>
+    </div>
+  );
+}
+
+const grammarStyles = `
+  .grammar-exercise { max-width: 800px; margin: 0 auto; }
+  .grammar-header { display: flex; align-items: center; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }
+  .grammar-header h2 { margin: 0; }
+  .grammar-band-badge { padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; background: rgba(79,70,229,0.12); color: var(--color-primary); }
+  .grammar-context { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+  .grammar-context h3 { margin: 0 0 var(--spacing-sm) 0; font-size: 0.875rem; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .grammar-context p { line-height: 1.8; color: var(--color-text-primary); margin: 0; }
+  .grammar-group { margin-bottom: var(--spacing-lg); }
+  .group-type-label { font-size: 1rem; font-weight: 600; color: var(--color-primary); margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.8rem; }
+  .group-instruction { font-size: 0.8rem; color: var(--color-text-secondary); margin: 0 0 var(--spacing-md) 0; font-style: italic; }
+  .grammar-q { display: flex; gap: var(--spacing-md); padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); transition: border-color 0.2s; }
+  .grammar-q.correct { border-color: var(--color-success); background: rgba(16,185,129,0.04); }
+  .grammar-q.incorrect { border-color: var(--color-error); background: rgba(239,68,68,0.04); }
+  .q-number { width: 28px; height: 28px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
+  .q-body { flex: 1; min-width: 0; }
+  .q-sentence { margin: 0 0 var(--spacing-sm) 0; line-height: 1.7; color: var(--color-text-primary); }
+  .grammar-input { width: 100%; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.875rem; font-family: inherit; }
+  .grammar-input:focus { outline: none; border-color: var(--color-primary); }
+  .grammar-input:disabled { opacity: 0.7; }
+  .gap-input { display: inline-block; width: 140px; padding: 4px 8px; border: 1px dashed var(--color-primary); border-radius: var(--radius-sm); background: rgba(79,70,229,0.05); color: var(--color-text-primary); font-size: 0.875rem; font-family: inherit; text-align: center; margin: 0 4px; }
+  .gap-input:focus { outline: none; border-style: solid; background: rgba(79,70,229,0.1); }
+  .gap-input:disabled { opacity: 0.7; border-style: solid; }
+  .gap-input::placeholder { color: var(--color-text-secondary); font-style: italic; font-size: 0.8rem; }
+  .q-feedback { margin-top: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-background); border-radius: var(--radius-sm); font-size: 0.85rem; }
+  .feedback-correct { color: var(--color-success); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .feedback-incorrect { color: var(--color-error); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .correct-answer { color: var(--color-success); margin: 4px 0 0 0; font-size: 0.8rem; }
+  .q-explanation { color: var(--color-text-secondary); margin: 4px 0 0 0; font-style: italic; }
+  .mcq-options { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+  .mcq-opt { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--color-background); border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; transition: all 0.15s; font-size: 0.875rem; }
+  .mcq-opt:hover:not(:disabled) { border-color: var(--color-primary); }
+  .mcq-opt.selected { border-color: var(--color-primary); background: rgba(79,70,229,0.08); }
+  .mcq-opt.correct { border-color: var(--color-success); background: rgba(16,185,129,0.08); }
+  .mcq-opt.incorrect { border-color: var(--color-error); background: rgba(239,68,68,0.08); }
+  .mcq-opt:disabled { cursor: default; }
+  .mcq-letter { width: 26px; height: 26px; border-radius: 50%; background: var(--color-border); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
+  .mcq-opt.selected .mcq-letter { background: var(--color-primary); color: white; }
+  .mcq-opt.correct .mcq-letter { background: var(--color-success); color: white; }
+  .mcq-icon { margin-left: auto; flex-shrink: 0; }
+  .mcq-icon.correct { color: var(--color-success); }
+  .mcq-icon.incorrect { color: var(--color-error); }
+  .grammar-actions { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
+  .grammar-score { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
+  .score-summary { display: flex; align-items: center; gap: var(--spacing-md); padding: var(--spacing-md) var(--spacing-xl); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+  .score-num { font-size: 1.5rem; font-weight: 700; color: var(--color-text-primary); }
+  .score-label { font-size: 0.875rem; color: var(--color-text-secondary); }
+  .score-band { padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 700; background: rgba(79,70,229,0.12); color: var(--color-primary); }
+`;
+
 // ─── AI Listening Exercise View ──────────────────────────────────────────────
 
 function AIListeningExerciseView({
@@ -1550,6 +1851,12 @@ export default function Practice() {
   const [listeningGeneratingMore, setListeningGeneratingMore] = useState(false);
   const [listeningPoolEmpty, setListeningPoolEmpty] = useState(false);
 
+  const [aiGrammarExercises, setAIGrammarExercises] = useState<AIGrammarPractice[]>([]);
+  const [currentAIGrammar, setCurrentAIGrammar] = useState<AIGrammarPractice | null>(null);
+  const [grammarLoading, setGrammarLoading] = useState(false);
+  const [grammarGeneratingMore, setGrammarGeneratingMore] = useState(false);
+  const [grammarPoolEmpty, setGrammarPoolEmpty] = useState(false);
+
   const [writingTopics, setWritingTopics] = useState<WritingTopic[]>([]);
   const [speakingTopics, setSpeakingTopics] = useState<SpeakingTopic[]>([]);
 
@@ -1587,10 +1894,25 @@ export default function Practice() {
     }
   };
 
+  const loadAIGrammarExercises = async () => {
+    setGrammarLoading(true);
+    try {
+      const res = await practiceAPI.getDailyGrammar();
+      const practices = res.data?.practices;
+      setAIGrammarExercises(Array.isArray(practices) ? practices : []);
+      setGrammarPoolEmpty(false);
+    } catch {
+      // keep existing list
+    } finally {
+      setGrammarLoading(false);
+    }
+  };
+
   const loadExercises = async () => {
     setLoading(true);
     loadAIReadingExercises();
     loadAIListeningExercises();
+    loadAIGrammarExercises();
 
     const [writing, speaking] = await Promise.allSettled([
       practiceAPI.getWriting(),
@@ -1651,6 +1973,30 @@ export default function Practice() {
     }
   };
 
+  const handleSelectAIGrammar = (ex: AIGrammarPractice) => {
+    setCurrentAIGrammar(ex);
+  };
+
+  const handleGenerateMoreGrammar = async () => {
+    setGrammarGeneratingMore(true);
+    try {
+      const res = await practiceAPI.generateMoreGrammar();
+      if (res.data?.pool_empty) {
+        setGrammarPoolEmpty(true);
+      } else {
+        const newPractices: AIGrammarPractice[] = res.data?.practices ?? [];
+        if (newPractices.length > 0) {
+          setAIGrammarExercises(prev => [...prev, ...newPractices]);
+          setGrammarPoolEmpty(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate more grammar:', err);
+    } finally {
+      setGrammarGeneratingMore(false);
+    }
+  };
+
   const handleComplete = (correct: number, total: number) => {
     setResult({ correct, total });
     setShowResult(true);
@@ -1659,10 +2005,12 @@ export default function Practice() {
   const handleBack = () => {
     setCurrentAIExercise(null);
     setCurrentAIListening(null);
+    setCurrentAIGrammar(null);
     setShowResult(false);
     setResult(null);
     loadAIReadingExercises();
     loadAIListeningExercises();
+    loadAIGrammarExercises();
   };
 
   // Result screen
@@ -1705,6 +2053,17 @@ export default function Practice() {
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <AIListeningExerciseView exercise={currentAIListening} onComplete={handleComplete} />
+        <style>{sharedExerciseStyles}</style>
+      </div>
+    );
+  }
+
+  // AI Grammar exercise view
+  if (currentAIGrammar) {
+    return (
+      <div className="practice">
+        <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
+        <AIGrammarExerciseView exercise={currentAIGrammar} onComplete={handleComplete} />
         <style>{sharedExerciseStyles}</style>
       </div>
     );
@@ -1815,6 +2174,54 @@ export default function Practice() {
                     disabled={listeningGeneratingMore}
                   >
                     {listeningGeneratingMore
+                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
+                      : <><RefreshCw size={13} /> Generate More</>}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Grammar — AI */}
+          <div className="practice-section">
+            <div className="section-header" style={{ borderColor: '#8B5CF6' }}>
+              <Type size={24} style={{ color: '#8B5CF6' }} />
+              <h2>Grammar</h2>
+              <span className="ai-chip"><Sparkles size={11} /> AI</span>
+            </div>
+            <div className="exercise-list">
+              {grammarLoading ? (
+                <div className="generating-msg">
+                  <div className="loading-spinner-sm" />
+                  <span>Loading grammar exercises…</span>
+                </div>
+              ) : aiGrammarExercises.length === 0 ? (
+                <p className="empty-list">No exercises yet — click Generate below.</p>
+              ) : (
+                aiGrammarExercises.map((ex, i) => (
+                  <button key={i} className="exercise-item" onClick={() => handleSelectAIGrammar(ex)}>
+                    <span className="exercise-title">{ex.meta.grammar_topic}</span>
+                    <span className="exercise-meta">
+                      {ex.meta.band_level} · {ex.meta.question_count}q
+                    </span>
+                  </button>
+                ))
+              )}
+              {aiGrammarExercises.length < 3 && (
+                grammarPoolEmpty ? (
+                  <div className="pool-empty-msg">
+                    <span>Next exercise generating in background (~2 min)</span>
+                    <button className="retry-link" onClick={handleGenerateMoreGrammar} disabled={grammarGeneratingMore}>
+                      {grammarGeneratingMore ? 'Checking…' : 'Retry'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="generate-more-btn"
+                    onClick={handleGenerateMoreGrammar}
+                    disabled={grammarGeneratingMore}
+                  >
+                    {grammarGeneratingMore
                       ? <><div className="loading-spinner-sm" /> Checking pool…</>
                       : <><RefreshCw size={13} /> Generate More</>}
                   </button>
