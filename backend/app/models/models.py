@@ -11,6 +11,7 @@ class SkillType(str, enum.Enum):
     LISTENING = "listening"
     WRITING = "writing"
     SPEAKING = "speaking"
+    GRAMMAR = "grammar"
 
 class User(Base):
     __tablename__ = "users"

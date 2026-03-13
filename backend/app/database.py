@@ -41,6 +41,8 @@ def init_db():
         "ALTER TABLE topics ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
         "ALTER TABLE topics ADD COLUMN phonetic VARCHAR(100)",
         "ALTER TABLE topics ADD COLUMN audio_url VARCHAR(500)",
+        # Add 'grammar' to the skilltype enum (PostgreSQL only; SQLite ignores)
+        "ALTER TYPE skilltype ADD VALUE IF NOT EXISTS 'grammar'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

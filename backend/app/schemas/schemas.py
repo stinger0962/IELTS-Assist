@@ -8,6 +8,7 @@ class SkillType(str, Enum):
     LISTENING = "listening"
     WRITING = "writing"
     SPEAKING = "speaking"
+    GRAMMAR = "grammar"
 
 # Auth Schemas
 class UserCreate(BaseModel):

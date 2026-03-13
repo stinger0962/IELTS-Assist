@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Trash2, Filter, BookOpen, Headphones, Pen, MessageCircle } from 'lucide-react';
+import { AlertCircle, Trash2, Filter, BookOpen, Headphones, Pen, MessageCircle, Type } from 'lucide-react';
 import { mistakesAPI } from '../api';
 import type { Mistake, SkillType } from '../types';
 
@@ -9,6 +9,7 @@ const skillIcons = {
   listening: Headphones,
   writing: Pen,
   speaking: MessageCircle,
+  grammar: Type,
 };
 
 const skillColors = {
@@ -16,6 +17,7 @@ const skillColors = {
   listening: '#10B981',
   writing: '#F59E0B',
   speaking: '#EF4444',
+  grammar: '#8B5CF6',
 };
 
 export default function Mistakes() {

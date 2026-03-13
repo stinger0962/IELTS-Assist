@@ -1055,21 +1055,44 @@ function AIGrammarExerciseView({
           total,
         );
         await progressAPI.updateProgress({
-          skill: 'writing',  // grammar contributes to writing band
+          skill: 'grammar',
           band_score: bandScore,
           study_time_minutes: minutes,
           correct_answers: correct,
           total_questions: total,
         });
         await progressAPI.createSession({
-          skill: 'writing',
+          skill: 'grammar',
           duration_minutes: minutes,
           notes: `Grammar: ${exercise.meta.grammar_topic} (${exercise.meta.band_level}) — ${correct}/${total}`,
         });
       } catch {}
     }
 
-    onComplete(correct, total);
+    // Auto-extract wrong-answer grammar rules to Topics (category: Grammar)
+    for (const group of groups) {
+      for (const item of group.items as any[]) {
+        const key = `${group.type}_${item.question_number}`;
+        const userAns = (userAnswers[key] || '').trim();
+        let wrong = false;
+        if (group.type === 'error_correction') {
+          wrong = userAns.toLowerCase().replace(/[.!?]+$/, '') !== (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+        } else if (group.type === 'gap_fill') {
+          wrong = userAns.toLowerCase() !== (item.answer || '').trim().toLowerCase();
+        } else if (group.type === 'grammar_mcq') {
+          wrong = userAns !== item.answer;
+        }
+        if (wrong && item.explanation) {
+          const typeLabel = group.type.replace(/_/g, ' ');
+          topicsAPI.create({
+            title: `${exercise.meta.grammar_topic} — Q${item.question_number} (${typeLabel})`,
+            content: item.explanation,
+            skill: 'grammar',
+            category: 'Grammar',
+          }).catch(() => {});
+        }
+      }
+    }
   };
 
   const isCorrect = (groupType: string, item: any) => {
@@ -1222,9 +1245,9 @@ function AIGrammarExerciseView({
         ))}
       </div>
 
-      {/* Submit / Score */}
-      {!submitted ? (
-        <div className="grammar-actions">
+      {/* Submit / Score + Finish */}
+      <div className="grammar-actions">
+        {!submitted ? (
           <button
             className="btn btn-primary btn-lg"
             onClick={handleSubmit}
@@ -1232,16 +1255,19 @@ function AIGrammarExerciseView({
           >
             Submit Answers
           </button>
-        </div>
-      ) : score && (
-        <div className="grammar-score">
-          <div className="score-summary">
-            <span className="score-num">{score.correct}/{score.total}</span>
-            <span className="score-label">correct</span>
-            <span className="score-band">Band {Math.round((3.5 + (score.correct / score.total) * 4.5) * 2) / 2}</span>
+        ) : score && (
+          <div className="grammar-score">
+            <div className="score-summary">
+              <span className="score-num">{score.correct}/{score.total}</span>
+              <span className="score-label">correct</span>
+              <span className="score-band">Band {Math.round((3.5 + (score.correct / score.total) * 4.5) * 2) / 2}</span>
+            </div>
+            <button className="btn btn-primary" onClick={() => onComplete(score.correct, score.total)}>
+              Finish
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <style>{grammarStyles}</style>
     </div>
@@ -2186,7 +2212,7 @@ export default function Practice() {
           <div className="practice-section">
             <div className="section-header" style={{ borderColor: '#8B5CF6' }}>
               <Type size={24} style={{ color: '#8B5CF6' }} />
-              <h2>Grammar</h2>
+              <h2>{t('practice.grammar')}</h2>
               <span className="ai-chip"><Sparkles size={11} /> AI</span>
             </div>
             <div className="exercise-list">

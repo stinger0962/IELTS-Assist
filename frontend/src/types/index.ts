@@ -1,4 +1,4 @@
-export type SkillType = 'reading' | 'listening' | 'writing' | 'speaking';
+export type SkillType = 'reading' | 'listening' | 'writing' | 'speaking' | 'grammar';
 
 export interface User {
   id: number;
