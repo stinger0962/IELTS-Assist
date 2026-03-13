@@ -51,7 +51,8 @@ For gap_fill:
 - Provide a sentence with ONE blank indicated by ___
 - Include a base word hint in parentheses after the blank
 - The answer should be the grammatically correct form of the hint word
-- Format: {{"question_number": N, "sentence": "If the government ___ (invest) more...", "hint": "invest", "answer": "invested", "explanation": "second conditional requires past simple in the if-clause"}}
+- Each gap_fill sentence MUST be unique and original — do NOT reuse or adapt the format example below
+- Format: {{"question_number": N, "sentence": "The ___ (sentence) with a blank and hint word", "hint": "base_word", "answer": "correct_form", "explanation": "grammar rule explanation"}}
 
 For grammar_mcq:
 - Provide a sentence or short context with 4 options (A-D)

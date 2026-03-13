@@ -10,40 +10,40 @@ import random
 
 GRAMMAR_TOPICS = {
     "band_5_6": [
-        {"id": 1, "name": "Subject-verb agreement", "key_pattern": "The number of X has/have...", "common_error": "using plural verb with collective/uncountable subjects"},
-        {"id": 2, "name": "Tense consistency", "key_pattern": "Simple past vs present perfect", "common_error": "mixing tenses within a paragraph"},
-        {"id": 3, "name": "Articles", "key_pattern": "a/an/the/zero article", "common_error": "omitting 'the' before specific nouns or adding it before generalizations"},
-        {"id": 4, "name": "Countable vs uncountable nouns", "key_pattern": "much/many, fewer/less, amount/number", "common_error": "using 'less' with countable nouns"},
-        {"id": 5, "name": "Basic prepositions", "key_pattern": "in/on/at for time and place", "common_error": "confusing in/on/at in time expressions"},
-        {"id": 6, "name": "Pronoun reference", "key_pattern": "it/they/this referring back clearly", "common_error": "ambiguous pronoun reference"},
-        {"id": 7, "name": "Comparatives and superlatives", "key_pattern": "more/most, -er/-est, irregular forms", "common_error": "double comparative (more bigger)"},
-        {"id": 8, "name": "Basic conjunctions", "key_pattern": "and/but/so/because/although", "common_error": "run-on sentences or comma splices"},
-        {"id": 9, "name": "Singular and plural nouns", "key_pattern": "irregular plurals, uncountable nouns", "common_error": "adding -s to uncountable nouns (informations, advices)"},
-        {"id": 10, "name": "Basic word order", "key_pattern": "SVO, adverb placement, adjective order", "common_error": "misplacing adverbs of frequency"},
+        {"id": 1, "name": "Subject-verb agreement", "key_pattern": "The number of X has/have...", "common_error": "using plural verb with collective/uncountable subjects", "gap_fill": True},
+        {"id": 2, "name": "Tense consistency", "key_pattern": "Simple past vs present perfect", "common_error": "mixing tenses within a paragraph", "gap_fill": True},
+        {"id": 3, "name": "Articles", "key_pattern": "a/an/the/zero article", "common_error": "omitting 'the' before specific nouns or adding it before generalizations", "gap_fill": False},
+        {"id": 4, "name": "Countable vs uncountable nouns", "key_pattern": "much/many, fewer/less, amount/number", "common_error": "using 'less' with countable nouns", "gap_fill": False},
+        {"id": 5, "name": "Basic prepositions", "key_pattern": "in/on/at for time and place", "common_error": "confusing in/on/at in time expressions", "gap_fill": False},
+        {"id": 6, "name": "Pronoun reference", "key_pattern": "it/they/this referring back clearly", "common_error": "ambiguous pronoun reference", "gap_fill": False},
+        {"id": 7, "name": "Comparatives and superlatives", "key_pattern": "more/most, -er/-est, irregular forms", "common_error": "double comparative (more bigger)", "gap_fill": True},
+        {"id": 8, "name": "Basic conjunctions", "key_pattern": "and/but/so/because/although", "common_error": "run-on sentences or comma splices", "gap_fill": False},
+        {"id": 9, "name": "Singular and plural nouns", "key_pattern": "irregular plurals, uncountable nouns", "common_error": "adding -s to uncountable nouns (informations, advices)", "gap_fill": True},
+        {"id": 10, "name": "Basic word order", "key_pattern": "SVO, adverb placement, adjective order", "common_error": "misplacing adverbs of frequency", "gap_fill": False},
     ],
     "band_6_7": [
-        {"id": 11, "name": "Conditionals", "key_pattern": "zero/first/second/third/mixed", "common_error": "using 'would' in the if-clause"},
-        {"id": 12, "name": "Passive voice", "key_pattern": "be + past participle across tenses", "common_error": "incomplete passive (missing 'been' in present perfect passive)"},
-        {"id": 13, "name": "Relative clauses", "key_pattern": "who/which/that, defining vs non-defining", "common_error": "using 'that' in non-defining clauses"},
-        {"id": 14, "name": "Reported speech", "key_pattern": "tense backshift, say/tell/ask", "common_error": "failing to shift tense or pronoun"},
-        {"id": 15, "name": "Gerunds vs infinitives", "key_pattern": "verb + -ing vs verb + to-infinitive", "common_error": "using infinitive after verbs that require gerund (enjoy to do)"},
-        {"id": 16, "name": "Modal verbs for speculation", "key_pattern": "must/might/could/can't + have + pp", "common_error": "using 'can' instead of 'could' for past possibility"},
-        {"id": 17, "name": "Complex prepositions", "key_pattern": "in terms of, with regard to, as a result of", "common_error": "incomplete or mixed prepositional phrases"},
-        {"id": 18, "name": "Cause-effect connectors", "key_pattern": "consequently, as a result, thereby, hence", "common_error": "using connectors with wrong punctuation or grammar"},
-        {"id": 19, "name": "Concession and contrast", "key_pattern": "although/despite/nevertheless/however", "common_error": "despite + clause instead of despite + noun/-ing"},
-        {"id": 20, "name": "Parallel structure", "key_pattern": "matching grammatical forms in lists/comparisons", "common_error": "mixing forms: 'reading, writing, and to speak'"},
+        {"id": 11, "name": "Conditionals", "key_pattern": "zero/first/second/third/mixed", "common_error": "using 'would' in the if-clause", "gap_fill": True},
+        {"id": 12, "name": "Passive voice", "key_pattern": "be + past participle across tenses", "common_error": "incomplete passive (missing 'been' in present perfect passive)", "gap_fill": True},
+        {"id": 13, "name": "Relative clauses", "key_pattern": "who/which/that, defining vs non-defining", "common_error": "using 'that' in non-defining clauses", "gap_fill": False},
+        {"id": 14, "name": "Reported speech", "key_pattern": "tense backshift, say/tell/ask", "common_error": "failing to shift tense or pronoun", "gap_fill": True},
+        {"id": 15, "name": "Gerunds vs infinitives", "key_pattern": "verb + -ing vs verb + to-infinitive", "common_error": "using infinitive after verbs that require gerund (enjoy to do)", "gap_fill": True},
+        {"id": 16, "name": "Modal verbs for speculation", "key_pattern": "must/might/could/can't + have + pp", "common_error": "using 'can' instead of 'could' for past possibility", "gap_fill": True},
+        {"id": 17, "name": "Complex prepositions", "key_pattern": "in terms of, with regard to, as a result of", "common_error": "incomplete or mixed prepositional phrases", "gap_fill": False},
+        {"id": 18, "name": "Cause-effect connectors", "key_pattern": "consequently, as a result, thereby, hence", "common_error": "using connectors with wrong punctuation or grammar", "gap_fill": False},
+        {"id": 19, "name": "Concession and contrast", "key_pattern": "although/despite/nevertheless/however", "common_error": "despite + clause instead of despite + noun/-ing", "gap_fill": False},
+        {"id": 20, "name": "Parallel structure", "key_pattern": "matching grammatical forms in lists/comparisons", "common_error": "mixing forms: 'reading, writing, and to speak'", "gap_fill": True},
     ],
     "band_7_8": [
-        {"id": 21, "name": "Inversion", "key_pattern": "Not only...but also, Seldom, Rarely, Never", "common_error": "forgetting auxiliary inversion after negative adverb"},
-        {"id": 22, "name": "Cleft sentences", "key_pattern": "It is/was...that/who, What...is/was", "common_error": "incorrect pronoun or verb agreement in cleft"},
-        {"id": 23, "name": "Participle clauses", "key_pattern": "Having studied, Being located, Faced with", "common_error": "dangling participle (wrong subject)"},
-        {"id": 24, "name": "Nominalisation", "key_pattern": "verb/adj → noun: reduce → reduction, important → importance", "common_error": "awkward or incorrect noun form"},
-        {"id": 25, "name": "Subjunctive mood", "key_pattern": "recommend that he study, it is essential that", "common_error": "using 'studies' instead of base form after subjunctive trigger"},
-        {"id": 26, "name": "Reduced relative clauses", "key_pattern": "The study conducted by... / The data collected from...", "common_error": "using both relative pronoun and participle"},
-        {"id": 27, "name": "Advanced articles", "key_pattern": "generalisation patterns, abstract nouns", "common_error": "adding 'the' before abstract generalizations"},
-        {"id": 28, "name": "Hedging language", "key_pattern": "tend to, appear to, is likely to, it seems that", "common_error": "over-hedging or mixing hedging with certainty"},
-        {"id": 29, "name": "Ellipsis and substitution", "key_pattern": "so/neither/nor, do so, one/ones", "common_error": "repeating full clause instead of using substitution"},
-        {"id": 30, "name": "Emphasis structures", "key_pattern": "do/does/did for emphasis, It is X that...", "common_error": "using emphatic 'do' with wrong verb form"},
+        {"id": 21, "name": "Inversion", "key_pattern": "Not only...but also, Seldom, Rarely, Never", "common_error": "forgetting auxiliary inversion after negative adverb", "gap_fill": True},
+        {"id": 22, "name": "Cleft sentences", "key_pattern": "It is/was...that/who, What...is/was", "common_error": "incorrect pronoun or verb agreement in cleft", "gap_fill": True},
+        {"id": 23, "name": "Participle clauses", "key_pattern": "Having studied, Being located, Faced with", "common_error": "dangling participle (wrong subject)", "gap_fill": True},
+        {"id": 24, "name": "Nominalisation", "key_pattern": "verb/adj → noun: reduce → reduction, important → importance", "common_error": "awkward or incorrect noun form", "gap_fill": True},
+        {"id": 25, "name": "Subjunctive mood", "key_pattern": "recommend that he study, it is essential that", "common_error": "using 'studies' instead of base form after subjunctive trigger", "gap_fill": True},
+        {"id": 26, "name": "Reduced relative clauses", "key_pattern": "The study conducted by... / The data collected from...", "common_error": "using both relative pronoun and participle", "gap_fill": True},
+        {"id": 27, "name": "Advanced articles", "key_pattern": "generalisation patterns, abstract nouns", "common_error": "adding 'the' before abstract generalizations", "gap_fill": False},
+        {"id": 28, "name": "Hedging language", "key_pattern": "tend to, appear to, is likely to, it seems that", "common_error": "over-hedging or mixing hedging with certainty", "gap_fill": False},
+        {"id": 29, "name": "Ellipsis and substitution", "key_pattern": "so/neither/nor, do so, one/ones", "common_error": "repeating full clause instead of using substitution", "gap_fill": False},
+        {"id": 30, "name": "Emphasis structures", "key_pattern": "do/does/did for emphasis, It is X that...", "common_error": "using emphatic 'do' with wrong verb form", "gap_fill": True},
     ],
 }
 
@@ -88,6 +88,16 @@ EXERCISE_COMPOSITIONS = [
     [("error_correction", 3), ("gap_fill", 2), ("grammar_mcq", 3)],
 ]
 
+# Compositions for topics where gap_fill is unsuitable (articles, prepositions, etc.)
+NO_GAP_FILL_COMPOSITIONS = [
+    [("error_correction", 4), ("grammar_mcq", 4)],
+    [("error_correction", 5), ("grammar_mcq", 3)],
+    [("grammar_mcq", 5), ("error_correction", 3)],
+    [("error_correction", 3), ("grammar_mcq", 3)],
+    [("grammar_mcq", 4), ("error_correction", 3)],
+    [("error_correction", 4), ("grammar_mcq", 3)],
+]
+
 
 # ─── Metadata Generator ───────────────────────────────────────────────────
 
@@ -112,7 +122,13 @@ def generate_metadata(avoid_topics: list[str] | None = None) -> dict:
     band_level, grammar_topic = random.choice(all_topics)
 
     context_theme = random.choice(CONTEXT_THEMES)
-    composition = random.choice(EXERCISE_COMPOSITIONS)
+
+    # Pick composition based on whether the topic supports gap_fill
+    if grammar_topic.get("gap_fill", True):
+        composition = random.choice(EXERCISE_COMPOSITIONS)
+    else:
+        composition = random.choice(NO_GAP_FILL_COMPOSITIONS)
+
     total_questions = sum(count for _, count in composition)
 
     return {
