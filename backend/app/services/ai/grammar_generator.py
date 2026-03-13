@@ -27,13 +27,18 @@ Create a grammar exercise targeting this grammar point:
 - Band level: {band_label}
 - IELTS context theme: {context_theme}
 
-STEP 1 — Write a short IELTS-relevant context paragraph (80-150 words)
+STEP 1 — Write a grammar tip (2-3 sentences)
+- Briefly explain the grammar rule being tested
+- Include ONE clear example sentence demonstrating correct usage
+- Keep it concise and learner-friendly
+
+STEP 2 — Write a short IELTS-relevant context paragraph (80-150 words)
 - The paragraph should be about the context theme
 - It should naturally contain examples of the target grammar point
 - Use B2 to low C1 vocabulary
 - Academic but accessible tone
 
-STEP 2 — Create {total_questions} questions using this mix: {composition}
+STEP 3 — Create {total_questions} questions using this mix: {composition}
 
 For error_correction:
 - Provide a sentence that contains ONE grammatical error related to the target grammar topic
@@ -52,6 +57,7 @@ For grammar_mcq:
 - Provide a sentence or short context with 4 options (A-D)
 - One option must be clearly correct; others should be plausible but grammatically wrong
 - The question should test understanding of the grammar rule, not just vocabulary
+- IMPORTANT: If the question contains a blank (___), the options must complete the blank seamlessly — the correct option must NOT repeat words already adjacent to the blank. For example, "This is the ___ preserved" with option "most well-preserved" would result in "most well-preserved preserved" — this is WRONG. Instead, use "the ___ artifact" with option "most well-preserved".
 - Format: {{"question_number": N, "question": "Choose the correct option: ...", "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}}, "answer": "A", "explanation": "..."}}
 
 IMPORTANT RULES:
@@ -63,6 +69,8 @@ IMPORTANT RULES:
 
 Return STRICT JSON only:
 {{
+  "grammar_tip": "Brief explanation of the grammar rule + one example sentence.",
+  "highlight_phrases": ["phrase from context 1", "phrase from context 2"],
   "context": "the context paragraph text",
   "meta": {{
     "grammar_topic": "{grammar_topic_name}",
@@ -87,6 +95,8 @@ Return STRICT JSON only:
     ]
   }}
 }}
+
+The "highlight_phrases" array must contain the EXACT phrases or words from the context paragraph that demonstrate the target grammar point. These will be highlighted in the UI so the learner can see the grammar in action.
 
 Only include groups that have questions assigned. Do not include empty groups.
 Do not include explanations outside the JSON. Return JSON only.'''
@@ -135,10 +145,13 @@ class GrammarGenerator:
                 "meta": {
                     "module": "IELTS Grammar Practice",
                     "grammar_topic": metadata["grammar_topic"]["name"],
+                    "key_pattern": metadata["grammar_topic"]["key_pattern"],
                     "band_level": metadata["band_label"],
                     "context_theme": metadata["context_theme"],
                     "question_count": metadata["total_questions"],
                 },
+                "grammar_tip": exercise_data.get("grammar_tip", ""),
+                "highlight_phrases": exercise_data.get("highlight_phrases", []),
                 "context": exercise_data["context"],
                 "questions": exercise_data.get("questions", {"groups": []}),
             }

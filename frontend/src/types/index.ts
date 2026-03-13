@@ -342,10 +342,13 @@ export interface AIGrammarPractice {
   meta: {
     module: string;
     grammar_topic: string;
+    key_pattern?: string;
     band_level: string;
     context_theme: string;
     question_count: number;
   };
+  grammar_tip?: string;
+  highlight_phrases?: string[];
   context: string;
   questions: {
     groups: GrammarQuestionGroup[];

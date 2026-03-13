@@ -1006,12 +1006,109 @@ function AIGrammarExerciseView({
   exercise: AIGrammarPractice;
   onComplete: (correct: number, total: number) => void;
 }) {
+  const { language } = useAppStore();
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
   const [startTime] = useState(Date.now());
 
+  // Vocab popup state (same pattern as reading)
+  const [vocabWord, setVocabWord] = useState('');
+  const [vocabPopupPos, setVocabPopupPos] = useState<{ x: number; y: number } | null>(null);
+  const [showVocabModal, setShowVocabModal] = useState(false);
+  const [vocabDef, setVocabDef] = useState('');
+  const [vocabDefZh, setVocabDefZh] = useState('');
+  const [vocabPhonetic, setVocabPhonetic] = useState('');
+  const [vocabAudioUrl, setVocabAudioUrl] = useState('');
+  const [vocabDefLoading, setVocabDefLoading] = useState(false);
+  const [vocabSaving, setVocabSaving] = useState(false);
+  const [vocabDuplicate, setVocabDuplicate] = useState(false);
+  const [vocabSaved, setVocabSaved] = useState(false);
+
   const groups = exercise.questions?.groups ?? [];
+
+  // ── Vocab selection handlers ──
+  const handleTextSelect = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? '';
+    if (text.length >= 2 && text.length <= 60 && !text.includes('\n')) {
+      try {
+        const rect = sel!.getRangeAt(0).getBoundingClientRect();
+        setVocabWord(text);
+        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom });
+      } catch { /* ignore */ }
+    } else {
+      setVocabPopupPos(null);
+    }
+  };
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onSelChange = () => { clearTimeout(timer); timer = setTimeout(handleTextSelect, 200); };
+    document.addEventListener('selectionchange', onSelChange);
+    return () => { clearTimeout(timer); document.removeEventListener('selectionchange', onSelChange); };
+  }, []);
+
+  const openVocabModal = async (word: string) => {
+    setVocabWord(word);
+    setShowVocabModal(true);
+    setVocabPopupPos(null);
+    setVocabDef('');
+    setVocabDefZh('');
+    setVocabPhonetic('');
+    setVocabAudioUrl('');
+    setVocabDefLoading(true);
+    setVocabDuplicate(false);
+    setVocabSaved(false);
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVocabDef(parseDictionaryEntry(data));
+        const phonetics = data[0]?.phonetics ?? [];
+        const ipa = phonetics.find((p: any) => p.text)?.text ?? '';
+        const audio = phonetics.find((p: any) => p.audio)?.audio ?? '';
+        setVocabPhonetic(ipa);
+        setVocabAudioUrl(audio);
+        if (language === 'zh') {
+          topicsAPI.translateDefinition(word, parseDictionaryEntry(data))
+            .then(r => setVocabDefZh(r.data?.translation ?? ''))
+            .catch(() => {});
+        }
+      }
+    } catch { /* ignore */ }
+    setVocabDefLoading(false);
+  };
+
+  const handleSaveVocab = async () => {
+    if (!vocabDef.trim()) return;
+    setVocabSaving(true);
+    setVocabDuplicate(false);
+    try {
+      await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'grammar', category: 'vocabulary', phonetic: vocabPhonetic || undefined, audio_url: vocabAudioUrl || undefined });
+      setVocabSaved(true);
+      setShowVocabModal(false);
+      setVocabDef('');
+      setTimeout(() => setVocabSaved(false), 3000);
+    } catch (error: any) {
+      if (error?.response?.status === 409) setVocabDuplicate(true);
+    } finally {
+      setVocabSaving(false);
+    }
+  };
+
+  // ── Highlight grammar phrases in context ──
+  const renderHighlightedContext = (text: string) => {
+    const phrases = exercise.highlight_phrases ?? [];
+    if (phrases.length === 0) return text;
+    // Build a regex that matches any of the phrases (case-insensitive)
+    const escaped = phrases.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? <mark key={i} className="grammar-highlight">{part}</mark> : part
+    );
+  };
 
   const handleSubmit = async () => {
     let correct = 0;
@@ -1083,12 +1180,25 @@ function AIGrammarExerciseView({
           wrong = userAns !== item.answer;
         }
         if (wrong && item.explanation) {
-          const typeLabel = group.type.replace(/_/g, ' ');
+          // Build flashcard-friendly title (the question) and content (answer + explanation)
+          let cardTitle = '';
+          let cardContent = '';
+          if (group.type === 'error_correction') {
+            cardTitle = `Fix: ${item.sentence}`;
+            cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
+          } else if (group.type === 'gap_fill') {
+            cardTitle = item.sentence.replace('___', `___ (${item.hint})`);
+            cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
+          } else if (group.type === 'grammar_mcq') {
+            cardTitle = item.question;
+            const correctText = item.options?.[item.answer] || item.answer;
+            cardContent = `✓ ${item.answer}) ${correctText}\n\n${item.explanation}`;
+          }
           topicsAPI.create({
-            title: `${exercise.meta.grammar_topic} — Q${item.question_number} (${typeLabel})`,
-            content: item.explanation,
+            title: cardTitle || `${exercise.meta.grammar_topic} — Q${item.question_number}`,
+            content: cardContent || item.explanation,
             skill: 'grammar',
-            category: 'Grammar',
+            category: 'grammar',
           }).catch(() => {});
         }
       }
@@ -1116,10 +1226,18 @@ function AIGrammarExerciseView({
         <span className="grammar-band-badge">{exercise.meta.band_level}</span>
       </div>
 
-      {/* Context paragraph */}
+      {/* Grammar Tip */}
+      {(exercise.grammar_tip || exercise.meta.key_pattern) && (
+        <div className="grammar-tip">
+          <h3>💡 Grammar Tip</h3>
+          <p>{exercise.grammar_tip || `Key pattern: ${exercise.meta.key_pattern}`}</p>
+        </div>
+      )}
+
+      {/* Context paragraph with highlighted grammar phrases */}
       <div className="grammar-context">
         <h3>Context</h3>
-        <p>{exercise.context}</p>
+        <p>{renderHighlightedContext(exercise.context)}</p>
       </div>
 
       {/* Question groups */}
@@ -1269,6 +1387,46 @@ function AIGrammarExerciseView({
         )}
       </div>
 
+      {/* Vocab popup (appears on text selection) */}
+      {vocabPopupPos && !showVocabModal && (
+        <div
+          className="vocab-popup"
+          style={{ position: 'fixed', left: vocabPopupPos.x, top: vocabPopupPos.y + 10 }}
+          onMouseDown={e => { e.preventDefault(); openVocabModal(vocabWord); }}
+          onTouchEnd={e => { e.preventDefault(); openVocabModal(vocabWord); }}
+        >
+          + Add to Vocab
+        </div>
+      )}
+
+      {/* Vocab modal */}
+      {showVocabModal && (
+        <div className="vocab-modal-overlay" onClick={() => setShowVocabModal(false)}>
+          <div className="vocab-modal" onClick={e => e.stopPropagation()}>
+            <h3>Add Word</h3>
+            <input className="vocab-input" value={vocabWord} onChange={e => setVocabWord(e.target.value)} />
+            {vocabDefLoading ? (
+              <div className="generating-msg"><div className="loading-spinner-sm" /><span>Looking up…</span></div>
+            ) : (
+              <>
+                <textarea className="vocab-def-input" rows={4} placeholder="Definition"
+                  value={language === 'zh' && vocabDefZh ? vocabDefZh : vocabDef}
+                  onChange={e => language === 'zh' ? setVocabDefZh(e.target.value) : setVocabDef(e.target.value)} />
+                {vocabPhonetic && <p className="vocab-phonetic">{vocabPhonetic}</p>}
+              </>
+            )}
+            <div className="vocab-modal-actions">
+              <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || !vocabDef.trim()}>
+                {vocabSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button className="btn" onClick={() => setShowVocabModal(false)}>Cancel</button>
+            </div>
+            {vocabDuplicate && <p className="vocab-error">Already in your deck</p>}
+          </div>
+        </div>
+      )}
+      {vocabSaved && <div className="vocab-saved-toast">✓ Saved to vocabulary</div>}
+
       <style>{grammarStyles}</style>
     </div>
   );
@@ -1322,6 +1480,11 @@ const grammarStyles = `
   .score-num { font-size: 1.5rem; font-weight: 700; color: var(--color-text-primary); }
   .score-label { font-size: 0.875rem; color: var(--color-text-secondary); }
   .score-band { padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 700; background: rgba(79,70,229,0.12); color: var(--color-primary); }
+  .grammar-tip { background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.2); border-radius: var(--radius-lg); padding: var(--spacing-md) var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+  .grammar-tip h3 { margin: 0 0 var(--spacing-xs) 0; font-size: 0.9rem; color: #8B5CF6; }
+  .grammar-tip p { margin: 0; line-height: 1.7; color: var(--color-text-primary); font-size: 0.9rem; }
+  .grammar-highlight { background: rgba(139,92,246,0.15); color: inherit; padding: 1px 3px; border-radius: 3px; font-weight: 500; }
+  .grammar-actions { flex-direction: column; align-items: center; gap: var(--spacing-md); }
 `;
 
 // ─── AI Listening Exercise View ──────────────────────────────────────────────
