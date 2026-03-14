@@ -1105,8 +1105,10 @@ function AIGrammarExerciseView({
     const escaped = phrases.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
     const parts = text.split(regex);
+    // Use a fresh regex per test to avoid stateful lastIndex issue with 'g' flag
+    const matchRegex = new RegExp(`^(${escaped.join('|')})$`, 'i');
     return parts.map((part, i) =>
-      regex.test(part) ? <mark key={i} className="grammar-highlight">{part}</mark> : part
+      matchRegex.test(part) ? <mark key={i} className="grammar-highlight">{part}</mark> : part
     );
   };
 
@@ -1487,6 +1489,16 @@ const grammarStyles = `
   .grammar-tip p { margin: 0; line-height: 1.7; color: var(--color-text-primary); font-size: 0.9rem; }
   .grammar-highlight { background: rgba(139,92,246,0.15); color: inherit; padding: 1px 3px; border-radius: 3px; font-weight: 500; }
   .grammar-actions { flex-direction: column; align-items: center; gap: var(--spacing-md); }
+  .vocab-popup { position: fixed; transform: translateX(-50%); background: var(--color-primary); color: white; padding: 5px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600; cursor: pointer; z-index: 1000; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .vocab-popup:hover { background: #4338ca; }
+  .vocab-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; display: flex; align-items: center; justify-content: center; }
+  .vocab-modal { background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-lg); width: min(400px, 90vw); box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+  .vocab-modal h3 { margin-bottom: var(--spacing-md); font-size: 1rem; }
+  .vocab-input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; box-sizing: border-box; }
+  .vocab-def-input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-background); color: var(--color-text-primary); font-size: 0.9rem; resize: vertical; box-sizing: border-box; font-family: inherit; }
+  .vocab-phonetic { font-size: 0.85rem; color: var(--color-text-secondary); margin: var(--spacing-xs) 0 0; }
+  .vocab-error { font-size: 0.8rem; color: var(--color-error); margin: var(--spacing-xs) 0 0; }
+  .vocab-saved-toast { position: fixed; bottom: 24px; right: 24px; background: var(--color-success); color: white; padding: 10px 18px; border-radius: var(--radius-md); font-size: 0.875rem; font-weight: 600; z-index: 1002; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 `;
 
 // ─── AI Listening Exercise View ──────────────────────────────────────────────
