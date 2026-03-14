@@ -6,6 +6,8 @@ on:
     types: [completed]
     branches: [main]
 
+run-name: "Deploy — ${{ github.event.workflow_run.display_title }}"
+
 jobs:
   deploy:
     name: Deploy to VPS
@@ -51,7 +53,7 @@ jobs:
             pip install -r requirements.txt -q
             python -m pytest tests/ --tb=short -q
             systemctl restart ielts-backend
-            
+
             # Frontend
             cd ../frontend
             npm ci
@@ -62,5 +64,5 @@ jobs:
             cp -r dist/* /var/www/ielts-assist/
             mv /tmp/ielts-audio-backup /var/www/ielts-assist/audio 2>/dev/null || true
             chown -R www-data:www-data /var/www/ielts-assist
-            
+
             echo "Deploy complete!"
