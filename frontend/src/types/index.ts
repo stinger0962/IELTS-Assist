@@ -354,14 +354,33 @@ export interface GrammarContextCompletionItem {
   explanation: string;
 }
 
+export interface GrammarParaphraseItem {
+  question_number: number;
+  original_sentence: string;
+  options: Record<string, string>;
+  answer: string;
+  explanation: string;
+}
+
+export interface GrammarFunctionIdItem {
+  question_number: number;
+  sentence: string;
+  question: string;
+  options: Record<string, string>;
+  answer: string;
+  explanation: string;
+}
+
 export type GrammarQuestionType =
   | 'error_correction' | 'gap_fill' | 'grammar_mcq'
-  | 'sentence_transformation' | 'sentence_combination' | 'context_completion';
+  | 'sentence_transformation' | 'sentence_combination' | 'context_completion'
+  | 'paraphrase_rewrite' | 'grammar_function_id';
 
 export interface GrammarQuestionGroup {
   type: GrammarQuestionType;
   items: (GrammarErrorCorrectionItem | GrammarGapFillItem | GrammarMCQItem
-    | GrammarTransformationItem | GrammarCombinationItem | GrammarContextCompletionItem)[];
+    | GrammarTransformationItem | GrammarCombinationItem | GrammarContextCompletionItem
+    | GrammarParaphraseItem | GrammarFunctionIdItem)[];
 }
 
 export interface AIGrammarPractice {

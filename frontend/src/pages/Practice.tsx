@@ -1151,7 +1151,7 @@ function AIGrammarExerciseView({
         } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           // Compare answer word(s) — case-insensitive
           if (userAns.toLowerCase() === (item.answer || '').trim().toLowerCase()) correct++;
-        } else if (group.type === 'grammar_mcq') {
+        } else if (group.type === 'grammar_mcq' || group.type === 'paraphrase_rewrite' || group.type === 'grammar_function_id') {
           if (userAns === item.answer) correct++;
         }
       }
@@ -1199,7 +1199,7 @@ function AIGrammarExerciseView({
           wrong = userAns.toLowerCase().replace(/[.!?]+$/, '') !== (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
         } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           wrong = userAns.toLowerCase() !== (item.answer || '').trim().toLowerCase();
-        } else if (group.type === 'grammar_mcq') {
+        } else if (group.type === 'grammar_mcq' || group.type === 'paraphrase_rewrite' || group.type === 'grammar_function_id') {
           wrong = userAns !== item.answer;
         }
         if (wrong && item.explanation) {
@@ -1226,6 +1226,16 @@ function AIGrammarExerciseView({
           } else if (group.type === 'context_completion') {
             cardTitle = (item.paragraph || '').replace('___', `___ (${item.hint || '...'})`);
             cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
+          } else if (group.type === 'paraphrase_rewrite') {
+            const optLines = Object.entries(item.options || {}).map(([k, v]) => `${k}) ${v}`).join('  ');
+            cardTitle = `Paraphrase: ${item.original_sentence}\n${optLines}`;
+            const correctText = item.options?.[item.answer] || item.answer;
+            cardContent = `✓ ${item.answer}) ${correctText}\n\n${item.explanation}`;
+          } else if (group.type === 'grammar_function_id') {
+            const optLines = Object.entries(item.options || {}).map(([k, v]) => `${k}) ${v}`).join('  ');
+            cardTitle = `${item.question}: ${(item.sentence || '').replace(/\*\*/g, '')}\n${optLines}`;
+            const correctText = item.options?.[item.answer] || item.answer;
+            cardContent = `✓ ${item.answer}) ${correctText}\n\n${item.explanation}`;
           }
           topicsAPI.create({
             title: cardTitle || `${exercise.meta.grammar_topic} — Q${item.question_number}`,
@@ -1245,7 +1255,7 @@ function AIGrammarExerciseView({
       return userAns.toLowerCase().replace(/[.!?]+$/, '') === (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
     } else if (groupType === 'gap_fill' || groupType === 'context_completion') {
       return userAns.toLowerCase() === (item.answer || '').trim().toLowerCase();
-    } else if (groupType === 'grammar_mcq') {
+    } else if (groupType === 'grammar_mcq' || groupType === 'paraphrase_rewrite' || groupType === 'grammar_function_id') {
       return userAns === item.answer;
     }
     return false;
@@ -1284,6 +1294,8 @@ function AIGrammarExerciseView({
               {group.type === 'sentence_transformation' && 'Sentence Transformation'}
               {group.type === 'sentence_combination' && 'Sentence Combination'}
               {group.type === 'context_completion' && 'Context Completion'}
+              {group.type === 'paraphrase_rewrite' && 'Paraphrase Rewrite'}
+              {group.type === 'grammar_function_id' && 'Grammar Function'}
             </h3>
             {group.type === 'error_correction' && (
               <p className="group-instruction">Find and correct the grammatical error in each sentence.</p>
@@ -1302,6 +1314,12 @@ function AIGrammarExerciseView({
             )}
             {group.type === 'context_completion' && (
               <p className="group-instruction">Complete the gap with the correct grammatical structure.</p>
+            )}
+            {group.type === 'paraphrase_rewrite' && (
+              <p className="group-instruction">Choose the option that correctly paraphrases the sentence using the target grammar.</p>
+            )}
+            {group.type === 'grammar_function_id' && (
+              <p className="group-instruction">Identify the grammatical function of the highlighted word or phrase.</p>
             )}
 
             {(group.items as any[]).map((item, qi) => {
@@ -1483,6 +1501,81 @@ function AIGrammarExerciseView({
                       )}
                     </div>
                   )}
+
+                  {group.type === 'paraphrase_rewrite' && (
+                    <div className="q-body">
+                      <p className="q-sentence">{item.original_sentence}</p>
+                      <div className="mcq-options">
+                        {Object.entries((item.options || {}) as Record<string, string>).map(([letter, text]) => {
+                          const selected = userAnswers[key] === letter;
+                          const isRight = item.answer === letter;
+                          let cls = 'mcq-opt';
+                          if (submitted) {
+                            if (isRight) cls += ' correct';
+                            else if (selected && !isRight) cls += ' incorrect';
+                          } else if (selected) {
+                            cls += ' selected';
+                          }
+                          return (
+                            <button
+                              key={letter}
+                              className={cls}
+                              onClick={() => !submitted && setUserAnswers(prev => ({ ...prev, [key]: letter }))}
+                              disabled={submitted}
+                            >
+                              <span className="mcq-letter">{letter}</span>
+                              <span>{text}</span>
+                              {submitted && isRight && <Check size={14} className="mcq-icon correct" />}
+                              {submitted && selected && !isRight && <X size={14} className="mcq-icon incorrect" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {submitted && (
+                        <div className="q-feedback">
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'grammar_function_id' && (
+                    <div className="q-body">
+                      <p className="q-sentence" dangerouslySetInnerHTML={{ __html: (item.sentence || '').replace(/\*\*(.*?)\*\*/g, '<strong class="grammar-highlight-inline">$1</strong>') }} />
+                      <p className="q-instruction-text">{item.question}</p>
+                      <div className="mcq-options">
+                        {Object.entries((item.options || {}) as Record<string, string>).map(([letter, text]) => {
+                          const selected = userAnswers[key] === letter;
+                          const isRight = item.answer === letter;
+                          let cls = 'mcq-opt';
+                          if (submitted) {
+                            if (isRight) cls += ' correct';
+                            else if (selected && !isRight) cls += ' incorrect';
+                          } else if (selected) {
+                            cls += ' selected';
+                          }
+                          return (
+                            <button
+                              key={letter}
+                              className={cls}
+                              onClick={() => !submitted && setUserAnswers(prev => ({ ...prev, [key]: letter }))}
+                              disabled={submitted}
+                            >
+                              <span className="mcq-letter">{letter}</span>
+                              <span>{text}</span>
+                              {submitted && isRight && <Check size={14} className="mcq-icon correct" />}
+                              {submitted && selected && !isRight && <X size={14} className="mcq-icon incorrect" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {submitted && (
+                        <div className="q-feedback">
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1611,6 +1704,9 @@ const grammarStyles = `
   .grammar-tip h3 { margin: 0 0 var(--spacing-xs) 0; font-size: 0.9rem; color: #8B5CF6; }
   .grammar-tip p { margin: 0; line-height: 1.7; color: var(--color-text-primary); font-size: 0.9rem; }
   .grammar-highlight { background: rgba(139,92,246,0.15); color: inherit; padding: 1px 3px; border-radius: 3px; font-weight: 500; }
+  .grammar-highlight-inline { color: var(--color-primary); font-weight: 600; text-decoration: underline; text-decoration-style: dotted; }
+  .q-instruction-text { font-style: italic; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
+  .combination-sentences { margin-bottom: var(--spacing-sm); }
   .grammar-actions { flex-direction: column; align-items: center; gap: var(--spacing-md); }
   .vocab-popup { position: fixed; transform: translateX(-50%); background: var(--color-primary); color: white; padding: 5px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600; cursor: pointer; z-index: 1000; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
   .vocab-popup:hover { background: #4338ca; }

@@ -99,6 +99,20 @@ TYPE_SPECS = {
 - The answer should be a short phrase (2-6 words) that completes the gap grammatically
 - Format: {{"question_number": N, "paragraph": "A short paragraph with ___ a blank in it.", "hint": "use [grammar structure]", "answer": "the correct phrase", "explanation": "why this phrase fits grammatically"}}
 ''',
+    "paraphrase_rewrite": '''For paraphrase_rewrite:
+- Show an original sentence, then provide 4 paraphrase options (A-D) that use different grammar structures
+- Only ONE option correctly paraphrases the meaning while using the target grammar point correctly
+- Distractors should change meaning, use wrong grammar, or apply the grammar rule incorrectly
+- IELTS design: test whether students recognise correct paraphrase under grammar transformation
+- Format: {{"question_number": N, "original_sentence": "The original sentence.", "options": {{"A": "paraphrase A", "B": "paraphrase B", "C": "paraphrase C", "D": "paraphrase D"}}, "answer": "B", "explanation": "why this paraphrase correctly preserves meaning using the target grammar"}}
+''',
+    "grammar_function_id": '''For grammar_function_id:
+- Show a sentence with a word or phrase highlighted using **bold markers** (e.g. "The team **quickly** adapted")
+- Ask what grammatical function the highlighted element serves
+- Provide 4 options (A-D) with grammatical function labels
+- Only ONE option is correct; others should be plausible but wrong
+- Format: {{"question_number": N, "sentence": "The team **quickly** adapted to the new system.", "question": "What is the grammatical function of the highlighted word?", "options": {{"A": "adverb of manner", "B": "adjective", "C": "adverb of frequency", "D": "intensifier"}}, "answer": "A", "explanation": "why this grammatical function is correct"}}
+''',
 }
 
 GRAMMAR_PROMPT_FOOTER = '''IMPORTANT RULES:
@@ -107,6 +121,13 @@ GRAMMAR_PROMPT_FOOTER = '''IMPORTANT RULES:
 - Each question must be distinct — do not repeat the same sentence or test the same specific usage
 - Explanations must name the grammar rule being tested
 - Sentences should use IELTS-relevant academic vocabulary and topics
+
+IELTS DESIGN PATTERNS (apply where natural):
+- Paraphrase trap: MCQ options rephrase the grammar differently — only one preserves meaning correctly
+- Structure shift: require the student to express the same idea using a different grammatical structure
+- Function word gap: test articles, prepositions, or conjunctions that change meaning in context
+- Controlled transformation: specify exactly which grammar rule the student must apply
+- Parallel structure repair: include broken parallelism as a distractor or error
 
 Return STRICT JSON only:
 {{

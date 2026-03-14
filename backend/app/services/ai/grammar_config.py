@@ -125,35 +125,35 @@ SKILL_INTEGRATIONS = ["reading_grammar", "listening_grammar", "writing_grammar"]
 
 # ─── Exercise Type Compositions ────────────────────────────────────────────
 # Each composition is a list of (type, count) tuples — 6-8 questions total
-# v0.16.0: 6 types (error_correction, gap_fill, grammar_mcq,
-#           sentence_transformation, sentence_combination, context_completion)
+# v0.17.0: 8 types (+ paraphrase_rewrite, grammar_function_id)
 
 EXERCISE_COMPOSITIONS = [
     # Classic compositions (original 3 types)
     [("error_correction", 3), ("gap_fill", 3), ("grammar_mcq", 2)],
-    [("error_correction", 2), ("gap_fill", 4), ("grammar_mcq", 2)],
     [("grammar_mcq", 3), ("gap_fill", 3), ("error_correction", 2)],
-    [("grammar_mcq", 4), ("error_correction", 2), ("gap_fill", 2)],
-    # Mixed compositions (old + new types)
+    # Mixed: original + text-input new types
     [("error_correction", 2), ("gap_fill", 2), ("sentence_transformation", 2), ("grammar_mcq", 2)],
-    [("gap_fill", 2), ("sentence_transformation", 2), ("sentence_combination", 2), ("grammar_mcq", 2)],
-    [("error_correction", 2), ("sentence_combination", 2), ("context_completion", 2), ("grammar_mcq", 2)],
+    [("gap_fill", 2), ("sentence_combination", 2), ("context_completion", 2), ("grammar_mcq", 2)],
     [("sentence_transformation", 2), ("gap_fill", 2), ("error_correction", 2), ("grammar_mcq", 2)],
-    [("error_correction", 2), ("gap_fill", 2), ("context_completion", 2), ("sentence_transformation", 2)],
-    [("sentence_combination", 2), ("error_correction", 2), ("grammar_mcq", 2), ("gap_fill", 2)],
+    # Mixed: including MCQ-style new types
+    [("error_correction", 2), ("paraphrase_rewrite", 2), ("gap_fill", 2), ("grammar_mcq", 2)],
+    [("grammar_function_id", 2), ("sentence_transformation", 2), ("gap_fill", 2), ("error_correction", 2)],
+    [("paraphrase_rewrite", 2), ("grammar_function_id", 2), ("error_correction", 2), ("grammar_mcq", 2)],
+    [("sentence_combination", 2), ("paraphrase_rewrite", 2), ("context_completion", 2), ("grammar_mcq", 2)],
     # New-type-heavy compositions
-    [("sentence_transformation", 3), ("sentence_combination", 2), ("context_completion", 2), ("grammar_mcq", 1)],
-    [("context_completion", 3), ("sentence_transformation", 2), ("error_correction", 2), ("gap_fill", 1)],
+    [("sentence_transformation", 2), ("sentence_combination", 2), ("paraphrase_rewrite", 2), ("grammar_function_id", 2)],
+    [("context_completion", 2), ("grammar_function_id", 2), ("error_correction", 2), ("paraphrase_rewrite", 2)],
+    [("paraphrase_rewrite", 2), ("sentence_transformation", 2), ("gap_fill", 2), ("grammar_function_id", 2)],
 ]
 
 # Compositions for topics where gap_fill is unsuitable (articles, prepositions, etc.)
 NO_GAP_FILL_COMPOSITIONS = [
     [("error_correction", 4), ("grammar_mcq", 4)],
-    [("error_correction", 3), ("grammar_mcq", 3), ("sentence_transformation", 2)],
-    [("grammar_mcq", 3), ("sentence_transformation", 2), ("error_correction", 3)],
-    [("error_correction", 2), ("sentence_combination", 2), ("grammar_mcq", 2), ("context_completion", 2)],
-    [("sentence_transformation", 2), ("context_completion", 2), ("grammar_mcq", 2), ("error_correction", 2)],
-    [("grammar_mcq", 3), ("error_correction", 3), ("sentence_combination", 2)],
+    [("error_correction", 2), ("grammar_mcq", 2), ("sentence_transformation", 2), ("paraphrase_rewrite", 2)],
+    [("grammar_function_id", 2), ("paraphrase_rewrite", 2), ("error_correction", 2), ("grammar_mcq", 2)],
+    [("error_correction", 2), ("sentence_combination", 2), ("context_completion", 2), ("grammar_function_id", 2)],
+    [("sentence_transformation", 2), ("paraphrase_rewrite", 2), ("grammar_mcq", 2), ("error_correction", 2)],
+    [("grammar_mcq", 2), ("error_correction", 2), ("sentence_combination", 2), ("grammar_function_id", 2)],
 ]
 
 
