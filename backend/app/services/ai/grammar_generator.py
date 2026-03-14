@@ -26,17 +26,25 @@ Create a grammar exercise targeting this grammar point:
 - Common error: {common_error}
 - Band level: {band_label}
 - IELTS context theme: {context_theme}
+- Sentence complexity: {sentence_complexity}
+- Error focus: {error_type}
+- Register: {register}
+- Paraphrase distance: {paraphrase_distance}
+- Cognitive difficulty: {cognitive_difficulty}
+- Skill integration: {skill_integration}
 
 STEP 1 — Write a grammar tip (2-3 sentences)
 - Briefly explain the grammar rule being tested
 - Include ONE clear example sentence demonstrating correct usage
 - Keep it concise and learner-friendly
 
-STEP 2 — Write a short IELTS-relevant context paragraph (80-150 words)
+STEP 2 — Write an IELTS-relevant context paragraph (200-300 words)
 - The paragraph should be about the context theme
-- It should naturally contain examples of the target grammar point
+- It should naturally contain multiple examples of the target grammar point
 - Use B2 to low C1 vocabulary
-- Academic but accessible tone
+- Write in the specified register (e.g. academic essay, news report, lecture transcript)
+- Prefer the specified sentence complexity where natural
+- Include enough grammar instances to demonstrate the pattern thoroughly
 
 STEP 3 — Create {total_questions} questions using this mix: {composition}
 (See format details below for each type.)
@@ -83,6 +91,12 @@ Return STRICT JSON only:
     "grammar_topic": "{grammar_topic_name}",
     "band_level": "{band_label}",
     "context_theme": "{context_theme}",
+    "sentence_complexity": "{sentence_complexity}",
+    "error_type": "{error_type}",
+    "register": "{register}",
+    "paraphrase_distance": "{paraphrase_distance}",
+    "cognitive_difficulty": "{cognitive_difficulty}",
+    "skill_integration": "{skill_integration}",
     "question_count": {total_questions}
   }},
   "questions": {{
@@ -163,6 +177,12 @@ class GrammarGenerator:
                     "key_pattern": metadata["grammar_topic"]["key_pattern"],
                     "band_level": metadata["band_label"],
                     "context_theme": metadata["context_theme"],
+                    "sentence_complexity": metadata.get("sentence_complexity", ""),
+                    "error_type": metadata.get("error_type", ""),
+                    "register": metadata.get("register", ""),
+                    "paraphrase_distance": metadata.get("paraphrase_distance", ""),
+                    "cognitive_difficulty": metadata.get("cognitive_difficulty", ""),
+                    "skill_integration": metadata.get("skill_integration", ""),
                     "question_count": metadata["total_questions"],
                 },
                 "grammar_tip": exercise_data.get("grammar_tip", ""),
@@ -197,6 +217,12 @@ class GrammarGenerator:
             common_error=topic["common_error"],
             band_label=metadata["band_label"],
             context_theme=metadata["context_theme"],
+            sentence_complexity=metadata.get("sentence_complexity", "complex"),
+            error_type=metadata.get("error_type", "substitution"),
+            register=metadata.get("register", "academic_essay"),
+            paraphrase_distance=metadata.get("paraphrase_distance", "medium"),
+            cognitive_difficulty=metadata.get("cognitive_difficulty", "production"),
+            skill_integration=metadata.get("skill_integration", "reading_grammar"),
             total_questions=metadata["total_questions"],
             composition=comp_str,
         )
@@ -209,7 +235,7 @@ class GrammarGenerator:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.7,
-                max_tokens=3000,
+                max_tokens=4000,
             )
             return self._parse_json(response.choices[0].message.content)
         except Exception as e:
