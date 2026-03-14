@@ -1024,8 +1024,18 @@ function AIGrammarExerciseView({
   const [vocabSaving, setVocabSaving] = useState(false);
   const [vocabDuplicate, setVocabDuplicate] = useState(false);
   const [vocabSaved, setVocabSaved] = useState(false);
+  const [grammarTipZh, setGrammarTipZh] = useState('');
 
   const groups = exercise.questions?.groups ?? [];
+
+  // Translate grammar tip for Chinese users
+  useEffect(() => {
+    if (language === 'zh' && exercise.grammar_tip) {
+      topicsAPI.translateDefinition('grammar_tip', exercise.grammar_tip)
+        .then(r => { if (r.data?.content_zh) setGrammarTipZh(r.data.content_zh); })
+        .catch(() => {});
+    }
+  }, [language, exercise.grammar_tip]);
 
   // ── Vocab selection handlers ──
   const handleTextSelect = () => {
@@ -1071,8 +1081,19 @@ function AIGrammarExerciseView({
         setVocabPhonetic(ipa);
         setVocabAudioUrl(audio);
         if (language === 'zh') {
-          topicsAPI.translateDefinition(word, parseDictionaryEntry(data))
-            .then(r => setVocabDefZh(r.data?.translation ?? ''))
+          const formatted = parseDictionaryEntry(data);
+          const quotes: string[] = [];
+          const tokenized = formatted.replace(/"([^"]*)"/g, (_: string, q: string) => {
+            quotes.push(`"${q}"`);
+            return `__Q${quotes.length - 1}__`;
+          });
+          topicsAPI.translateDefinition(word, tokenized)
+            .then(r => {
+              if (r.data?.content_zh) {
+                const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
+                setVocabDefZh(restored);
+              }
+            })
             .catch(() => {});
         }
       }
@@ -1233,8 +1254,8 @@ function AIGrammarExerciseView({
       {/* Grammar Tip */}
       {(exercise.grammar_tip || exercise.meta.key_pattern) && (
         <div className="grammar-tip">
-          <h3>💡 Grammar Tip</h3>
-          <p>{exercise.grammar_tip || `Key pattern: ${exercise.meta.key_pattern}`}</p>
+          <h3>💡 {language === 'zh' ? '语法提示' : 'Grammar Tip'}</h3>
+          <p>{(language === 'zh' && grammarTipZh) ? grammarTipZh : (exercise.grammar_tip || `Key pattern: ${exercise.meta.key_pattern}`)}</p>
         </div>
       )}
 
