@@ -330,11 +330,38 @@ export interface GrammarMCQItem {
   explanation: string;
 }
 
-export type GrammarQuestionType = 'error_correction' | 'gap_fill' | 'grammar_mcq';
+export interface GrammarTransformationItem {
+  question_number: number;
+  instruction: string;
+  original_sentence: string;
+  answer: string;
+  explanation: string;
+}
+
+export interface GrammarCombinationItem {
+  question_number: number;
+  sentences: string[];
+  instruction: string;
+  answer: string;
+  explanation: string;
+}
+
+export interface GrammarContextCompletionItem {
+  question_number: number;
+  paragraph: string;
+  hint: string;
+  answer: string;
+  explanation: string;
+}
+
+export type GrammarQuestionType =
+  | 'error_correction' | 'gap_fill' | 'grammar_mcq'
+  | 'sentence_transformation' | 'sentence_combination' | 'context_completion';
 
 export interface GrammarQuestionGroup {
   type: GrammarQuestionType;
-  items: GrammarErrorCorrectionItem[] | GrammarGapFillItem[] | GrammarMCQItem[];
+  items: (GrammarErrorCorrectionItem | GrammarGapFillItem | GrammarMCQItem
+    | GrammarTransformationItem | GrammarCombinationItem | GrammarContextCompletionItem)[];
 }
 
 export interface AIGrammarPractice {

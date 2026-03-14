@@ -1143,12 +1143,12 @@ function AIGrammarExerciseView({
         const key = `${group.type}_${item.question_number}`;
         const userAns = (userAnswers[key] || '').trim();
 
-        if (group.type === 'error_correction') {
-          // Compare corrected sentence — flexible: case-insensitive, trim punctuation
+        if (group.type === 'error_correction' || group.type === 'sentence_transformation' || group.type === 'sentence_combination') {
+          // Compare full sentence — flexible: case-insensitive, trim punctuation
           const expected = (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
           const given = userAns.toLowerCase().replace(/[.!?]+$/, '');
           if (given === expected) correct++;
-        } else if (group.type === 'gap_fill') {
+        } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           // Compare answer word(s) — case-insensitive
           if (userAns.toLowerCase() === (item.answer || '').trim().toLowerCase()) correct++;
         } else if (group.type === 'grammar_mcq') {
@@ -1195,9 +1195,9 @@ function AIGrammarExerciseView({
         const key = `${group.type}_${item.question_number}`;
         const userAns = (userAnswers[key] || '').trim();
         let wrong = false;
-        if (group.type === 'error_correction') {
+        if (group.type === 'error_correction' || group.type === 'sentence_transformation' || group.type === 'sentence_combination') {
           wrong = userAns.toLowerCase().replace(/[.!?]+$/, '') !== (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
-        } else if (group.type === 'gap_fill') {
+        } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           wrong = userAns.toLowerCase() !== (item.answer || '').trim().toLowerCase();
         } else if (group.type === 'grammar_mcq') {
           wrong = userAns !== item.answer;
@@ -1213,11 +1213,19 @@ function AIGrammarExerciseView({
             cardTitle = item.sentence.replace('___', `___ (${item.hint})`);
             cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
           } else if (group.type === 'grammar_mcq') {
-            // Include options in title so user can attempt the question
             const optLines = Object.entries(item.options || {}).map(([k, v]) => `${k}) ${v}`).join('  ');
             cardTitle = `${item.question}\n${optLines}`;
             const correctText = item.options?.[item.answer] || item.answer;
             cardContent = `✓ ${item.answer}) ${correctText}\n\n${item.explanation}`;
+          } else if (group.type === 'sentence_transformation') {
+            cardTitle = `${item.instruction}: ${item.original_sentence}`;
+            cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
+          } else if (group.type === 'sentence_combination') {
+            cardTitle = `${item.instruction}: ${(item.sentences || []).join(' + ')}`;
+            cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
+          } else if (group.type === 'context_completion') {
+            cardTitle = (item.paragraph || '').replace('___', `___ (${item.hint || '...'})`);
+            cardContent = `✓ ${item.answer}\n\n${item.explanation}`;
           }
           topicsAPI.create({
             title: cardTitle || `${exercise.meta.grammar_topic} — Q${item.question_number}`,
@@ -1233,9 +1241,9 @@ function AIGrammarExerciseView({
   const isCorrect = (groupType: string, item: any) => {
     const key = `${groupType}_${item.question_number}`;
     const userAns = (userAnswers[key] || '').trim();
-    if (groupType === 'error_correction') {
+    if (groupType === 'error_correction' || groupType === 'sentence_transformation' || groupType === 'sentence_combination') {
       return userAns.toLowerCase().replace(/[.!?]+$/, '') === (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
-    } else if (groupType === 'gap_fill') {
+    } else if (groupType === 'gap_fill' || groupType === 'context_completion') {
       return userAns.toLowerCase() === (item.answer || '').trim().toLowerCase();
     } else if (groupType === 'grammar_mcq') {
       return userAns === item.answer;
@@ -1273,6 +1281,9 @@ function AIGrammarExerciseView({
               {group.type === 'error_correction' && 'Error Correction'}
               {group.type === 'gap_fill' && 'Gap Fill'}
               {group.type === 'grammar_mcq' && 'Multiple Choice'}
+              {group.type === 'sentence_transformation' && 'Sentence Transformation'}
+              {group.type === 'sentence_combination' && 'Sentence Combination'}
+              {group.type === 'context_completion' && 'Context Completion'}
             </h3>
             {group.type === 'error_correction' && (
               <p className="group-instruction">Find and correct the grammatical error in each sentence.</p>
@@ -1282,6 +1293,15 @@ function AIGrammarExerciseView({
             )}
             {group.type === 'grammar_mcq' && (
               <p className="group-instruction">Choose the correct option.</p>
+            )}
+            {group.type === 'sentence_transformation' && (
+              <p className="group-instruction">Rewrite each sentence as instructed.</p>
+            )}
+            {group.type === 'sentence_combination' && (
+              <p className="group-instruction">Combine the sentences using the specified grammar structure.</p>
+            )}
+            {group.type === 'context_completion' && (
+              <p className="group-instruction">Complete the gap with the correct grammatical structure.</p>
             )}
 
             {(group.items as any[]).map((item, qi) => {
@@ -1376,6 +1396,88 @@ function AIGrammarExerciseView({
                       </div>
                       {submitted && (
                         <div className="q-feedback">
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'sentence_transformation' && (
+                    <div className="q-body">
+                      <p className="q-instruction-text">{item.instruction}</p>
+                      <p className="q-sentence">{item.original_sentence}</p>
+                      <input
+                        type="text"
+                        className="grammar-input"
+                        placeholder="Type the transformed sentence…"
+                        value={userAnswers[key] || ''}
+                        onChange={e => setUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                        disabled={submitted}
+                      />
+                      {submitted && (
+                        <div className="q-feedback">
+                          {correct
+                            ? <span className="feedback-correct"><Check size={14} /> Correct</span>
+                            : <span className="feedback-incorrect"><X size={14} /> Your answer differs from the expected transformation</span>}
+                          {!correct && <p className="correct-answer">Correct: {item.answer}</p>}
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'sentence_combination' && (
+                    <div className="q-body">
+                      <p className="q-instruction-text">{item.instruction}</p>
+                      <div className="combination-sentences">
+                        {(item.sentences as string[] || []).map((s: string, si: number) => (
+                          <p key={si} className="q-sentence">• {s}</p>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        className="grammar-input"
+                        placeholder="Type the combined sentence…"
+                        value={userAnswers[key] || ''}
+                        onChange={e => setUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                        disabled={submitted}
+                      />
+                      {submitted && (
+                        <div className="q-feedback">
+                          {correct
+                            ? <span className="feedback-correct"><Check size={14} /> Correct</span>
+                            : <span className="feedback-incorrect"><X size={14} /> Your combined sentence differs from the expected answer</span>}
+                          {!correct && <p className="correct-answer">Correct: {item.answer}</p>}
+                          <p className="q-explanation">{item.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {group.type === 'context_completion' && (
+                    <div className="q-body">
+                      <p className="q-sentence">
+                        {(item.paragraph || '').split('___').map((part: string, pi: number, arr: string[]) => (
+                          <React.Fragment key={pi}>
+                            {part}
+                            {pi < arr.length - 1 && (
+                              <input
+                                type="text"
+                                className="gap-input"
+                                placeholder={item.hint || 'complete the gap'}
+                                value={userAnswers[key] || ''}
+                                onChange={e => setUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                                disabled={submitted}
+                              />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </p>
+                      {submitted && (
+                        <div className="q-feedback">
+                          {correct
+                            ? <span className="feedback-correct"><Check size={14} /> Correct</span>
+                            : <span className="feedback-incorrect"><X size={14} /> Answer: <strong>{item.answer}</strong></span>}
                           <p className="q-explanation">{item.explanation}</p>
                         </div>
                       )}
