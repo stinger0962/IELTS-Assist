@@ -166,7 +166,10 @@ class GrammarGenerator:
                     "question_count": metadata["total_questions"],
                 },
                 "grammar_tip": exercise_data.get("grammar_tip", ""),
-                "highlight_phrases": exercise_data.get("highlight_phrases", []),
+                "highlight_phrases": self._validate_highlights(
+                    exercise_data.get("highlight_phrases", []),
+                    exercise_data["context"],
+                ),
                 "context": exercise_data["context"],
                 "questions": exercise_data.get("questions", {"groups": []}),
             }
@@ -230,6 +233,25 @@ class GrammarGenerator:
         except Exception as e:
             print(f"Grammar validation error: {e}")
             return {"valid": False, "issues": [str(e)]}
+
+    @staticmethod
+    def _validate_highlights(phrases: list[str], context: str) -> list[str]:
+        """Keep only phrases that actually appear in the context (case-insensitive).
+
+        For phrases that don't match exactly, try to find them case-insensitively
+        and return the exact substring from the context so highlighting works.
+        """
+        ctx_lower = context.lower()
+        result = []
+        for phrase in phrases:
+            if phrase in context:
+                result.append(phrase)
+            elif phrase.lower() in ctx_lower:
+                # Find the exact-case version from the context
+                idx = ctx_lower.index(phrase.lower())
+                result.append(context[idx:idx + len(phrase)])
+            # else: phrase doesn't exist in context at all — drop it
+        return result
 
     @staticmethod
     def _parse_json(text: str) -> dict | None:
