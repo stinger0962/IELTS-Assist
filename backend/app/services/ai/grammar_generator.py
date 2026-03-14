@@ -39,6 +39,12 @@ STEP 2 — Write a short IELTS-relevant context paragraph (80-150 words)
 - Academic but accessible tone
 
 STEP 3 — Create {total_questions} questions using this mix: {composition}
+(See format details below for each type.)
+
+STEP 4 — Extract highlight phrases
+After writing the context paragraph, go back and find ALL instances of the target grammar point in it.
+List every occurrence as an exact substring copied from the context.
+Do NOT invent phrases — only copy verbatim from the context you wrote in Step 2.
 
 For error_correction:
 - Provide a sentence that contains ONE grammatical error related to the target grammar topic
@@ -71,8 +77,8 @@ IMPORTANT RULES:
 Return STRICT JSON only:
 {{
   "grammar_tip": "Brief explanation of the grammar rule + one example sentence.",
-  "highlight_phrases": ["exact phrase 1", "exact phrase 2", "exact phrase 3", "exact phrase 4", "exact phrase 5"],
   "context": "the context paragraph text",
+  "highlight_phrases": ["exact phrase from context 1", "exact phrase from context 2", "...all occurrences"],
   "meta": {{
     "grammar_topic": "{grammar_topic_name}",
     "band_level": "{band_label}",
