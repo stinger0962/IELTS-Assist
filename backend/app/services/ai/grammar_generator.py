@@ -71,7 +71,7 @@ IMPORTANT RULES:
 Return STRICT JSON only:
 {{
   "grammar_tip": "Brief explanation of the grammar rule + one example sentence.",
-  "highlight_phrases": ["phrase from context 1", "phrase from context 2"],
+  "highlight_phrases": ["exact phrase 1", "exact phrase 2", "exact phrase 3", "exact phrase 4", "exact phrase 5"],
   "context": "the context paragraph text",
   "meta": {{
     "grammar_topic": "{grammar_topic_name}",
@@ -97,7 +97,15 @@ Return STRICT JSON only:
   }}
 }}
 
-The "highlight_phrases" array must contain the EXACT phrases or words from the context paragraph that demonstrate the target grammar point. These will be highlighted in the UI so the learner can see the grammar in action.
+CRITICAL — "highlight_phrases" rules:
+- Scan the ENTIRE context paragraph and find ALL instances of the target grammar point
+- Include EVERY occurrence, not just 1 or 2 — if the grammar appears 7 times, list all 7
+- Each phrase must be the EXACT substring from the context (copy-paste, not paraphrased)
+- Keep phrases short: just the grammar structure itself (e.g. "have been researched", "are taught"), not the full sentence
+- For passive voice: highlight every "be + past participle" phrase
+- For conditionals: highlight every "if... would/will" clause
+- For articles: highlight every "a/an/the" + noun phrase
+- The UI highlights these for learners, so completeness is essential
 
 Only include groups that have questions assigned. Do not include empty groups.
 Do not include explanations outside the JSON. Return JSON only.'''
