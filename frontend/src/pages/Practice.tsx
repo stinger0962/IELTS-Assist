@@ -1133,6 +1133,15 @@ function AIGrammarExerciseView({
     );
   };
 
+  // Normalize sentence for comparison: loose on punctuation (commas, semicolons, colons, periods)
+  const normalizeSentence = (s: string) =>
+    s.trim().toLowerCase()
+      .replace(/[;:]/g, '.')   // treat ; and : as .
+      .replace(/,/g, '')       // strip commas (Oxford comma, appositives)
+      .replace(/[.!?]+$/, '')  // strip trailing sentence punctuation
+      .replace(/\s+/g, ' ')   // collapse whitespace
+      .trim();
+
   const handleSubmit = async () => {
     let correct = 0;
     let total = 0;
@@ -1144,10 +1153,8 @@ function AIGrammarExerciseView({
         const userAns = (userAnswers[key] || '').trim();
 
         if (group.type === 'error_correction' || group.type === 'sentence_transformation' || group.type === 'sentence_combination') {
-          // Compare full sentence — flexible: case-insensitive, trim punctuation
-          const expected = (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
-          const given = userAns.toLowerCase().replace(/[.!?]+$/, '');
-          if (given === expected) correct++;
+          // Compare full sentence — flexible: case-insensitive, loose punctuation
+          if (normalizeSentence(userAns) === normalizeSentence(item.answer || '')) correct++;
         } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           // Compare answer word(s) — case-insensitive
           if (userAns.toLowerCase() === (item.answer || '').trim().toLowerCase()) correct++;
@@ -1196,7 +1203,7 @@ function AIGrammarExerciseView({
         const userAns = (userAnswers[key] || '').trim();
         let wrong = false;
         if (group.type === 'error_correction' || group.type === 'sentence_transformation' || group.type === 'sentence_combination') {
-          wrong = userAns.toLowerCase().replace(/[.!?]+$/, '') !== (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+          wrong = normalizeSentence(userAns) !== normalizeSentence(item.answer || '');
         } else if (group.type === 'gap_fill' || group.type === 'context_completion') {
           wrong = userAns.toLowerCase() !== (item.answer || '').trim().toLowerCase();
         } else if (group.type === 'grammar_mcq' || group.type === 'paraphrase_rewrite' || group.type === 'grammar_function_id') {
@@ -1252,7 +1259,7 @@ function AIGrammarExerciseView({
     const key = `${groupType}_${item.question_number}`;
     const userAns = (userAnswers[key] || '').trim();
     if (groupType === 'error_correction' || groupType === 'sentence_transformation' || groupType === 'sentence_combination') {
-      return userAns.toLowerCase().replace(/[.!?]+$/, '') === (item.answer || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+      return normalizeSentence(userAns) === normalizeSentence(item.answer || '');
     } else if (groupType === 'gap_fill' || groupType === 'context_completion') {
       return userAns.toLowerCase() === (item.answer || '').trim().toLowerCase();
     } else if (groupType === 'grammar_mcq' || groupType === 'paraphrase_rewrite' || groupType === 'grammar_function_id') {
