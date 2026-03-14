@@ -166,8 +166,14 @@ def daily_generate() -> None:
             .all()
         )
         grammar_avoid = [r[0] for r in recent_grammar if r[0]]
-        for _ in range(2):
-            practice = grammar_generator.generate(avoid_topics=grammar_avoid)
+        # Rotate bands so daily batch covers different levels
+        bands = ["band_5_6", "band_6_7", "band_7_8"]
+        random.shuffle(bands)
+        for i in range(2):
+            practice = grammar_generator.generate(
+                avoid_topics=grammar_avoid,
+                prefer_band=bands[i],
+            )
             if practice:
                 db.add(GeneratedPractice(
                     skill="grammar",
@@ -761,8 +767,13 @@ def _replenish_grammar(user_id: int) -> None:
             .all()
         )
         avoid_list = [r[0] for r in recent if r[0]]
-        for _ in range(needed):
-            practice = grammar_generator.generate(avoid_topics=avoid_list)
+        bands = ["band_5_6", "band_6_7", "band_7_8"]
+        random.shuffle(bands)
+        for i in range(needed):
+            practice = grammar_generator.generate(
+                avoid_topics=avoid_list,
+                prefer_band=bands[i % len(bands)],
+            )
             if practice:
                 db.add(GeneratedPractice(
                     skill="grammar",

@@ -193,7 +193,7 @@ class GrammarGenerator:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = "gpt-4o-mini"
 
-    def generate(self, avoid_topics: list[str] | None = None) -> dict | None:
+    def generate(self, avoid_topics: list[str] | None = None, prefer_band: str | None = None) -> dict | None:
         """Generate a single grammar exercise via 2-step pipeline.
 
         Step 1: Generate context + exercises (GPT call #1)
@@ -201,7 +201,7 @@ class GrammarGenerator:
         """
         result = None
         for attempt in range(3):
-            metadata = generate_metadata(avoid_topics=avoid_topics)
+            metadata = generate_metadata(avoid_topics=avoid_topics, prefer_band=prefer_band)
 
             # Step 1: Generate exercises
             exercise_data = self._generate_exercises(metadata)

@@ -159,8 +159,15 @@ NO_GAP_FILL_COMPOSITIONS = [
 
 # ─── Metadata Generator ───────────────────────────────────────────────────
 
-def generate_metadata(avoid_topics: list[str] | None = None) -> dict:
+def generate_metadata(
+    avoid_topics: list[str] | None = None,
+    prefer_band: str | None = None,
+) -> dict:
     """Generate grammar exercise metadata via pure Python randomization.
+
+    Args:
+        avoid_topics: topic names to exclude (recently used)
+        prefer_band: optional band key (band_5_6, band_6_7, band_7_8) to prefer
 
     Returns a dict with: grammar_topic (full object), band_level, 12 dimensions,
     exercise_composition, total_questions.
@@ -176,6 +183,12 @@ def generate_metadata(avoid_topics: list[str] | None = None) -> dict:
 
     if not all_topics:
         all_topics = [(band, t) for band, topics in GRAMMAR_TOPICS.items() for t in topics]
+
+    # If prefer_band specified, try to filter to that band
+    if prefer_band and prefer_band in GRAMMAR_TOPICS:
+        band_filtered = [(b, t) for b, t in all_topics if b == prefer_band]
+        if band_filtered:
+            all_topics = band_filtered
 
     band_level, grammar_topic = random.choice(all_topics)
 
