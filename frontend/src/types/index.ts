@@ -383,6 +383,65 @@ export interface GrammarQuestionGroup {
     | GrammarParaphraseItem | GrammarFunctionIdItem)[];
 }
 
+// AI Writing practice types
+export interface WritingAnnotation {
+  start_char: number;
+  end_char: number;
+  original_text: string;
+  category: 'grammar' | 'vocabulary' | 'spelling' | 'punctuation' | 'coherence' | 'style';
+  suggestion: string;
+  severity: 'minor' | 'major';
+}
+
+export interface WritingCriterionScore {
+  band: number;
+  evidence: string;
+  task_completion?: {
+    answered_all_parts: boolean;
+    clear_position: boolean;
+    sufficient_support: boolean;
+    paragraphing_effective: boolean;
+  };
+}
+
+export interface WritingExaminerResult {
+  task_response: WritingCriterionScore;
+  coherence_cohesion: WritingCriterionScore;
+  lexical_resource: WritingCriterionScore;
+  grammatical_range_accuracy: WritingCriterionScore;
+  overall_band: number;
+}
+
+export interface WritingCoachingFeedback {
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+}
+
+export interface WritingGradingResult {
+  examiner_result: WritingExaminerResult;
+  coaching_feedback: WritingCoachingFeedback;
+  annotations: WritingAnnotation[];
+  grader_version: string;
+  model: string;
+}
+
+export interface AIWritingPractice {
+  practice_db_id?: number;
+  meta: {
+    module: string;
+    essay_type: string;
+    domain: string;
+    topic: string;
+    word_limit: { min: number; recommended: number };
+  };
+  prompt: {
+    statement: string;
+    instruction: string;
+    notes: string;
+  };
+}
+
 export interface AIGrammarPractice {
   practice_db_id?: number;
   meta: {

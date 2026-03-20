@@ -123,6 +123,12 @@ export const practiceAPI = {
     correct_count: correctCount,
     total_questions: totalQuestions,
   }),
+  getDailyWriting: () => api.get('/generate/daily-writing'),
+  generateMoreWriting: () => api.post('/generate/generate-more-writing'),
+  submitAIWriting: (practiceId: number, essay: string, timeSeconds: number, mode: string) =>
+    api.post('/generate/submit-ai-writing', {
+      practice_id: practiceId, essay, time_seconds: timeSeconds, submission_mode: mode,
+    }),
   getListening: () => api.get('/practice/listening'),
   getWriting: () => api.get('/practice/writing'),
   getSpeaking: () => api.get('/practice/speaking'),
