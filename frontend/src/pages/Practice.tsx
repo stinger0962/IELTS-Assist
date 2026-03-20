@@ -3085,7 +3085,7 @@ export default function Practice() {
                   <button key={i} className="exercise-item" onClick={() => handleSelectAIWriting(ex)}>
                     <span className="exercise-title">{ex.meta.topic}</span>
                     <span className="exercise-meta">
-                      {ex.meta.essay_type.replace(/_/g, ' ')} · {ex.meta.domain}
+                      {ESSAY_TYPE_LABELS[ex.meta.essay_type] || ex.meta.essay_type.replace(/_/g, ' ')} · {ex.meta.domain} · 250w
                     </span>
                   </button>
                 ))

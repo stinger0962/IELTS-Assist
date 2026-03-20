@@ -221,7 +221,7 @@ def daily_generate() -> None:
                         "module": "writing_task2",
                         "essay_type": prompt_data["essay_type"],
                         "domain": prompt_data["domain"],
-                        "topic": prompt_data["statement"][:60],
+                        "topic": prompt_data.get("topic_title", prompt_data["statement"][:60]),
                         "word_limit": {"min": 250, "recommended": 280},
                     },
                     "prompt": {
@@ -233,7 +233,7 @@ def daily_generate() -> None:
                 }
                 db.add(GeneratedPractice(
                     skill="writing",
-                    topic=prompt_data["statement"][:60],
+                    topic=prompt_data.get("topic_title", prompt_data["statement"][:60]),
                     content=json.dumps(content),
                     is_validated=True,
                     generated_date=datetime.utcnow(),
@@ -1019,7 +1019,7 @@ def _replenish_writing(user_id: int) -> None:
                         "module": "writing_task2",
                         "essay_type": prompt_data["essay_type"],
                         "domain": prompt_data["domain"],
-                        "topic": prompt_data["statement"][:60],
+                        "topic": prompt_data.get("topic_title", prompt_data["statement"][:60]),
                         "word_limit": {"min": 250, "recommended": 280},
                     },
                     "prompt": {
@@ -1031,7 +1031,7 @@ def _replenish_writing(user_id: int) -> None:
                 }
                 db.add(GeneratedPractice(
                     skill="writing",
-                    topic=prompt_data["statement"][:60],
+                    topic=prompt_data.get("topic_title", prompt_data["statement"][:60]),
                     content=json.dumps(content),
                     is_validated=True,
                     generated_date=datetime.utcnow(),
@@ -1138,7 +1138,7 @@ def _seed_writing_pool(db: Session, count: int = 5) -> None:
                     "module": "writing_task2",
                     "essay_type": prompt_data["essay_type"],
                     "domain": prompt_data["domain"],
-                    "topic": prompt_data["statement"][:60],
+                    "topic": prompt_data.get("topic_title", prompt_data["statement"][:60]),
                     "word_limit": {"min": 250, "recommended": 280},
                 },
                 "prompt": {
@@ -1150,7 +1150,7 @@ def _seed_writing_pool(db: Session, count: int = 5) -> None:
             }
             db.add(GeneratedPractice(
                 skill="writing",
-                topic=prompt_data["statement"][:60],
+                topic=prompt_data.get("topic_title", prompt_data["statement"][:60]),
                 content=json.dumps(content),
                 is_validated=True,
                 generated_date=datetime.utcnow(),
