@@ -1015,16 +1015,17 @@ def generate_metadata(
     avoid_d = set(avoid_domains or [])
     avoid_ty = set(avoid_types or [])
 
+    # Pool stores topic as statement[:60], so compare against statement prefix
     candidates = [
         p for p in WRITING_PROMPTS
-        if p["topic"] not in avoid_t
+        if p["statement"][:60] not in avoid_t
         and p["domain"] not in avoid_d
         and p["essay_type"] not in avoid_ty
     ]
 
     if not candidates:
         # Relax: only avoid topics
-        candidates = [p for p in WRITING_PROMPTS if p["topic"] not in avoid_t]
+        candidates = [p for p in WRITING_PROMPTS if p["statement"][:60] not in avoid_t]
 
     if not candidates:
         # Fully relax
