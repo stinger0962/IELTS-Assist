@@ -442,6 +442,45 @@ export interface AIWritingPractice {
   };
 }
 
+// AI Speaking practice types
+export interface SpeakingCueCard {
+  topic_line: string;
+  bullets: string[];
+  follow_up: string;
+}
+
+export interface AISpeakingPractice {
+  practice_db_id: number;
+  meta: { module: string; domain: string; topic: string };
+  cue_card: SpeakingCueCard;
+  cue_card_metadata: Record<string, any>;
+}
+
+export interface SpeakingPronunciationWord {
+  word: string;
+  accuracy_score: number;
+  error_type: string;
+}
+
+export interface SpeakingGradingResult {
+  examiner_result: {
+    fluency_coherence: { band: number; evidence: string };
+    lexical_resource: { band: number; evidence: string };
+    grammatical_range_accuracy: { band: number; evidence: string };
+    pronunciation: { band: number; evidence: string; azure_scores?: Record<string, number> };
+    overall_band: number;
+  };
+  coaching_feedback: {
+    summary: string;
+    strengths: string[];
+    improvements: string[];
+  };
+  transcript: string;
+  pronunciation_words?: SpeakingPronunciationWord[];
+  grader_version: string;
+  model: string;
+}
+
 export interface AIGrammarPractice {
   practice_db_id?: number;
   meta: {

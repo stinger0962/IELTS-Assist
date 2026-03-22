@@ -3,14 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Sparkles, RefreshCw, ChevronLeft, Type } from 'lucide-react';
 import { practiceAPI } from '../api';
 import type {
-  SkillType, SpeakingTopic,
+  SkillType,
   AIReadingPractice, AIListeningPractice, AIGrammarPractice,
-  AIWritingPractice,
+  AIWritingPractice, AISpeakingPractice,
 } from '../types';
 import AIReadingExerciseView from '../components/practice/AIReadingView';
 import AIListeningExerciseView from '../components/practice/AIListeningView';
 import AIWritingExerciseView from '../components/practice/AIWritingView';
 import AIGrammarExerciseView from '../components/practice/AIGrammarView';
+import AISpeakingExerciseView from '../components/practice/AISpeakingView';
 
 const skillConfig = [
   { type: 'reading' as SkillType, icon: BookOpen, color: '#4F46E5' },
@@ -56,7 +57,11 @@ export default function Practice() {
   const [writingGeneratingMore, setWritingGeneratingMore] = useState(false);
   const [writingPoolEmpty, setWritingPoolEmpty] = useState(false);
 
-  const [speakingTopics, setSpeakingTopics] = useState<SpeakingTopic[]>([]);
+  const [aiSpeakingExercises, setAISpeakingExercises] = useState<AISpeakingPractice[]>([]);
+  const [currentAISpeaking, setCurrentAISpeaking] = useState<AISpeakingPractice | null>(null);
+  const [speakingLoading, setSpeakingLoading] = useState(false);
+  const [speakingGeneratingMore, setSpeakingGeneratingMore] = useState(false);
+  const [speakingPoolEmpty, setSpeakingPoolEmpty] = useState(false);
 
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<{ correct: number; total: number } | null>(null);
@@ -120,18 +125,27 @@ export default function Practice() {
     }
   };
 
+  const loadAISpeakingExercises = async () => {
+    setSpeakingLoading(true);
+    try {
+      const res = await practiceAPI.getDailySpeaking();
+      const practices = res.data?.practices;
+      setAISpeakingExercises(Array.isArray(practices) ? practices : []);
+      setSpeakingPoolEmpty(false);
+    } catch {
+      // keep existing list
+    } finally {
+      setSpeakingLoading(false);
+    }
+  };
+
   const loadExercises = async () => {
     setLoading(true);
     loadAIReadingExercises();
     loadAIListeningExercises();
     loadAIGrammarExercises();
     loadAIWritingExercises();
-
-    const [speaking] = await Promise.allSettled([
-      practiceAPI.getSpeaking(),
-    ]);
-
-    if (speaking.status === 'fulfilled') setSpeakingTopics(Array.isArray(speaking.value.data) ? speaking.value.data : []);
+    loadAISpeakingExercises();
     setLoading(false);
   };
 
@@ -232,6 +246,30 @@ export default function Practice() {
     }
   };
 
+  const handleSelectAISpeaking = (ex: AISpeakingPractice) => {
+    setCurrentAISpeaking(ex);
+  };
+
+  const handleGenerateMoreSpeaking = async () => {
+    setSpeakingGeneratingMore(true);
+    try {
+      const res = await practiceAPI.generateMoreSpeaking();
+      if (res.data?.pool_empty) {
+        setSpeakingPoolEmpty(true);
+      } else {
+        const newPractices: AISpeakingPractice[] = res.data?.practices ?? [];
+        if (newPractices.length > 0) {
+          setAISpeakingExercises(prev => [...prev, ...newPractices]);
+          setSpeakingPoolEmpty(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate more speaking:', err);
+    } finally {
+      setSpeakingGeneratingMore(false);
+    }
+  };
+
   const handleComplete = (correct: number, total: number) => {
     setResult({ correct, total });
     setShowResult(true);
@@ -242,12 +280,14 @@ export default function Practice() {
     setCurrentAIListening(null);
     setCurrentAIGrammar(null);
     setCurrentAIWriting(null);
+    setCurrentAISpeaking(null);
     setShowResult(false);
     setResult(null);
     loadAIReadingExercises();
     loadAIListeningExercises();
     loadAIGrammarExercises();
     loadAIWritingExercises();
+    loadAISpeakingExercises();
   };
 
   // Result screen
@@ -312,6 +352,17 @@ export default function Practice() {
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <AIWritingExerciseView exercise={currentAIWriting} onBack={handleBack} />
+        <style>{sharedExerciseStyles}</style>
+      </div>
+    );
+  }
+
+  // AI Speaking exercise view
+  if (currentAISpeaking) {
+    return (
+      <div className="practice">
+        <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
+        <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
         <style>{sharedExerciseStyles}</style>
       </div>
     );
@@ -526,19 +577,51 @@ export default function Practice() {
             </div>
           </div>
 
-          {/* Speaking */}
+          {/* Speaking — AI */}
           <div className="practice-section">
             <div className="section-header" style={{ borderColor: skillConfig[3].color }}>
               <MessageCircle size={24} style={{ color: skillConfig[3].color }} />
               <h2>{t('practice.speaking')}</h2>
+              <span className="ai-chip"><Sparkles size={11} /> AI</span>
             </div>
             <div className="exercise-list">
-              {speakingTopics.map(topic => (
-                <button key={topic.id} className="exercise-item" onClick={() => alert(`Speaking Topic (${topic.part}):\n\n${topic.question}`)}>
-                  <span className="exercise-title">{topic.part.toUpperCase()}</span>
-                  <span className="exercise-meta">Click to view</span>
-                </button>
-              ))}
+              {speakingLoading ? (
+                <div className="generating-msg">
+                  <div className="loading-spinner-sm" />
+                  <span>Loading speaking exercises...</span>
+                </div>
+              ) : aiSpeakingExercises.length === 0 ? (
+                <p className="empty-list">No exercises yet — click Generate below.</p>
+              ) : (
+                aiSpeakingExercises.map((ex, i) => (
+                  <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
+                    <span className="exercise-title">{ex.meta.topic}</span>
+                    <span className="exercise-meta">
+                      {ex.meta.domain} · Part 2
+                    </span>
+                  </button>
+                ))
+              )}
+              {aiSpeakingExercises.length < 3 && (
+                speakingPoolEmpty ? (
+                  <div className="pool-empty-msg">
+                    <span>Next exercise generating in background (~2 min)</span>
+                    <button className="retry-link" onClick={handleGenerateMoreSpeaking} disabled={speakingGeneratingMore}>
+                      {speakingGeneratingMore ? 'Checking...' : 'Retry'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="generate-more-btn"
+                    onClick={handleGenerateMoreSpeaking}
+                    disabled={speakingGeneratingMore}
+                  >
+                    {speakingGeneratingMore
+                      ? <><div className="loading-spinner-sm" /> Checking pool...</>
+                      : <><RefreshCw size={13} /> Generate More</>}
+                  </button>
+                )
+              )}
             </div>
           </div>
         </div>

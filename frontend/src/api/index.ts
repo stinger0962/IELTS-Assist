@@ -123,6 +123,17 @@ export const practiceAPI = {
     correct_count: correctCount,
     total_questions: totalQuestions,
   }),
+  getDailySpeaking: () => api.get('/generate/daily-speaking'),
+  generateMoreSpeaking: () => api.post('/generate/generate-more-speaking'),
+  submitAISpeaking: (audio: Blob, practiceId: number) => {
+    const formData = new FormData();
+    formData.append('audio', audio, 'recording.webm');
+    formData.append('practice_id', practiceId.toString());
+    return api.post('/generate/submit-ai-speaking', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+  },
   getDailyWriting: () => api.get('/generate/daily-writing'),
   generateMoreWriting: () => api.post('/generate/generate-more-writing'),
   submitAIWriting: (practiceId: number, essay: string, timeSeconds: number, mode: string) =>
