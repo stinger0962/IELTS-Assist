@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, generate, goals, grammar, listening, mistakes, practice, progress, reading, topics, writing
+from app.routers import auth, generate, goals, grammar, listening, mistakes, practice, progress, reading, speaking, topics, writing
 from app.routers.generate import daily_generate
 
 
@@ -65,6 +65,7 @@ app.include_router(reading.router, prefix=f"{settings.API_PREFIX}/generate", tag
 app.include_router(listening.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(grammar.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(writing.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
+app.include_router(speaking.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(goals.router, prefix=f"{settings.API_PREFIX}/goals", tags=["Goals"])
 
 @app.exception_handler(Exception)
