@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     YOUDAO_APP_KEY: str = ""
     YOUDAO_APP_SECRET: str = ""
 
+    # Azure Speech — pronunciation assessment
+    AZURE_SPEECH_KEY: str = ""
+    AZURE_SPEECH_REGION: str = ""
+
     # Google Cloud TTS — listening practice audio
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
     TTS_AUDIO_DIR: str = "/var/www/ielts-assist/audio"
