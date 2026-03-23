@@ -137,31 +137,32 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
     setStage('processing');
     try {
       const res = await practiceAPI.submitAISpeaking(blob, exercise.practice_db_id);
+      console.log('[Speaking] Grading response:', res.status, res.data);
       const result = res.data as SpeakingGradingResult;
       setGrading(result);
       setStage('results');
 
-      // Update progress
+      // Update progress (fire-and-forget — don't let failures hide grading results)
       const overallBand = result?.examiner_result?.overall_band ?? 0;
       const minutes = Math.min(Math.round(recordTime / 60) + 1, 30);
-      await progressAPI.updateProgress({
+      progressAPI.updateProgress({
         skill: 'speaking',
         band_score: overallBand,
         correct_answers: 0,
         total_questions: 4,
         study_time_minutes: minutes,
-      });
-      await progressAPI.createSession({
+      }).catch(e => console.warn('[Speaking] Progress update failed:', e));
+      progressAPI.createSession({
         skill: 'speaking',
         duration_minutes: minutes,
         notes: `Speaking Part 2 (${exercise.meta.domain}) — Band ${overallBand}`,
-      });
+      }).catch(e => console.warn('[Speaking] Session create failed:', e));
     } catch (err: any) {
-      console.error('[Speaking] Submit error:', err?.response?.status, err?.response?.data);
+      console.error('[Speaking] Submit error:', err?.response?.status, err?.response?.data, err?.message);
       const detail = err?.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail
         : Array.isArray(detail) ? detail.map((d: any) => d.msg || d).join('; ')
-        : 'Grading failed. Please try again.';
+        : `Grading failed: ${err?.message || 'Please try again.'}`;
       setError(msg);
       setStage('cue_card');
     }

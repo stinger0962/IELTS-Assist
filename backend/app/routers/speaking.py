@@ -227,6 +227,7 @@ async def submit_ai_speaking(
         Path(tmp_in_path).unlink(missing_ok=True)
 
     # Step 1: Whisper transcription
+    logger.info(f"[Speaking] Step 1: Whisper transcription for user {current_user.id}, wav size={Path(wav_path).stat().st_size}")
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     try:
         with open(wav_path, "rb") as f:
@@ -236,28 +237,37 @@ async def submit_ai_speaking(
                 response_format="text",
             )
         transcript = whisper_result.strip() if isinstance(whisper_result, str) else whisper_result.text.strip()
+        logger.info(f"[Speaking] Whisper OK: {len(transcript)} chars, first 100: {transcript[:100]}")
     except Exception as e:
-        logger.error(f"Whisper transcription failed: {e}")
+        logger.error(f"[Speaking] Whisper FAILED: {e}")
         Path(wav_path).unlink(missing_ok=True)
         raise HTTPException(500, "Transcription failed. Please try again.")
 
     if not transcript or len(transcript) < 10:
+        logger.warning(f"[Speaking] Transcript too short: '{transcript}'")
         Path(wav_path).unlink(missing_ok=True)
         raise HTTPException(422, "No speech detected. Please speak clearly and try again.")
 
     # Step 2: Azure Pronunciation Assessment (graceful failure)
     azure_scores = None
     try:
+        logger.info("[Speaking] Step 2: Azure PA starting...")
         azure_scores = assess_pronunciation(wav_path)
+        if azure_scores:
+            logger.info(f"[Speaking] Azure PA OK: accuracy={azure_scores['accuracy_score']}, fluency={azure_scores['fluency_score']}, pronunciation={azure_scores['pronunciation_score']}, words={len(azure_scores.get('words', []))}")
+        else:
+            logger.warning("[Speaking] Azure PA returned None (key missing or no utterances)")
     except Exception as e:
-        logger.warning(f"Azure PA failed (proceeding without pronunciation): {e}")
+        logger.warning(f"[Speaking] Azure PA FAILED (proceeding without pronunciation): {e}")
 
     # Step 3: GPT-4o grading
     try:
+        logger.info(f"[Speaking] Step 3: GPT-4o grading, transcript={len(transcript)} chars, azure={'yes' if azure_scores else 'no'}")
         grader = SpeakingGrader()
         grading_result = grader.grade(transcript, cue_card, azure_scores)
+        logger.info(f"[Speaking] GPT-4o OK: overall_band={grading_result.get('examiner_result', {}).get('overall_band', '?')}")
     except Exception as e:
-        logger.error(f"Speaking grading failed: {e}")
+        logger.error(f"[Speaking] GPT-4o grading FAILED: {e}", exc_info=True)
         Path(wav_path).unlink(missing_ok=True)
         raise HTTPException(500, "Grading failed. Please try again.")
 
