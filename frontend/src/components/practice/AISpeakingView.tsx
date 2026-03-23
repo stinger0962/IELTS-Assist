@@ -10,6 +10,13 @@ interface AISpeakingViewProps {
 }
 
 type SpeakingStage = 'cue_card' | 'preparation' | 'recording' | 'processing' | 'results';
+type ProcessingStep = 'transcribing' | 'pronunciation' | 'grading';
+
+const PROCESSING_STEPS: { key: ProcessingStep; label: string; icon: string; duration: number }[] = [
+  { key: 'transcribing', label: 'Transcribing your speech...', icon: '🎧', duration: 8000 },
+  { key: 'pronunciation', label: 'Analyzing pronunciation...', icon: '🗣️', duration: 18000 },
+  { key: 'grading', label: 'Examiner is grading...', icon: '📝', duration: 30000 },
+];
 
 function negotiateMimeType(): string {
   const types = [
@@ -43,6 +50,8 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
   const [recordTime, setRecordTime] = useState(0);
   const [grading, setGrading] = useState<SpeakingGradingResult | null>(null);
   const [error, setError] = useState('');
+  const [processingStep, setProcessingStep] = useState(0);
+  const [processingElapsed, setProcessingElapsed] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -92,6 +101,27 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
     }, 1000);
     return () => { if (recTimerRef.current) clearInterval(recTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
+  // Processing step animation — advance through steps based on elapsed time
+  useEffect(() => {
+    if (stage !== 'processing') {
+      setProcessingStep(0);
+      setProcessingElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      setProcessingElapsed(elapsed);
+      let cumulative = 0;
+      for (let i = 0; i < PROCESSING_STEPS.length; i++) {
+        cumulative += PROCESSING_STEPS[i].duration;
+        if (elapsed < cumulative) { setProcessingStep(i); return; }
+      }
+      setProcessingStep(PROCESSING_STEPS.length - 1);
+    }, 200);
+    return () => clearInterval(interval);
   }, [stage]);
 
   const startRecording = useCallback(async () => {
@@ -256,11 +286,26 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
 
   // ─── Render: Processing ────────────────────────────────────────────
   if (stage === 'processing') {
+    const currentStep = PROCESSING_STEPS[processingStep];
+    const totalExpected = PROCESSING_STEPS.reduce((s, p) => s + p.duration, 0);
+    const progressPct = Math.min((processingElapsed / totalExpected) * 100, 95);
     return (
       <div className="speaking-container">
         <div className="processing-view">
-          <div className="loading-spinner" />
-          <p className="processing-text">Examiner is reviewing your response...</p>
+          <div className="processing-icon">{currentStep.icon}</div>
+          <p className="processing-label">{currentStep.label}</p>
+          <div className="processing-bar-track">
+            <div className="processing-bar-fill" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="processing-steps">
+            {PROCESSING_STEPS.map((step, i) => (
+              <div key={step.key} className={`processing-step ${i < processingStep ? 'done' : i === processingStep ? 'active' : ''}`}>
+                <span className="step-icon">{i < processingStep ? '✓' : step.icon}</span>
+                <span className="step-text">{step.label.replace('...', '')}</span>
+              </div>
+            ))}
+          </div>
+          <p className="processing-hint">This usually takes 30–60 seconds</p>
         </div>
         <style>{speakingStyles}</style>
       </div>
@@ -394,10 +439,19 @@ const speakingStyles = `
   .rec-max { text-align: center; font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: var(--spacing-lg); }
 
   /* Processing */
-  .processing-view { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-md); padding: var(--spacing-2xl) 0; }
-  .processing-text { font-size: 1rem; color: var(--color-text-secondary); }
-  .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .processing-view { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-lg); padding: var(--spacing-2xl) var(--spacing-lg); }
+  .processing-icon { font-size: 3rem; animation: processing-bounce 1.5s ease-in-out infinite; }
+  @keyframes processing-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .processing-label { font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary); text-align: center; }
+  .processing-bar-track { width: 100%; max-width: 300px; height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden; }
+  .processing-bar-fill { height: 100%; background: linear-gradient(90deg, var(--color-primary), #8B5CF6); border-radius: 3px; transition: width 0.3s ease; }
+  .processing-steps { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px; margin-top: var(--spacing-sm); }
+  .processing-step { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--color-text-secondary); opacity: 0.4; transition: opacity 0.3s; }
+  .processing-step.done { opacity: 1; color: #10B981; }
+  .processing-step.active { opacity: 1; color: var(--color-text-primary); font-weight: 600; }
+  .step-icon { font-size: 1rem; width: 24px; text-align: center; }
+  .step-text { flex: 1; }
+  .processing-hint { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: var(--spacing-xs); }
 
   /* Actions */
   .speaking-actions { display: flex; justify-content: center; margin-top: var(--spacing-lg); }
