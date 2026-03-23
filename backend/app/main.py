@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -67,6 +68,13 @@ app.include_router(grammar.router, prefix=f"{settings.API_PREFIX}/generate", tag
 app.include_router(writing.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(speaking.router, prefix=f"{settings.API_PREFIX}/generate", tags=["Generate"])
 app.include_router(goals.router, prefix=f"{settings.API_PREFIX}/goals", tags=["Goals"])
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
+    print(f"[IELTS VALIDATION] {request.method} {request.url.path}\n{exc.errors()}", file=sys.stderr, flush=True)
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
