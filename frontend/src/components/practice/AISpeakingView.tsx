@@ -128,7 +128,7 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
     setStage('processing');
     try {
       const res = await practiceAPI.submitAISpeaking(blob, exercise.practice_db_id);
-      const result = res.data?.grading as SpeakingGradingResult;
+      const result = res.data as SpeakingGradingResult;
       setGrading(result);
       setStage('results');
 

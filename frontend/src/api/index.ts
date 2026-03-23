@@ -130,7 +130,6 @@ export const practiceAPI = {
     formData.append('audio', audio, 'recording.webm');
     formData.append('practice_id', practiceId.toString());
     return api.post('/generate/submit-ai-speaking', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 30000,
     });
   },

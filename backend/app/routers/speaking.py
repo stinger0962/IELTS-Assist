@@ -191,8 +191,8 @@ async def submit_ai_speaking(
     """Upload audio → Whisper transcribe → Azure PA → GPT-4o grade."""
     # Find the user practice
     up = db.query(UserPractice).filter(
-        UserPractice.id == practice_id,
         UserPractice.user_id == current_user.id,
+        UserPractice.practice_id == practice_id,
         UserPractice.submitted_at.is_(None),
     ).first()
     if not up:
