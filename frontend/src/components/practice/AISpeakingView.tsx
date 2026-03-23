@@ -13,9 +13,9 @@ type SpeakingStage = 'cue_card' | 'preparation' | 'recording' | 'processing' | '
 type ProcessingStep = 'transcribing' | 'pronunciation' | 'grading';
 
 const PROCESSING_STEPS: { key: ProcessingStep; label: string; icon: string; duration: number }[] = [
-  { key: 'transcribing', label: 'Transcribing & analyzing pronunciation...', icon: '🎧', duration: 10000 },
-  { key: 'pronunciation', label: 'Processing results...', icon: '🗣️', duration: 5000 },
-  { key: 'grading', label: 'Examiner is grading...', icon: '📝', duration: 10000 },
+  { key: 'transcribing', label: 'Transcribing your speech...', icon: '🎧', duration: 6000 },
+  { key: 'pronunciation', label: 'Analyzing response...', icon: '🔍', duration: 3000 },
+  { key: 'grading', label: 'Examiner is grading...', icon: '📝', duration: 8000 },
 ];
 
 function negotiateMimeType(): string {
@@ -52,6 +52,9 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
   const [error, setError] = useState('');
   const [processingStep, setProcessingStep] = useState(0);
   const [processingElapsed, setProcessingElapsed] = useState(0);
+  const [pronLoading, setPronLoading] = useState(false);
+  const [pronAnalyzed, setPronAnalyzed] = useState(false);
+  const [pronWords, setPronWords] = useState<SpeakingPronunciationWord[]>([]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -162,6 +165,38 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
       mediaRecorderRef.current.stop();
     }
   }, []);
+
+  const handleAnalyzePronunciation = async () => {
+    setPronLoading(true);
+    try {
+      const res = await practiceAPI.analyzePronunciation(exercise.practice_db_id);
+      const data = res.data;
+      setPronWords(data.pronunciation_words || []);
+      setPronAnalyzed(true);
+      // Update grading with new pronunciation band + overall
+      if (grading && data.pronunciation_band != null) {
+        setGrading({
+          ...grading,
+          examiner_result: {
+            ...grading.examiner_result,
+            pronunciation: {
+              ...grading.examiner_result.pronunciation,
+              band: data.pronunciation_band,
+              azure_scores: data.azure_scores,
+            },
+            overall_band: data.overall_band,
+          },
+          pronunciation_words: data.pronunciation_words,
+          has_pronunciation_analysis: true,
+        } as any);
+      }
+    } catch (err: any) {
+      console.error('[Speaking] Pronunciation analysis error:', err);
+      setError(err?.response?.data?.detail || 'Pronunciation analysis failed.');
+    } finally {
+      setPronLoading(false);
+    }
+  };
 
   const submitRecording = async (blob: Blob) => {
     setStage('processing');
@@ -305,7 +340,7 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
               </div>
             ))}
           </div>
-          <p className="processing-hint">This usually takes 15–25 seconds</p>
+          <p className="processing-hint">This usually takes 10–20 seconds</p>
         </div>
         <style>{speakingStyles}</style>
       </div>
@@ -315,7 +350,6 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
   // ─── Render: Results ───────────────────────────────────────────────
   const ex = grading?.examiner_result;
   const coaching = grading?.coaching_feedback;
-  const pronWords = grading?.pronunciation_words;
 
   return (
     <div className="speaking-container">
@@ -355,8 +389,8 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
         </div>
       )}
 
-      {/* Pronunciation Words */}
-      {pronWords && pronWords.length > 0 && (
+      {/* Pronunciation Analysis — Layer 2 (on-demand) */}
+      {pronAnalyzed && pronWords.length > 0 ? (
         <div className="speaking-section">
           <h3>Pronunciation Details</h3>
           <div className="pron-legend">
@@ -376,6 +410,23 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
               </span>
             ))}
           </div>
+        </div>
+      ) : !pronAnalyzed && (
+        <div className="speaking-section pron-cta">
+          <div className="pron-cta-content">
+            <span className="pron-cta-icon">🗣️</span>
+            <div>
+              <h3>Pronunciation Analysis</h3>
+              <p className="pron-cta-desc">Get detailed word-by-word pronunciation scoring powered by Azure Speech AI. See which words you mispronounced and how to improve.</p>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleAnalyzePronunciation}
+            disabled={pronLoading}
+          >
+            {pronLoading ? 'Analyzing... (30-60s)' : 'Analyze My Pronunciation'}
+          </button>
         </div>
       )}
 
@@ -476,6 +527,13 @@ const speakingStyles = `
   .speaking-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
   .speaking-section h3 { font-size: 1rem; font-weight: 600; margin-bottom: var(--spacing-sm); color: var(--color-text-primary); }
   .transcript-text { line-height: 1.8; color: var(--color-text-primary); font-size: 0.95rem; }
+
+  /* Pronunciation CTA */
+  .pron-cta { text-align: center; }
+  .pron-cta-content { display: flex; align-items: flex-start; gap: var(--spacing-md); text-align: left; margin-bottom: var(--spacing-md); }
+  .pron-cta-icon { font-size: 2rem; flex-shrink: 0; }
+  .pron-cta-content h3 { margin-bottom: 4px; }
+  .pron-cta-desc { font-size: 0.85rem; color: var(--color-text-secondary); line-height: 1.5; }
 
   /* Pronunciation */
   .pron-legend { display: flex; gap: var(--spacing-md); font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex-wrap: wrap; }

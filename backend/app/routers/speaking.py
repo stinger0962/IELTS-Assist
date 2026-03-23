@@ -189,7 +189,11 @@ async def submit_ai_speaking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Upload audio → Whisper transcribe → Azure PA → GPT-4o grade."""
+    """Layer 1: Upload audio → Whisper transcribe → GPT-4o grade. Fast (~15s).
+
+    Skips Azure PA for speed. Pronunciation band estimated by GPT from transcript.
+    Audio file is saved for optional Layer 2 pronunciation analysis later.
+    """
     # Find the user practice
     up = db.query(UserPractice).filter(
         UserPractice.user_id == current_user.id,
@@ -203,109 +207,169 @@ async def submit_ai_speaking(
     content = json.loads(gp.content)
     cue_card = content.get("cue_card", {})
 
-    # Save uploaded audio to temp file
+    # Save uploaded audio
     SPEAKING_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     audio_bytes = await audio.read()
 
-    # Reject if too small (~5 seconds of audio ≈ 50KB for webm)
     if len(audio_bytes) < 10_000:
         raise HTTPException(422, "Audio too short. Please record at least 5 seconds.")
 
-    # Convert to WAV for Azure PA
-    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp_in:
-        tmp_in.write(audio_bytes)
-        tmp_in_path = tmp_in.name
+    # Save original webm/mp4 for both Whisper and future Azure PA
+    audio_path = str(SPEAKING_AUDIO_DIR / f"{current_user.id}_{up.id}.webm")
+    Path(audio_path).write_bytes(audio_bytes)
+    logger.info(f"[Speaking] Audio saved: {len(audio_bytes)} bytes ({len(audio_bytes)/1024:.0f}KB)")
 
-    wav_path = str(SPEAKING_AUDIO_DIR / f"{current_user.id}_{practice_id}.wav")
+    # Step 1: Whisper transcription (send original webm — much smaller than WAV)
+    logger.info(f"[Speaking] Step 1: Whisper transcription for user {current_user.id}")
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
     try:
-        from pydub import AudioSegment
-        audio_segment = AudioSegment.from_file(tmp_in_path)
-        audio_segment.export(wav_path, format="wav")
-    except Exception as e:
-        logger.error(f"Audio conversion failed: {e}")
-        raise HTTPException(422, f"Audio conversion failed. Please try a different recording.")
-    finally:
-        Path(tmp_in_path).unlink(missing_ok=True)
-
-    # Steps 1+2: Whisper transcription + Azure PA in PARALLEL (both read the WAV independently)
-    wav_size = Path(wav_path).stat().st_size
-    logger.info(f"[Speaking] Starting parallel pipeline for user {current_user.id}, wav size={wav_size}")
-
-    transcript = None
-    whisper_error = None
-    azure_scores = None
-
-    def run_whisper():
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        with open(wav_path, "rb") as f:
-            result = client.audio.transcriptions.create(
+        with open(audio_path, "rb") as f:
+            whisper_result = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=f,
                 response_format="text",
             )
-        return result.strip() if isinstance(result, str) else result.text.strip()
-
-    def run_azure_pa():
-        return assess_pronunciation(wav_path)
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        whisper_future = executor.submit(run_whisper)
-        azure_future = executor.submit(run_azure_pa)
-
-        # Collect Whisper result (required)
-        try:
-            transcript = whisper_future.result(timeout=60)
-            logger.info(f"[Speaking] Whisper OK: {len(transcript)} chars, first 100: {transcript[:100]}")
-        except Exception as e:
-            whisper_error = e
-            logger.error(f"[Speaking] Whisper FAILED: {e}")
-
-        # Collect Azure PA result (optional — graceful failure)
-        try:
-            azure_scores = azure_future.result(timeout=120)
-            if azure_scores:
-                logger.info(f"[Speaking] Azure PA OK: accuracy={azure_scores['accuracy_score']}, fluency={azure_scores['fluency_score']}, pronunciation={azure_scores['pronunciation_score']}, words={len(azure_scores.get('words', []))}")
-            else:
-                logger.warning("[Speaking] Azure PA returned None (key missing or no utterances)")
-        except Exception as e:
-            logger.warning(f"[Speaking] Azure PA FAILED (proceeding without pronunciation): {e}")
-
-    if whisper_error or not transcript:
-        Path(wav_path).unlink(missing_ok=True)
+        transcript = whisper_result.strip() if isinstance(whisper_result, str) else whisper_result.text.strip()
+        logger.info(f"[Speaking] Whisper OK: {len(transcript)} chars, first 100: {transcript[:100]}")
+    except Exception as e:
+        logger.error(f"[Speaking] Whisper FAILED: {e}")
+        Path(audio_path).unlink(missing_ok=True)
         raise HTTPException(500, "Transcription failed. Please try again.")
 
-    if len(transcript) < 10:
+    if not transcript or len(transcript) < 10:
         logger.warning(f"[Speaking] Transcript too short: '{transcript}'")
-        Path(wav_path).unlink(missing_ok=True)
+        Path(audio_path).unlink(missing_ok=True)
         raise HTTPException(422, "No speech detected. Please speak clearly and try again.")
 
-    # Step 3: GPT-4o-mini grading (fast — 3-5s)
+    # Step 2: GPT-4o grading (no Azure PA — pronunciation estimated from transcript)
     try:
-        logger.info(f"[Speaking] Step 3: GPT-4o-mini grading, transcript={len(transcript)} chars, azure={'yes' if azure_scores else 'no'}")
+        logger.info(f"[Speaking] Step 2: GPT-4o grading, transcript={len(transcript)} chars")
         grader = SpeakingGrader()
-        grading_result = grader.grade(transcript, cue_card, azure_scores)
-        logger.info(f"[Speaking] GPT-4o-mini OK: overall_band={grading_result.get('examiner_result', {}).get('overall_band', '?')}")
+        grading_result = grader.grade(transcript, cue_card, azure_scores=None)
+        logger.info(f"[Speaking] GPT-4o OK: overall_band={grading_result.get('examiner_result', {}).get('overall_band', '?')}")
     except Exception as e:
-        logger.error(f"[Speaking] GPT-4o-mini grading FAILED: {e}", exc_info=True)
-        Path(wav_path).unlink(missing_ok=True)
+        logger.error(f"[Speaking] GPT-4o grading FAILED: {e}", exc_info=True)
+        Path(audio_path).unlink(missing_ok=True)
         raise HTTPException(500, "Grading failed. Please try again.")
 
-    # Store results
+    # Store results — keep audio_path for Layer 2 pronunciation analysis
     overall = grading_result.get("examiner_result", {}).get("overall_band", 0)
     grading_result["transcript"] = transcript
-    if azure_scores:
-        # Only store mispronounced words to reduce storage size
-        grading_result["pronunciation_words"] = [
-            w for w in azure_scores.get("words", [])
-            if w.get("error_type") not in ("None", None)
-        ]
+    grading_result["has_pronunciation_analysis"] = False
+    grading_result["audio_path"] = audio_path
 
     up.submitted_at = datetime.utcnow()
     up.user_answers = json.dumps(grading_result)
     up.score = overall
     db.commit()
 
-    # Clean up audio file (results stored, no need to keep)
-    Path(wav_path).unlink(missing_ok=True)
-
     return grading_result
+
+
+@router.post("/analyze-pronunciation")
+def analyze_pronunciation(
+    practice_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Layer 2: Run Azure PA on saved audio. On-demand, ~30-60s.
+
+    Updates the stored grading result with real pronunciation scores
+    and per-word accuracy data. Replaces GPT's pronunciation estimate.
+    """
+    up = db.query(UserPractice).filter(
+        UserPractice.user_id == current_user.id,
+        UserPractice.practice_id == practice_id,
+        UserPractice.submitted_at.isnot(None),
+    ).first()
+    if not up or not up.user_answers:
+        raise HTTPException(404, "Submitted practice not found")
+
+    grading_result = json.loads(up.user_answers)
+
+    # Already analyzed?
+    if grading_result.get("has_pronunciation_analysis"):
+        return {
+            "pronunciation_band": grading_result["examiner_result"]["pronunciation"]["band"],
+            "azure_scores": grading_result["examiner_result"]["pronunciation"].get("azure_scores"),
+            "pronunciation_words": grading_result.get("pronunciation_words", []),
+            "overall_band": grading_result["examiner_result"]["overall_band"],
+        }
+
+    # Find saved audio file
+    audio_path = grading_result.get("audio_path", "")
+    if not audio_path or not Path(audio_path).exists():
+        raise HTTPException(404, "Audio file not found. Pronunciation analysis is only available for recent recordings.")
+
+    # Convert webm → WAV for Azure PA
+    wav_path = audio_path.replace(".webm", ".wav")
+    try:
+        from pydub import AudioSegment
+        audio_segment = AudioSegment.from_file(audio_path)
+        audio_segment.export(wav_path, format="wav")
+        logger.info(f"[Speaking] Pronunciation: converted to WAV, size={Path(wav_path).stat().st_size}")
+    except Exception as e:
+        logger.error(f"[Speaking] Pronunciation: WAV conversion failed: {e}")
+        raise HTTPException(500, "Audio conversion failed.")
+
+    # Run Azure PA
+    logger.info(f"[Speaking] Pronunciation: starting Azure PA for user {current_user.id}")
+    try:
+        azure_scores = assess_pronunciation(wav_path)
+    except Exception as e:
+        logger.error(f"[Speaking] Pronunciation: Azure PA failed: {e}")
+        Path(wav_path).unlink(missing_ok=True)
+        raise HTTPException(500, "Pronunciation analysis failed. Please try again.")
+    finally:
+        Path(wav_path).unlink(missing_ok=True)
+
+    if not azure_scores:
+        raise HTTPException(500, "Pronunciation analysis returned no results.")
+
+    logger.info(f"[Speaking] Pronunciation OK: accuracy={azure_scores['accuracy_score']}, fluency={azure_scores['fluency_score']}, pronunciation={azure_scores['pronunciation_score']}")
+
+    # Update pronunciation band using Azure mapping (70/30 blend with GPT estimate)
+    grader = SpeakingGrader()
+    mapped_band = grader._map_pronunciation_band(azure_scores["pronunciation_score"])
+    er = grading_result.get("examiner_result", {})
+    old_pron_band = er.get("pronunciation", {}).get("band", mapped_band)
+    new_pron_band = round((mapped_band * 0.7 + old_pron_band * 0.3) * 2) / 2
+
+    er["pronunciation"]["band"] = new_pron_band
+    er["pronunciation"]["azure_scores"] = {
+        "accuracy": azure_scores["accuracy_score"],
+        "fluency": azure_scores["fluency_score"],
+        "prosody": azure_scores["prosody_score"],
+        "composite": azure_scores["pronunciation_score"],
+    }
+
+    # Recalculate overall band
+    bands = [
+        er.get("fluency_coherence", {}).get("band", 0),
+        er.get("lexical_resource", {}).get("band", 0),
+        er.get("grammatical_range_accuracy", {}).get("band", 0),
+        er.get("pronunciation", {}).get("band", 0),
+    ]
+    er["overall_band"] = round(sum(bands) / 4 * 2) / 2
+
+    # Store mispronounced words
+    pronunciation_words = [
+        w for w in azure_scores.get("words", [])
+        if w.get("error_type") not in ("None", None)
+    ]
+    grading_result["pronunciation_words"] = pronunciation_words
+    grading_result["has_pronunciation_analysis"] = True
+
+    up.user_answers = json.dumps(grading_result)
+    up.score = er["overall_band"]
+    db.commit()
+
+    # Clean up audio file now that analysis is done
+    Path(audio_path).unlink(missing_ok=True)
+
+    return {
+        "pronunciation_band": new_pron_band,
+        "azure_scores": er["pronunciation"]["azure_scores"],
+        "pronunciation_words": pronunciation_words,
+        "overall_band": er["overall_band"],
+    }

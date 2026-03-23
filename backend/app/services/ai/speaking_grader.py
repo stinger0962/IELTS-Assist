@@ -80,7 +80,7 @@ class SpeakingGrader:
 
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-4o"
 
     def grade(self, transcript: str, cue_card: dict, azure_scores: dict | None = None) -> dict:
         """Grade a speaking response. Returns examiner result + coaching."""
