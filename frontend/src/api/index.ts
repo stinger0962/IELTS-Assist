@@ -130,7 +130,7 @@ export const practiceAPI = {
     formData.append('audio', audio, 'recording.webm');
     formData.append('practice_id', practiceId.toString());
     return api.post('/generate/submit-ai-speaking', formData, {
-      timeout: 30000,
+      timeout: 120000,  // 2 min — Whisper + Azure PA + GPT-4o can take 30-60s
       headers: { 'Content-Type': undefined },
     });
   },
