@@ -131,6 +131,7 @@ export const practiceAPI = {
     formData.append('practice_id', practiceId.toString());
     return api.post('/generate/submit-ai-speaking', formData, {
       timeout: 30000,
+      headers: { 'Content-Type': undefined },
     });
   },
   getDailyWriting: () => api.get('/generate/daily-writing'),
