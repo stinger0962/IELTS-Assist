@@ -55,6 +55,8 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
   const [pronLoading, setPronLoading] = useState(false);
   const [pronAnalyzed, setPronAnalyzed] = useState(false);
   const [pronWords, setPronWords] = useState<SpeakingPronunciationWord[]>([]);
+  const [pronDiff, setPronDiff] = useState<{ oldPron: number; newPron: number; oldOverall: number; newOverall: number } | null>(null);
+  const [azureDetail, setAzureDetail] = useState<{ accuracy: number; fluency: number; prosody: number; composite: number } | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -173,6 +175,13 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
       const data = res.data;
       setPronWords(data.pronunciation_words || []);
       setPronAnalyzed(true);
+      setAzureDetail(data.azure_scores || null);
+      setPronDiff({
+        oldPron: data.old_pronunciation_band,
+        newPron: data.pronunciation_band,
+        oldOverall: data.old_overall_band,
+        newOverall: data.overall_band,
+      });
       // Update grading with new pronunciation band + overall
       if (grading && data.pronunciation_band != null) {
         setGrading({
@@ -390,34 +399,86 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
       )}
 
       {/* Pronunciation Analysis — Layer 2 (on-demand) */}
-      {pronAnalyzed && pronWords.length > 0 ? (
+      {pronAnalyzed ? (
         <div className="speaking-section">
-          <h3>Pronunciation Details</h3>
-          <div className="pron-legend">
-            <span><span className="pron-dot" style={{ background: '#10B981' }} /> Good (80+)</span>
-            <span><span className="pron-dot" style={{ background: '#F59E0B' }} /> Fair (60-79)</span>
-            <span><span className="pron-dot" style={{ background: '#EF4444' }} /> Needs Work (&lt;60)</span>
-          </div>
-          <div className="pron-words">
-            {pronWords.map((w: SpeakingPronunciationWord, i: number) => (
-              <span
-                key={i}
-                className="pron-word"
-                style={{ color: pronColor(w.accuracy_score), borderColor: pronColor(w.accuracy_score) }}
-                title={`${w.accuracy_score}% — ${w.error_type || 'OK'}`}
-              >
-                {w.word}
-              </span>
-            ))}
-          </div>
+          <h3>Pronunciation Analysis</h3>
+
+          {/* Score update notification */}
+          {pronDiff && (
+            <div className="pron-update-banner">
+              <div className="pron-update-row">
+                <span>Pronunciation</span>
+                <span>
+                  <span className="pron-old-score">{pronDiff.oldPron}</span>
+                  <span className="pron-arrow"> → </span>
+                  <span className="pron-new-score" style={{ color: bandColor(pronDiff.newPron) }}>{pronDiff.newPron}</span>
+                  {pronDiff.newPron !== pronDiff.oldPron && (
+                    <span className={`pron-delta ${pronDiff.newPron > pronDiff.oldPron ? 'up' : 'down'}`}>
+                      {pronDiff.newPron > pronDiff.oldPron ? '+' : ''}{pronDiff.newPron - pronDiff.oldPron}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {pronDiff.newOverall !== pronDiff.oldOverall && (
+                <div className="pron-update-row">
+                  <span>Overall Band</span>
+                  <span>
+                    <span className="pron-old-score">{pronDiff.oldOverall}</span>
+                    <span className="pron-arrow"> → </span>
+                    <span className="pron-new-score" style={{ color: bandColor(pronDiff.newOverall) }}>{pronDiff.newOverall}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Azure detail scores */}
+          {azureDetail && (
+            <div className="azure-scores">
+              <div className="azure-score-item">
+                <span className="azure-label">Accuracy</span>
+                <div className="azure-bar-track"><div className="azure-bar-fill" style={{ width: `${azureDetail.accuracy}%`, background: pronColor(azureDetail.accuracy) }} /></div>
+                <span className="azure-value">{azureDetail.accuracy}</span>
+              </div>
+              <div className="azure-score-item">
+                <span className="azure-label">Fluency</span>
+                <div className="azure-bar-track"><div className="azure-bar-fill" style={{ width: `${azureDetail.fluency}%`, background: pronColor(azureDetail.fluency) }} /></div>
+                <span className="azure-value">{azureDetail.fluency}</span>
+              </div>
+              <div className="azure-score-item">
+                <span className="azure-label">Prosody</span>
+                <div className="azure-bar-track"><div className="azure-bar-fill" style={{ width: `${azureDetail.prosody}%`, background: pronColor(azureDetail.prosody) }} /></div>
+                <span className="azure-value">{azureDetail.prosody}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Mispronounced words */}
+          {pronWords.length > 0 && (
+            <>
+              <h4 style={{ fontSize: '0.9rem', marginTop: 'var(--spacing-md)', marginBottom: 'var(--spacing-xs)' }}>Words to Practice ({pronWords.length})</h4>
+              <div className="pron-words">
+                {pronWords.map((w: SpeakingPronunciationWord, i: number) => (
+                  <span
+                    key={i}
+                    className="pron-word"
+                    style={{ color: pronColor(w.accuracy_score), borderColor: pronColor(w.accuracy_score) }}
+                    title={`${w.accuracy_score}% — ${w.error_type || 'OK'}`}
+                  >
+                    {w.word}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      ) : !pronAnalyzed && (
+      ) : (
         <div className="speaking-section pron-cta">
           <div className="pron-cta-content">
             <span className="pron-cta-icon">🗣️</span>
             <div>
               <h3>Pronunciation Analysis</h3>
-              <p className="pron-cta-desc">Get detailed word-by-word pronunciation scoring powered by Azure Speech AI. See which words you mispronounced and how to improve.</p>
+              <p className="pron-cta-desc">Get detailed word-by-word pronunciation scoring powered by AI speech analysis. See which words need work and track accuracy, fluency, and prosody.</p>
             </div>
           </div>
           <button
@@ -534,6 +595,24 @@ const speakingStyles = `
   .pron-cta-icon { font-size: 2rem; flex-shrink: 0; }
   .pron-cta-content h3 { margin-bottom: 4px; }
   .pron-cta-desc { font-size: 0.85rem; color: var(--color-text-secondary); line-height: 1.5; }
+
+  /* Pronunciation update banner */
+  .pron-update-banner { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
+  .pron-update-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 4px 0; }
+  .pron-old-score { color: var(--color-text-secondary); text-decoration: line-through; }
+  .pron-arrow { color: var(--color-text-secondary); }
+  .pron-new-score { font-weight: 700; font-size: 1.1rem; }
+  .pron-delta { font-size: 0.8rem; font-weight: 600; margin-left: 4px; padding: 1px 6px; border-radius: 10px; }
+  .pron-delta.up { background: #D1FAE5; color: #059669; }
+  .pron-delta.down { background: #FEE2E2; color: #DC2626; }
+
+  /* Azure detail scores */
+  .azure-scores { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--spacing-md); }
+  .azure-score-item { display: flex; align-items: center; gap: 8px; }
+  .azure-label { font-size: 0.8rem; color: var(--color-text-secondary); width: 65px; flex-shrink: 0; }
+  .azure-bar-track { flex: 1; height: 8px; background: var(--color-border); border-radius: 4px; overflow: hidden; }
+  .azure-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .azure-value { font-size: 0.8rem; font-weight: 600; width: 30px; text-align: right; }
 
   /* Pronunciation */
   .pron-legend { display: flex; gap: var(--spacing-md); font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); flex-wrap: wrap; }

@@ -328,12 +328,12 @@ def analyze_pronunciation(
 
     logger.info(f"[Speaking] Pronunciation OK: accuracy={azure_scores['accuracy_score']}, fluency={azure_scores['fluency_score']}, pronunciation={azure_scores['pronunciation_score']}")
 
-    # Update pronunciation band using Azure mapping (70/30 blend with GPT estimate)
+    # Replace GPT pronunciation estimate with real Azure data (no blending)
     grader = SpeakingGrader()
-    mapped_band = grader._map_pronunciation_band(azure_scores["pronunciation_score"])
+    new_pron_band = grader._map_pronunciation_band(azure_scores["pronunciation_score"])
     er = grading_result.get("examiner_result", {})
-    old_pron_band = er.get("pronunciation", {}).get("band", mapped_band)
-    new_pron_band = round((mapped_band * 0.7 + old_pron_band * 0.3) * 2) / 2
+    old_pron_band = er.get("pronunciation", {}).get("band", 0)
+    old_overall = er.get("overall_band", 0)
 
     er["pronunciation"]["band"] = new_pron_band
     er["pronunciation"]["azure_scores"] = {
@@ -348,9 +348,10 @@ def analyze_pronunciation(
         er.get("fluency_coherence", {}).get("band", 0),
         er.get("lexical_resource", {}).get("band", 0),
         er.get("grammatical_range_accuracy", {}).get("band", 0),
-        er.get("pronunciation", {}).get("band", 0),
+        new_pron_band,
     ]
-    er["overall_band"] = round(sum(bands) / 4 * 2) / 2
+    new_overall = round(sum(bands) / 4 * 2) / 2
+    er["overall_band"] = new_overall
 
     # Store mispronounced words
     pronunciation_words = [
@@ -361,7 +362,7 @@ def analyze_pronunciation(
     grading_result["has_pronunciation_analysis"] = True
 
     up.user_answers = json.dumps(grading_result)
-    up.score = er["overall_band"]
+    up.score = new_overall
     db.commit()
 
     # Clean up audio file now that analysis is done
@@ -369,7 +370,9 @@ def analyze_pronunciation(
 
     return {
         "pronunciation_band": new_pron_band,
+        "old_pronunciation_band": old_pron_band,
         "azure_scores": er["pronunciation"]["azure_scores"],
         "pronunciation_words": pronunciation_words,
-        "overall_band": er["overall_band"],
+        "overall_band": new_overall,
+        "old_overall_band": old_overall,
     }

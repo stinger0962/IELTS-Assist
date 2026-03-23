@@ -126,14 +126,11 @@ class SpeakingGrader:
 
         er = scoring.get("examiner_result", {})
 
-        # Override pronunciation band with Azure mapping if available
+        # Override pronunciation band with Azure mapping if available (no blending)
         if azure_scores and azure_scores.get("pronunciation_score") is not None:
             mapped = self._map_pronunciation_band(azure_scores["pronunciation_score"])
             if mapped is not None:
-                # Blend: 70% Azure mapping + 30% GPT judgment
-                gpt_band = er.get("pronunciation", {}).get("band", mapped)
-                blended = round((mapped * 0.7 + gpt_band * 0.3) * 2) / 2
-                er["pronunciation"]["band"] = blended
+                er["pronunciation"]["band"] = mapped
 
         # Recalculate overall
         bands = [
