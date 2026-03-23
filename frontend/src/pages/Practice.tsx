@@ -13,6 +13,36 @@ import AIWritingExerciseView from '../components/practice/AIWritingView';
 import AIGrammarExerciseView from '../components/practice/AIGrammarView';
 import AISpeakingExerciseView from '../components/practice/AISpeakingView';
 
+// Error boundary to prevent white screens from component crashes
+class ExerciseErrorBoundary extends React.Component<
+  { children: React.ReactNode; onBack: () => void },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ExerciseErrorBoundary]', error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <h2>Something went wrong</h2>
+          <p style={{ color: '#888', margin: '1rem 0' }}>{this.state.error}</p>
+          <button className="btn btn-primary" onClick={this.props.onBack}>Go Back</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+
 const skillConfig = [
   { type: 'reading' as SkillType, icon: BookOpen, color: '#4F46E5' },
   { type: 'listening' as SkillType, icon: Headphones, color: '#10B981' },
@@ -362,7 +392,9 @@ export default function Practice() {
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
-        <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
+        <ExerciseErrorBoundary onBack={handleBack}>
+          <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
+        </ExerciseErrorBoundary>
         <style>{sharedExerciseStyles}</style>
       </div>
     );

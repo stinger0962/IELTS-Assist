@@ -107,9 +107,18 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
+        console.log('[Speaking] Recording stopped, blob size:', blob.size, 'chunks:', chunksRef.current.length);
+        if (blob.size < 1000) {
+          setError('No audio was recorded. Please check your microphone and try again.');
+          setStage('cue_card');
+          return;
+        }
         submitRecording(blob);
       };
-      recorder.start(250);
+      // No timeslice — collect entire recording as one blob on stop
+      // Using timeslice (e.g. start(250)) causes race conditions where
+      // onstop fires before the final ondataavailable completes
+      recorder.start();
       mediaRecorderRef.current = recorder;
       setStage('recording');
     } catch {
@@ -148,7 +157,12 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
         notes: `Speaking Part 2 (${exercise.meta.domain}) — Band ${overallBand}`,
       });
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Grading failed. Please try again.');
+      console.error('[Speaking] Submit error:', err?.response?.status, err?.response?.data);
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail
+        : Array.isArray(detail) ? detail.map((d: any) => d.msg || d).join('; ')
+        : 'Grading failed. Please try again.';
+      setError(msg);
       setStage('cue_card');
     }
   };
