@@ -13,9 +13,9 @@ type SpeakingStage = 'cue_card' | 'preparation' | 'recording' | 'processing' | '
 type ProcessingStep = 'transcribing' | 'pronunciation' | 'grading';
 
 const PROCESSING_STEPS: { key: ProcessingStep; label: string; icon: string; duration: number }[] = [
-  { key: 'transcribing', label: 'Transcribing your speech...', icon: '🎧', duration: 8000 },
-  { key: 'pronunciation', label: 'Analyzing pronunciation...', icon: '🗣️', duration: 18000 },
-  { key: 'grading', label: 'Examiner is grading...', icon: '📝', duration: 30000 },
+  { key: 'transcribing', label: 'Transcribing & analyzing pronunciation...', icon: '🎧', duration: 10000 },
+  { key: 'pronunciation', label: 'Processing results...', icon: '🗣️', duration: 5000 },
+  { key: 'grading', label: 'Examiner is grading...', icon: '📝', duration: 10000 },
 ];
 
 function negotiateMimeType(): string {
@@ -305,7 +305,7 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
               </div>
             ))}
           </div>
-          <p className="processing-hint">This usually takes 30–60 seconds</p>
+          <p className="processing-hint">This usually takes 15–25 seconds</p>
         </div>
         <style>{speakingStyles}</style>
       </div>
