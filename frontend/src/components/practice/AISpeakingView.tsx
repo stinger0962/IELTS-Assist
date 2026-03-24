@@ -252,20 +252,21 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // ─── Render: Cue Card ──────────────────────────────────────────────
+  // ─── Render: Cue Card (Part 2 only — cue_card is always present) ───
+  const cueCard = exercise.cue_card!;
   if (stage === 'cue_card') {
     return (
       <div className="speaking-container">
         <div className="speaking-cue-card">
-          <h2 className="cue-topic">{exercise.cue_card.topic_line}</h2>
+          <h2 className="cue-topic">{cueCard.topic_line}</h2>
           <p className="cue-instruction">You should say:</p>
           <ul className="cue-bullets">
-            {exercise.cue_card.bullets.map((b, i) => (
+            {cueCard.bullets.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
           </ul>
-          {exercise.cue_card.follow_up && (
-            <p className="cue-followup">and explain {exercise.cue_card.follow_up}</p>
+          {cueCard.follow_up && (
+            <p className="cue-followup">and explain {cueCard.follow_up}</p>
           )}
         </div>
         {error && <p className="speaking-error">{error}</p>}
@@ -284,14 +285,14 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
     return (
       <div className="speaking-container">
         <div className="speaking-cue-card">
-          <h2 className="cue-topic">{exercise.cue_card.topic_line}</h2>
+          <h2 className="cue-topic">{cueCard.topic_line}</h2>
           <ul className="cue-bullets">
-            {exercise.cue_card.bullets.map((b, i) => (
+            {cueCard.bullets.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
           </ul>
-          {exercise.cue_card.follow_up && (
-            <p className="cue-followup">and explain {exercise.cue_card.follow_up}</p>
+          {cueCard.follow_up && (
+            <p className="cue-followup">and explain {cueCard.follow_up}</p>
           )}
         </div>
         <div className="prep-timer">

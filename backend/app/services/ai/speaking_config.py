@@ -862,6 +862,326 @@ PART2_CUE_CARDS = [
 ]
 
 
+PART1_TOPIC_SETS = [
+    # ── 30 topic sets × 4 questions = 120 Part 1 questions ──────────────
+    {
+        "id": "p1_hometown",
+        "topic_title": "Hometown",
+        "questions": [
+            "Where is your hometown?",
+            "What do you like most about your hometown?",
+            "Has your hometown changed much in recent years?",
+            "Would you like to live there in the future?",
+        ],
+    },
+    {
+        "id": "p1_family",
+        "topic_title": "Family",
+        "questions": [
+            "How many people are there in your family?",
+            "Do you spend a lot of time with your family?",
+            "What do you enjoy doing together as a family?",
+            "Are family relationships important in your culture?",
+        ],
+    },
+    {
+        "id": "p1_work_study",
+        "topic_title": "Work & Study",
+        "questions": [
+            "Do you work or are you a student?",
+            "What do you like most about your job or studies?",
+            "Is there anything you would like to change about your work or studies?",
+            "What are your plans for the future regarding your career or education?",
+        ],
+    },
+    {
+        "id": "p1_food",
+        "topic_title": "Food",
+        "questions": [
+            "What kind of food do you like to eat?",
+            "Do you prefer home-cooked meals or eating out?",
+            "Is there a dish from your country that you would recommend to visitors?",
+            "Have your eating habits changed in recent years?",
+        ],
+    },
+    {
+        "id": "p1_weather",
+        "topic_title": "Weather",
+        "questions": [
+            "What is the weather usually like in your country?",
+            "Do you prefer hot weather or cold weather?",
+            "Does the weather affect your mood or daily plans?",
+            "What is your favourite season of the year?",
+        ],
+    },
+    {
+        "id": "p1_hobbies",
+        "topic_title": "Hobbies",
+        "questions": [
+            "What do you like to do in your free time?",
+            "How did you become interested in this hobby?",
+            "Do you think hobbies are important for people?",
+            "Is there a new hobby you would like to try?",
+        ],
+    },
+    {
+        "id": "p1_music",
+        "topic_title": "Music",
+        "questions": [
+            "What type of music do you enjoy listening to?",
+            "Do you play any musical instruments?",
+            "Has the kind of music you listen to changed over the years?",
+            "Do you prefer listening to music alone or with others?",
+        ],
+    },
+    {
+        "id": "p1_sports",
+        "topic_title": "Sports",
+        "questions": [
+            "Do you play any sports regularly?",
+            "What sport is most popular in your country?",
+            "Did you play sports when you were a child?",
+            "Do you prefer watching sports or playing them?",
+        ],
+    },
+    {
+        "id": "p1_transport",
+        "topic_title": "Transport",
+        "questions": [
+            "How do you usually get to work or school?",
+            "Do you prefer public transport or driving?",
+            "Is traffic a problem in your city?",
+            "Do you think public transport in your area could be improved?",
+        ],
+    },
+    {
+        "id": "p1_shopping",
+        "topic_title": "Shopping",
+        "questions": [
+            "Do you enjoy shopping?",
+            "Do you prefer shopping online or in stores?",
+            "How often do you go shopping for clothes?",
+            "Have your shopping habits changed compared to a few years ago?",
+        ],
+    },
+    {
+        "id": "p1_friends",
+        "topic_title": "Friends",
+        "questions": [
+            "Do you prefer to have a few close friends or many friends?",
+            "How often do you spend time with your friends?",
+            "What do you usually do when you meet your friends?",
+            "Do you think it is easy to make new friends as an adult?",
+        ],
+    },
+    {
+        "id": "p1_holidays",
+        "topic_title": "Holidays",
+        "questions": [
+            "What do you usually do during holidays?",
+            "Do you prefer to relax at home or travel during holidays?",
+            "What is the most important holiday in your country?",
+            "Do you think people need more holidays than they currently get?",
+        ],
+    },
+    {
+        "id": "p1_animals",
+        "topic_title": "Animals",
+        "questions": [
+            "Do you like animals?",
+            "Have you ever had a pet?",
+            "What is the most popular pet in your country?",
+            "Do you think children can learn anything from looking after animals?",
+        ],
+    },
+    {
+        "id": "p1_colors",
+        "topic_title": "Colors",
+        "questions": [
+            "What is your favourite colour?",
+            "Do you think colours can affect how people feel?",
+            "Did you prefer different colours when you were a child?",
+            "Do colours play an important role when you buy things?",
+        ],
+    },
+    {
+        "id": "p1_flowers",
+        "topic_title": "Flowers",
+        "questions": [
+            "Do you like flowers?",
+            "What kinds of flowers are popular in your country?",
+            "Do people in your country give flowers as gifts?",
+            "Have you ever grown any flowers yourself?",
+        ],
+    },
+    {
+        "id": "p1_daily_routine",
+        "topic_title": "Daily Routine",
+        "questions": [
+            "What does a typical day look like for you?",
+            "Do you usually follow the same routine every day?",
+            "What is your favourite part of the day?",
+            "Has your daily routine changed much in the last few years?",
+        ],
+    },
+    {
+        "id": "p1_sleep",
+        "topic_title": "Sleep",
+        "questions": [
+            "How many hours of sleep do you usually get?",
+            "Do you think you get enough sleep?",
+            "Do you find it easy to fall asleep at night?",
+            "Is taking a nap during the day common in your country?",
+        ],
+    },
+    {
+        "id": "p1_social_media",
+        "topic_title": "Social Media",
+        "questions": [
+            "Do you use social media very much?",
+            "Which social media platform do you use the most?",
+            "Do you think people spend too much time on social media?",
+            "Has social media changed the way you communicate with friends?",
+        ],
+    },
+    {
+        "id": "p1_reading",
+        "topic_title": "Reading",
+        "questions": [
+            "Do you enjoy reading?",
+            "What kind of books or articles do you usually read?",
+            "Do you prefer reading paper books or e-books?",
+            "Did you read a lot when you were a child?",
+        ],
+    },
+    {
+        "id": "p1_movies",
+        "topic_title": "Movies",
+        "questions": [
+            "How often do you watch movies?",
+            "What kind of movies do you enjoy?",
+            "Do you prefer watching movies at home or at the cinema?",
+            "Who is your favourite actor or actress?",
+        ],
+    },
+    {
+        "id": "p1_photography",
+        "topic_title": "Photography",
+        "questions": [
+            "Do you like taking photos?",
+            "Do you prefer taking photos with your phone or a camera?",
+            "What do you usually take photos of?",
+            "Do you think people take too many photos these days?",
+        ],
+    },
+    {
+        "id": "p1_art",
+        "topic_title": "Art",
+        "questions": [
+            "Are you interested in art?",
+            "Did you enjoy art classes when you were at school?",
+            "Have you ever visited an art gallery or museum?",
+            "Do you think art is important in everyday life?",
+        ],
+    },
+    {
+        "id": "p1_science",
+        "topic_title": "Science",
+        "questions": [
+            "Did you enjoy science lessons at school?",
+            "Do you follow any science-related news or topics?",
+            "What area of science interests you the most?",
+            "Do you think science is important in daily life?",
+        ],
+    },
+    {
+        "id": "p1_clothes",
+        "topic_title": "Clothes",
+        "questions": [
+            "What kind of clothes do you usually wear?",
+            "Do you care a lot about what you wear?",
+            "Has your style of dressing changed over the years?",
+            "Do you prefer comfort or style when choosing clothes?",
+        ],
+    },
+    {
+        "id": "p1_gifts",
+        "topic_title": "Gifts",
+        "questions": [
+            "Do you enjoy giving gifts to others?",
+            "What is the best gift you have ever received?",
+            "Do you find it difficult to choose gifts for people?",
+            "Is it the thought behind a gift that matters most, or the gift itself?",
+        ],
+    },
+    {
+        "id": "p1_neighbors",
+        "topic_title": "Neighbors",
+        "questions": [
+            "Do you know your neighbors well?",
+            "How often do you talk to your neighbors?",
+            "Do you think it is important to have a good relationship with your neighbors?",
+            "Has the relationship between neighbors changed compared to the past?",
+        ],
+    },
+    {
+        "id": "p1_patience",
+        "topic_title": "Patience",
+        "questions": [
+            "Do you consider yourself a patient person?",
+            "What kinds of things require a lot of patience?",
+            "Have you become more or less patient as you have got older?",
+            "Is patience an important quality in your work or studies?",
+        ],
+    },
+    {
+        "id": "p1_concentration",
+        "topic_title": "Concentration",
+        "questions": [
+            "Do you find it easy to concentrate?",
+            "What do you do when you need to focus on something?",
+            "Is it easier for you to concentrate in the morning or at night?",
+            "Do you think modern technology makes it harder for people to concentrate?",
+        ],
+    },
+    {
+        "id": "p1_memories",
+        "topic_title": "Memories",
+        "questions": [
+            "Do you have a good memory?",
+            "What is your happiest childhood memory?",
+            "Do you prefer to take photos or just remember experiences in your mind?",
+            "Are there any smells or sounds that bring back memories for you?",
+        ],
+    },
+    {
+        "id": "p1_plans",
+        "topic_title": "Plans",
+        "questions": [
+            "Do you like to plan things in advance or be spontaneous?",
+            "What plans do you have for the coming year?",
+            "Do you usually stick to your plans?",
+            "How do you feel when your plans have to change unexpectedly?",
+        ],
+    },
+]
+
+
+def generate_metadata_part1(
+    avoid_topics: list[str] | None = None,
+) -> dict | None:
+    """Pick 3 random Part 1 topic areas, avoiding recent ones. Returns bundled exercise dict."""
+    avoid = set(avoid_topics or [])
+    candidates = [t for t in PART1_TOPIC_SETS if t["topic_title"] not in avoid]
+    if len(candidates) < 3:
+        candidates = PART1_TOPIC_SETS[:]
+    selected = random.sample(candidates, min(3, len(candidates)))
+    return {
+        "topic_title": ", ".join(t["topic_title"] for t in selected),
+        "topics": [{"area": t["topic_title"], "questions": t["questions"]} for t in selected],
+    }
+
+
 def generate_metadata(
     avoid_topics: list[str] | None = None,
     avoid_domains: list[str] | None = None,

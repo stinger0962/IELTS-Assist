@@ -449,11 +449,17 @@ export interface SpeakingCueCard {
   follow_up: string;
 }
 
+export interface SpeakingTopicSet {
+  area: string;
+  questions: string[];
+}
+
 export interface AISpeakingPractice {
   practice_db_id: number;
-  meta: { module: string; domain: string; topic: string };
-  cue_card: SpeakingCueCard;
-  cue_card_metadata: Record<string, any>;
+  meta: { module: string; domain?: string; topic: string };
+  cue_card?: SpeakingCueCard;                // Part 2 only
+  topics?: SpeakingTopicSet[];               // Part 1 only
+  cue_card_metadata?: Record<string, any>;
 }
 
 export interface SpeakingPronunciationWord {

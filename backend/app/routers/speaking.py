@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
-from app.services.ai.speaking_config import PART2_CUE_CARDS, generate_metadata as speaking_generate_metadata
+from app.services.ai.speaking_config import PART2_CUE_CARDS, generate_metadata as speaking_generate_metadata, generate_metadata_part1
 from app.services.ai.speaking_grader import SpeakingGrader
 from app.services.azure_speech import assess_pronunciation
 from app.services.auth import get_current_user
@@ -73,40 +73,85 @@ def _active_speaking_cards(user_id: int, db: Session) -> list:
     )
 
 
-def _seed_speaking_pool(db: Session, count: int = 5) -> None:
-    """Seed pool from hardcoded cue cards (instant, no GPT)."""
-    existing_topics = {
-        gp.topic for gp in db.query(GeneratedPractice).filter(
-            GeneratedPractice.skill == "speaking"
-        ).all()
-    }
+def _seed_speaking_pool(db: Session, count: int = 6) -> None:
+    """Seed pool with balanced Part 1 + Part 2 exercises (instant, no GPT).
+
+    Alternates between Part 1 and Part 2, seeding whichever has fewer.
+    """
+    existing = db.query(GeneratedPractice).filter(
+        GeneratedPractice.skill == "speaking"
+    ).all()
+    existing_topics = {gp.topic for gp in existing}
+
+    # Count existing Part 1 vs Part 2
+    part1_count = sum(1 for gp in existing if '"speaking_part1"' in (gp.content or ""))
+    part2_count = sum(1 for gp in existing if '"speaking_part2"' in (gp.content or ""))
+
     added = 0
-    for card in PART2_CUE_CARDS:
-        if card["topic_title"] in existing_topics:
-            continue
-        content = {
-            "meta": {
-                "module": "speaking_part2",
-                "domain": card["domain"],
-                "topic": card["topic_title"],
-            },
-            "cue_card": {
-                "topic_line": card["topic_line"],
-                "bullets": card["bullets"],
-                "follow_up": card["follow_up"],
-            },
-            "cue_card_metadata": card,
-        }
-        db.add(GeneratedPractice(
-            skill="speaking",
-            topic=card["topic_title"],
-            content=json.dumps(content),
-            is_validated=True,
-            generated_date=datetime.utcnow(),
-        ))
-        added += 1
-        if added >= count:
-            break
+    for i in range(count):
+        # Alternate, starting with whichever has fewer
+        seed_part1 = (part1_count + (1 if i % 2 == 0 else 0)) <= (part2_count + (1 if i % 2 == 1 else 0))
+        if part1_count < part2_count:
+            seed_part1 = True
+        elif part2_count < part1_count:
+            seed_part1 = False
+        else:
+            seed_part1 = (i % 2 == 0)
+
+        if seed_part1:
+            # Seed Part 1
+            meta = generate_metadata_part1(avoid_topics=list(existing_topics))
+            if not meta:
+                seed_part1 = False  # fall through to Part 2
+            else:
+                content = {
+                    "meta": {
+                        "module": "speaking_part1",
+                        "topic": meta["topic_title"],
+                    },
+                    "topics": meta["topics"],
+                }
+                db.add(GeneratedPractice(
+                    skill="speaking",
+                    topic=meta["topic_title"],
+                    content=json.dumps(content),
+                    is_validated=True,
+                    generated_date=datetime.utcnow(),
+                ))
+                existing_topics.add(meta["topic_title"])
+                part1_count += 1
+                added += 1
+                continue
+
+        if not seed_part1:
+            # Seed Part 2
+            for card in PART2_CUE_CARDS:
+                if card["topic_title"] not in existing_topics:
+                    content = {
+                        "meta": {
+                            "module": "speaking_part2",
+                            "domain": card["domain"],
+                            "topic": card["topic_title"],
+                        },
+                        "cue_card": {
+                            "topic_line": card["topic_line"],
+                            "bullets": card["bullets"],
+                            "follow_up": card["follow_up"],
+                        },
+                        "cue_card_metadata": card,
+                    }
+                    db.add(GeneratedPractice(
+                        skill="speaking",
+                        topic=card["topic_title"],
+                        content=json.dumps(content),
+                        is_validated=True,
+                        generated_date=datetime.utcnow(),
+                    ))
+                    existing_topics.add(card["topic_title"])
+                    part2_count += 1
+                    added += 1
+                    break
+
     if added:
         db.commit()
 

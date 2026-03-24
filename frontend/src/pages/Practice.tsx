@@ -12,6 +12,7 @@ import AIListeningExerciseView from '../components/practice/AIListeningView';
 import AIWritingExerciseView from '../components/practice/AIWritingView';
 import AIGrammarExerciseView from '../components/practice/AIGrammarView';
 import AISpeakingExerciseView from '../components/practice/AISpeakingView';
+import AISpeakingPart1View from '../components/practice/AISpeakingPart1View';
 
 // Error boundary to prevent white screens from component crashes
 class ExerciseErrorBoundary extends React.Component<
@@ -389,11 +390,16 @@ export default function Practice() {
 
   // AI Speaking exercise view
   if (currentAISpeaking) {
+    const isPart1 = currentAISpeaking.meta.module === 'speaking_part1';
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <ExerciseErrorBoundary onBack={handleBack}>
-          <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
+          {isPart1 ? (
+            <AISpeakingPart1View exercise={currentAISpeaking} onBack={handleBack} />
+          ) : (
+            <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
+          )}
         </ExerciseErrorBoundary>
         <style>{sharedExerciseStyles}</style>
       </div>
@@ -625,14 +631,17 @@ export default function Practice() {
               ) : aiSpeakingExercises.length === 0 ? (
                 <p className="empty-list">No exercises yet — click Generate below.</p>
               ) : (
-                aiSpeakingExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
-                    <span className="exercise-title">{ex.meta.topic}</span>
-                    <span className="exercise-meta">
-                      {ex.meta.domain} · Part 2
-                    </span>
-                  </button>
-                ))
+                aiSpeakingExercises.map((ex, i) => {
+                  const isPart1 = ex.meta.module === 'speaking_part1';
+                  return (
+                    <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
+                      <span className="exercise-title">{ex.meta.topic}</span>
+                      <span className="exercise-meta">
+                        {isPart1 ? 'Interview · 3 topics' : `Long Turn · ${ex.meta.domain || 'speaking'}`}
+                      </span>
+                    </button>
+                  );
+                })
               )}
               {aiSpeakingExercises.length < 3 && (
                 speakingPoolEmpty ? (
