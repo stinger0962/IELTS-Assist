@@ -32,7 +32,6 @@ export default function AISpeakingPart1View({ exercise, onBack }: Props) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const allRecordingsRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup on unmount
@@ -64,73 +63,58 @@ export default function AISpeakingPart1View({ exercise, onBack }: Props) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      // Single continuous recording for the entire interview
+      // (multiple webm blobs can't be concatenated — Whisper only reads the first container)
+      const mimeType = negotiateMimeType();
+      const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, options);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+
       setStage('interview');
       setCurrentQ(0);
-      allRecordingsRef.current = [];
-      startRecordingForQuestion(stream);
     } catch {
       setError('Microphone access denied. Please allow microphone access and try again.');
     }
   }, []);
 
-  const startRecordingForQuestion = (stream: MediaStream) => {
-    const mimeType = negotiateMimeType();
-    const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
-    const recorder = new MediaRecorder(stream, options);
-    chunksRef.current = [];
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
-      allRecordingsRef.current.push(blob);
-    };
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setRecordTime(0);
-  };
-
   const handleNextQuestion = () => {
-    // Stop current recording
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-
     const nextQ = currentQ + 1;
     if (nextQ >= totalQ) {
-      // All questions done — submit
+      // All questions done — stop recording and submit
       if (timerRef.current) clearInterval(timerRef.current);
-      // Small delay to let onstop fire and save the last chunk
-      setTimeout(() => submitAllRecordings(), 300);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.onstop = () => {
+          if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+          const mimeType = negotiateMimeType() || 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          console.log('[Part1] Final blob:', blob.size, 'bytes,', chunksRef.current.length, 'chunks');
+          submitFinalRecording(blob);
+        };
+        mediaRecorderRef.current.stop();
+      }
     } else {
       setCurrentQ(nextQ);
       setRecordTime(0);
-      // Start recording for next question
-      if (streamRef.current) {
-        startRecordingForQuestion(streamRef.current);
-      }
     }
   };
 
-  const submitAllRecordings = async () => {
+  const submitFinalRecording = async (blob: Blob) => {
     setStage('processing');
 
-    // Stop mic
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-    }
+    console.log('[Part1] Submitting blob:', blob.size, 'bytes');
 
-    // Concatenate all recordings into one blob
-    const mimeType = negotiateMimeType() || 'audio/webm';
-    const combinedBlob = new Blob(allRecordingsRef.current, { type: mimeType });
-    console.log('[Part1] Combined blob:', combinedBlob.size, 'bytes,', allRecordingsRef.current.length, 'chunks');
-
-    if (combinedBlob.size < 5000) {
+    if (blob.size < 5000) {
       setError('No audio was recorded. Please check your microphone and try again.');
       setStage('intro');
       return;
     }
 
     try {
-      const res = await practiceAPI.submitAISpeaking(combinedBlob, exercise.practice_db_id);
+      const res = await practiceAPI.submitAISpeaking(blob, exercise.practice_db_id);
       const result = res.data as SpeakingGradingResult;
       setGrading(result);
       setStage('results');
