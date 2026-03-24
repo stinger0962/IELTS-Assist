@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { progressAPI, goalsAPI } from '../api';
-import type { GoalTodayProgressItem, ProgressStats, StudySession, Goal, UserProgress } from '../types';
+import type { GoalTodayProgressItem, ProgressStats, StudySession, Goal, UserProgress, SpeakingInsights } from '../types';
 
 function ProgressRing({ progress, size = 80, strokeWidth = 8 }: { progress: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -68,10 +68,12 @@ function StatCard({ icon: Icon, label, value, subValue, color }: {
   );
 }
 
-function SkillCard({ progress, skillName, goalProgress }: {
+function SkillCard({ progress, skillName, goalProgress, onClick, isExpanded }: {
   progress: UserProgress;
   skillName: string;
   goalProgress?: GoalTodayProgressItem;
+  onClick?: () => void;
+  isExpanded?: boolean;
 }) {
   const hasGoal = goalProgress && goalProgress.target > 0;
   const ringPct = hasGoal
@@ -84,9 +86,9 @@ function SkillCard({ progress, skillName, goalProgress }: {
     : `${ringPct}%`;
 
   return (
-    <div className="skill-card">
+    <div className={`skill-card${onClick ? ' skill-card-clickable' : ''}${isExpanded ? ' skill-card-expanded' : ''}`} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className="skill-header">
-        <span className="skill-name">{skillName}</span>
+        <span className="skill-name">{skillName}{onClick ? (isExpanded ? ' ▾' : ' ▸') : ''}</span>
         <span className="skill-band">{progress.band_score.toFixed(1)}</span>
       </div>
       <div className="skill-progress">
@@ -123,6 +125,8 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [todayProgress, setTodayProgress] = useState<GoalTodayProgressItem[]>([]);
+  const [speakingInsights, setSpeakingInsights] = useState<SpeakingInsights | null>(null);
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -131,17 +135,19 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [statsRes, sessionsRes, goalsRes, progressRes] = await Promise.all([
+      const [statsRes, sessionsRes, goalsRes, progressRes, speakingRes] = await Promise.all([
         progressAPI.getStats(),
         progressAPI.getSessions(5),
         goalsAPI.getAll(false, 5),
         goalsAPI.getTodayProgress(),
+        progressAPI.getSpeakingInsights().catch(() => null),
       ]);
       setLocalStats(statsRes.data);
       setStats(statsRes.data);
       setSessions(sessionsRes.data);
       setGoals(goalsRes.data);
       setTodayProgress(progressRes.data);
+      if (speakingRes) setSpeakingInsights(speakingRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -210,9 +216,66 @@ export default function Dashboard() {
               progress={p}
               skillName={getSkillName(p.skill)}
               goalProgress={todayProgress.find(tp => tp.skill === p.skill && tp.goal_type === 'daily_minutes')}
+              onClick={p.skill === 'speaking' ? () => setExpandedSkill(expandedSkill === 'speaking' ? null : 'speaking') : undefined}
+              isExpanded={p.skill === 'speaking' && expandedSkill === 'speaking'}
             />
           ))}
         </div>
+        {expandedSkill === 'speaking' && speakingInsights && (
+          <div className="speaking-insights-panel">
+            {speakingInsights.total_sessions === 0 ? (
+              <p className="speaking-insights-empty">Complete a speaking exercise to see progress insights</p>
+            ) : (
+              <>
+                {/* Criterion bars */}
+                <div className="si-criteria">
+                  {speakingInsights.criteria.map((c) => {
+                    const barPct = Math.min((c.average / 9) * 100, 100);
+                    const barClr = c.average >= 7 ? '#10B981' : c.average >= 6 ? '#F59E0B' : '#EF4444';
+                    const trendArrow = c.trend === 'improving' ? '\u2191' : c.trend === 'declining' ? '\u2193' : c.trend === 'stable' ? '\u2192' : '\u2014';
+                    const trendColor = c.trend === 'improving' ? '#10B981' : c.trend === 'declining' ? '#EF4444' : 'var(--color-text-secondary)';
+                    return (
+                      <div key={c.name} className="si-criterion-row">
+                        <span className="si-criterion-label">{c.label}</span>
+                        <div className="si-bar-track">
+                          <div className="si-bar-fill" style={{ width: `${barPct}%`, background: barClr }} />
+                        </div>
+                        <span className="si-criterion-band">{c.average.toFixed(1)}</span>
+                        <span className="si-trend" style={{ color: trendColor }}>{trendArrow}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Weakest area callout */}
+                {speakingInsights.weakest_criterion && (
+                  <div className="si-weakest">
+                    <strong>Weakest area: {speakingInsights.weakest_criterion}</strong>
+                    {speakingInsights.weakest_recommendation && (
+                      <p className="si-weakest-rec">{speakingInsights.weakest_recommendation}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Recent sessions */}
+                {speakingInsights.recent_sessions.length > 0 && (
+                  <div className="si-recent">
+                    <h4 className="si-recent-title">Recent Sessions</h4>
+                    {speakingInsights.recent_sessions.slice(0, 5).map((s, i) => (
+                      <div key={i} className="si-session-row">
+                        <span className="si-session-date">{new Date(s.date).toLocaleDateString()}</span>
+                        <span className="si-session-band" style={{ color: s.overall_band >= 7 ? '#10B981' : s.overall_band >= 6 ? '#F59E0B' : '#EF4444' }}>
+                          {s.overall_band}
+                        </span>
+                        {s.topic && <span className="si-session-topic">{s.topic}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Quick Actions */}
@@ -671,6 +734,120 @@ export default function Dashboard() {
           bottom: -14px;
           font-size: 0.6rem;
           color: var(--color-text-secondary);
+          white-space: nowrap;
+        }
+
+        .skill-card-clickable:hover {
+          border-color: var(--color-primary);
+        }
+        .skill-card-expanded {
+          border-color: var(--color-primary);
+        }
+
+        .speaking-insights-panel {
+          grid-column: 1 / -1;
+          background: var(--color-surface);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-lg);
+          padding: var(--spacing-md);
+          margin-top: var(--spacing-sm);
+        }
+        .speaking-insights-empty {
+          text-align: center;
+          color: var(--color-text-secondary);
+          padding: var(--spacing-md);
+        }
+        .si-criteria {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: var(--spacing-md);
+        }
+        .si-criterion-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .si-criterion-label {
+          font-size: 0.8rem;
+          color: var(--color-text-secondary);
+          width: 140px;
+          flex-shrink: 0;
+        }
+        @media (max-width: 480px) {
+          .si-criterion-label { width: 80px; font-size: 0.7rem; }
+        }
+        .si-bar-track {
+          flex: 1;
+          height: 10px;
+          background: var(--color-border);
+          border-radius: 5px;
+          overflow: hidden;
+        }
+        .si-bar-fill {
+          height: 100%;
+          border-radius: 5px;
+          transition: width 0.4s ease;
+        }
+        .si-criterion-band {
+          font-size: 0.85rem;
+          font-weight: 600;
+          width: 28px;
+          text-align: right;
+        }
+        .si-trend {
+          font-size: 1rem;
+          font-weight: 700;
+          width: 20px;
+          text-align: center;
+        }
+        .si-weakest {
+          border: 1px solid #F59E0B;
+          border-radius: var(--radius-md);
+          padding: var(--spacing-sm) var(--spacing-md);
+          background: #FFFBEB;
+          margin-bottom: var(--spacing-md);
+          font-size: 0.85rem;
+          color: #92400E;
+        }
+        [data-theme="dark"] .si-weakest {
+          background: #78350F22;
+          color: #FCD34D;
+        }
+        .si-weakest-rec {
+          margin-top: 4px;
+          font-weight: 400;
+        }
+        .si-recent {
+          margin-top: var(--spacing-sm);
+        }
+        .si-recent-title {
+          font-size: 0.85rem;
+          font-weight: 600;
+          margin-bottom: var(--spacing-xs);
+          color: var(--color-text-primary);
+        }
+        .si-session-row {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: 4px 0;
+          font-size: 0.8rem;
+        }
+        .si-session-date {
+          color: var(--color-text-secondary);
+          width: 90px;
+          flex-shrink: 0;
+        }
+        .si-session-band {
+          font-weight: 700;
+          width: 28px;
+        }
+        .si-session-topic {
+          color: var(--color-text-secondary);
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
           white-space: nowrap;
         }
 

@@ -62,6 +62,7 @@ export const progressAPI = {
     total_questions?: number;
     study_time_minutes?: number;
   }) => api.post('/progress', data),
+  getSpeakingInsights: () => api.get('/progress/speaking-insights'),
   getSessions: (limit = 10) => api.get(`/sessions?limit=${limit}`),
   createSession: (data: { skill?: string; duration_minutes: number; notes?: string }) =>
     api.post('/sessions', data),

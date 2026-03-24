@@ -481,6 +481,32 @@ export interface SpeakingGradingResult {
   model: string;
 }
 
+export type SpeakingTrend = 'improving' | 'declining' | 'stable' | 'insufficient';
+
+export interface SpeakingCriterionInsight {
+  name: string;
+  label: string;
+  average: number;
+  trend: SpeakingTrend;
+}
+
+export interface SpeakingSessionSummary {
+  date: string;
+  overall_band: number;
+  topic: string | null;
+}
+
+export interface SpeakingInsights {
+  total_sessions: number;
+  criteria: SpeakingCriterionInsight[];
+  weakest_criterion: string | null;
+  weakest_recommendation: string | null;
+  best_session_band: number | null;
+  worst_session_band: number | null;
+  overall_average: number | null;
+  recent_sessions: SpeakingSessionSummary[];
+}
+
 export interface AIGrammarPractice {
   practice_db_id?: number;
   meta: {

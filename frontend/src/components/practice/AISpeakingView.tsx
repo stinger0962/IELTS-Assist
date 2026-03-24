@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { practiceAPI, progressAPI } from '../../api';
 import type {
-  AISpeakingPractice, SpeakingGradingResult, SpeakingPronunciationWord,
+  AISpeakingPractice, SpeakingGradingResult, SpeakingPronunciationWord, SpeakingInsights,
 } from '../../types';
 
 interface AISpeakingViewProps {
@@ -56,6 +56,7 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
   const [pronAnalyzed, setPronAnalyzed] = useState(false);
   const [pronWords, setPronWords] = useState<SpeakingPronunciationWord[]>([]);
   const [pronDiff, setPronDiff] = useState<{ oldPron: number; newPron: number; oldOverall: number; newOverall: number } | null>(null);
+  const [speakingAvg, setSpeakingAvg] = useState<SpeakingInsights | null>(null);
   const [azureDetail, setAzureDetail] = useState<{ accuracy: number; fluency: number; prosody: number; composite: number } | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -216,6 +217,9 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
       setGrading(result);
       setStage('results');
 
+      // Fetch speaking insights for comparison (fire-and-forget)
+      progressAPI.getSpeakingInsights().then(r => setSpeakingAvg(r.data)).catch(() => {});
+
       // Update progress (fire-and-forget — don't let failures hide grading results)
       const overallBand = result?.examiner_result?.overall_band ?? 0;
       const minutes = Math.min(Math.round(recordTime / 60) + 1, 30);
@@ -373,19 +377,36 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
 
           <div className="band-cards">
             {([
-              ['Fluency & Coherence', ex.fluency_coherence],
-              ['Lexical Resource', ex.lexical_resource],
-              ['Grammar Range & Accuracy', ex.grammatical_range_accuracy],
-              ['Pronunciation', ex.pronunciation],
-            ] as [string, { band: number; evidence: string }][]).map(([label, data]) => (
-              <div key={label} className="band-card">
-                <div className="band-card-header">
-                  <span className="band-card-label">{label}</span>
-                  <span className="band-card-score" style={{ color: bandColor(data.band) }}>{data.band}</span>
+              ['Fluency & Coherence', ex.fluency_coherence, 'fluency_coherence'],
+              ['Lexical Resource', ex.lexical_resource, 'lexical_resource'],
+              ['Grammar Range & Accuracy', ex.grammatical_range_accuracy, 'grammatical_range_accuracy'],
+              ['Pronunciation', ex.pronunciation, 'pronunciation'],
+            ] as [string, { band: number; evidence: string }, string][]).map(([label, data, name]) => {
+              const avgCriterion = speakingAvg && speakingAvg.total_sessions > 1
+                ? speakingAvg.criteria.find(c => c.name === name) : null;
+              const delta = avgCriterion ? +(data.band - avgCriterion.average).toFixed(1) : null;
+              return (
+                <div key={label} className="band-card">
+                  <div className="band-card-header">
+                    <span className="band-card-label">{label}</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span className="band-card-score" style={{ color: bandColor(data.band) }}>{data.band}</span>
+                      {avgCriterion && (
+                        <div className="band-card-avg">
+                          <span className="band-avg-text">avg: {avgCriterion.average.toFixed(1)}</span>
+                          {delta !== null && delta !== 0 && (
+                            <span className="band-delta" style={{ color: delta > 0 ? '#10B981' : '#EF4444' }}>
+                              {delta > 0 ? '+' : ''}{delta}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="band-card-evidence">{data.evidence}</p>
                 </div>
-                <p className="band-card-evidence">{data.evidence}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -583,6 +604,9 @@ const speakingStyles = `
   .band-card-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-primary); }
   .band-card-score { font-size: 1.5rem; font-weight: 700; }
   .band-card-evidence { font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.5; }
+  .band-card-avg { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 2px; }
+  .band-avg-text { font-size: 0.7rem; color: var(--color-text-secondary); }
+  .band-delta { font-size: 0.7rem; font-weight: 600; }
 
   /* Sections */
   .speaking-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
