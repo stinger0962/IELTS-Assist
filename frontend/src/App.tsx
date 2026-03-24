@@ -13,6 +13,7 @@ import Mistakes from './pages/Mistakes';
 import Topics from './pages/Topics';
 import Goals from './pages/Goals';
 import Settings from './pages/Settings';
+import SkillProgress from './pages/SkillProgress';
 import { Login, Register } from './pages/Auth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -109,6 +110,14 @@ export default function App() {
           </ProtectedRoute>
         } />
         
+        <Route path="/progress/:skill" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <SkillProgress />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
         <Route path="/settings" element={
           <ProtectedRoute>
             <AppLayout>
