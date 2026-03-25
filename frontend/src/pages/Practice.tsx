@@ -13,6 +13,7 @@ import AIWritingExerciseView from '../components/practice/AIWritingView';
 import AIGrammarExerciseView from '../components/practice/AIGrammarView';
 import AISpeakingExerciseView from '../components/practice/AISpeakingView';
 import AISpeakingPart1View from '../components/practice/AISpeakingPart1View';
+import AISpeakingPart3View from '../components/practice/AISpeakingPart3View';
 
 // Error boundary to prevent white screens from component crashes
 class ExerciseErrorBoundary extends React.Component<
@@ -390,13 +391,15 @@ export default function Practice() {
 
   // AI Speaking exercise view
   if (currentAISpeaking) {
-    const isPart1 = currentAISpeaking.meta.module === 'speaking_part1';
+    const mod = currentAISpeaking.meta.module;
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
         <ExerciseErrorBoundary onBack={handleBack}>
-          {isPart1 ? (
+          {mod === 'speaking_part1' ? (
             <AISpeakingPart1View exercise={currentAISpeaking} onBack={handleBack} />
+          ) : mod === 'speaking_part3' ? (
+            <AISpeakingPart3View exercise={currentAISpeaking} onBack={handleBack} />
           ) : (
             <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
           )}
@@ -632,13 +635,14 @@ export default function Practice() {
                 <p className="empty-list">No exercises yet — click Generate below.</p>
               ) : (
                 aiSpeakingExercises.map((ex, i) => {
-                  const isPart1 = ex.meta.module === 'speaking_part1';
+                  const mod = ex.meta.module;
+                  const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
+                    : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
+                    : `Long Turn · ${ex.meta.domain || 'speaking'}`;
                   return (
                     <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
                       <span className="exercise-title">{ex.meta.topic}</span>
-                      <span className="exercise-meta">
-                        {isPart1 ? 'Interview · 3 topics' : `Long Turn · ${ex.meta.domain || 'speaking'}`}
-                      </span>
+                      <span className="exercise-meta">{label}</span>
                     </button>
                   );
                 })

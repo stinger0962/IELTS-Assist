@@ -1182,6 +1182,326 @@ def generate_metadata_part1(
     }
 
 
+PART3_DISCUSSION_SETS = [
+    # ── 30 discussion themes × 4 questions = 120 Part 3 questions ─────
+    {
+        "id": "p3_education",
+        "topic_title": "Education & Learning",
+        "questions": [
+            "Why do you think some people prefer self-study over classroom learning?",
+            "How has technology changed the way people learn?",
+            "Do you think the education system in most countries needs to change?",
+            "What skills do you think are most important for young people to learn today?",
+        ],
+    },
+    {
+        "id": "p3_technology",
+        "topic_title": "Technology & Society",
+        "questions": [
+            "How has technology changed the way people communicate with each other?",
+            "Do you think people are becoming too dependent on technology?",
+            "What are the advantages and disadvantages of children using technology from a young age?",
+            "How do you think artificial intelligence will affect employment in the future?",
+        ],
+    },
+    {
+        "id": "p3_environment",
+        "topic_title": "Environment & Conservation",
+        "questions": [
+            "Why do you think some people are not concerned about environmental issues?",
+            "How can governments encourage people to be more environmentally friendly?",
+            "Do you think individuals or governments have a greater responsibility to protect the environment?",
+            "To what extent do you agree that economic growth and environmental protection can go hand in hand?",
+        ],
+    },
+    {
+        "id": "p3_health",
+        "topic_title": "Health & Well-being",
+        "questions": [
+            "Why do you think lifestyle diseases have become more common in recent years?",
+            "How has the way people think about mental health changed over time?",
+            "Do you think governments should do more to promote healthy lifestyles?",
+            "What are the advantages and disadvantages of modern medicine compared to traditional remedies?",
+        ],
+    },
+    {
+        "id": "p3_work",
+        "topic_title": "Work & Careers",
+        "questions": [
+            "How has the nature of work changed in recent decades?",
+            "Do you think remote working will become more or less common in the future?",
+            "Why do some people choose job satisfaction over a high salary?",
+            "To what extent do you agree that a university degree is necessary for a successful career?",
+        ],
+    },
+    {
+        "id": "p3_family",
+        "topic_title": "Family & Relationships",
+        "questions": [
+            "How has the role of the family changed in modern society?",
+            "Do you think the older generation and the younger generation have different values?",
+            "Why do you think family sizes have become smaller in many countries?",
+            "How can families maintain strong relationships despite busy modern lifestyles?",
+        ],
+    },
+    {
+        "id": "p3_travel",
+        "topic_title": "Travel & Tourism",
+        "questions": [
+            "Why do you think international travel has become so popular?",
+            "What are the advantages and disadvantages of tourism for local communities?",
+            "Do you think travel broadens the mind, or is that just a saying?",
+            "How do you think tourism will change in the next twenty years?",
+        ],
+    },
+    {
+        "id": "p3_media",
+        "topic_title": "Media & Information",
+        "questions": [
+            "How has social media changed the way people get their news?",
+            "Do you think the media has too much influence on public opinion?",
+            "Why is it important for people to think critically about what they read online?",
+            "To what extent do you agree that traditional newspapers will disappear in the future?",
+        ],
+    },
+    {
+        "id": "p3_food",
+        "topic_title": "Food & Diet",
+        "questions": [
+            "Why do you think fast food has become so popular around the world?",
+            "How has globalisation affected the food people eat in your country?",
+            "Do you think governments should regulate unhealthy food more strictly?",
+            "What are the advantages and disadvantages of genetically modified food?",
+        ],
+    },
+    {
+        "id": "p3_cities",
+        "topic_title": "Cities & Urban Life",
+        "questions": [
+            "Why do so many people choose to live in big cities despite the disadvantages?",
+            "How can governments address the problems caused by rapid urbanisation?",
+            "Do you think life in the countryside will become more or less attractive in the future?",
+            "What are the biggest challenges facing cities in the twenty-first century?",
+        ],
+    },
+    {
+        "id": "p3_culture",
+        "topic_title": "Culture & Identity",
+        "questions": [
+            "Why is it important for countries to preserve their cultural heritage?",
+            "How has globalisation affected local cultures around the world?",
+            "Do you think young people today are less interested in their own culture?",
+            "To what extent do you agree that cultural diversity makes a society stronger?",
+        ],
+    },
+    {
+        "id": "p3_language",
+        "topic_title": "Language & Communication",
+        "questions": [
+            "Why do you think English has become the dominant global language?",
+            "Do you think it is important for children to learn more than one language?",
+            "How has technology changed the way people use language?",
+            "Do you think minority languages should be actively protected, and if so, how?",
+        ],
+    },
+    {
+        "id": "p3_money",
+        "topic_title": "Money & Finance",
+        "questions": [
+            "Do you think young people today are good at managing their money?",
+            "How has the way people pay for things changed in recent years?",
+            "To what extent do you agree that money is the most important factor in choosing a career?",
+            "What are the advantages and disadvantages of a cashless society?",
+        ],
+    },
+    {
+        "id": "p3_sport",
+        "topic_title": "Sport & Competition",
+        "questions": [
+            "Why do you think some sports are more popular than others?",
+            "Do you think professional athletes are paid too much?",
+            "How can governments encourage more people to participate in sport?",
+            "To what extent do you agree that sport builds character in young people?",
+        ],
+    },
+    {
+        "id": "p3_crime",
+        "topic_title": "Crime & Punishment",
+        "questions": [
+            "Why do you think crime rates are higher in some areas than others?",
+            "Do you think stricter punishments are the best way to reduce crime?",
+            "How has technology helped in the fight against crime?",
+            "To what extent do you agree that poverty is the main cause of crime?",
+        ],
+    },
+    {
+        "id": "p3_government",
+        "topic_title": "Government & Society",
+        "questions": [
+            "What role should governments play in the daily lives of citizens?",
+            "Do you think people today are more or less interested in politics than in the past?",
+            "How can governments ensure that public services are distributed fairly?",
+            "To what extent do you agree that citizens have a duty to participate in the democratic process?",
+        ],
+    },
+    {
+        "id": "p3_art",
+        "topic_title": "Art & Creativity",
+        "questions": [
+            "Why do you think some people consider art to be less important than science?",
+            "How has technology changed the way art is created and shared?",
+            "Do you think governments should fund the arts, or should artists support themselves?",
+            "What are the advantages and disadvantages of making art education compulsory in schools?",
+        ],
+    },
+    {
+        "id": "p3_science",
+        "topic_title": "Science & Research",
+        "questions": [
+            "Why do you think scientific literacy is important for ordinary people?",
+            "How has science changed everyday life in the last fifty years?",
+            "Do you think there are areas of science where research should be restricted?",
+            "To what extent do you agree that governments should increase spending on scientific research?",
+        ],
+    },
+    {
+        "id": "p3_transport",
+        "topic_title": "Transport & Infrastructure",
+        "questions": [
+            "How has public transport changed in your country in recent years?",
+            "Do you think private cars will become less common in the future?",
+            "What are the advantages and disadvantages of investing heavily in high-speed rail?",
+            "How can cities reduce traffic congestion and air pollution at the same time?",
+        ],
+    },
+    {
+        "id": "p3_housing",
+        "topic_title": "Housing & Living Standards",
+        "questions": [
+            "Why has housing become so expensive in many cities around the world?",
+            "Do you think governments should do more to provide affordable housing?",
+            "How has the way people design and use their homes changed over time?",
+            "To what extent do you agree that where you live affects your quality of life?",
+        ],
+    },
+    {
+        "id": "p3_communication",
+        "topic_title": "Communication & Connection",
+        "questions": [
+            "How has the way people stay in touch with friends and family changed?",
+            "Do you think face-to-face communication is becoming less common?",
+            "What are the advantages and disadvantages of communicating mainly through screens?",
+            "Why do you think misunderstandings are more likely in written messages than in conversation?",
+        ],
+    },
+    {
+        "id": "p3_aging",
+        "topic_title": "Aging & Elderly Care",
+        "questions": [
+            "How has the role of elderly people in society changed over time?",
+            "Do you think governments or families should be mainly responsible for caring for the elderly?",
+            "What challenges does an aging population create for a country?",
+            "How can societies ensure that older people remain active and valued members of the community?",
+        ],
+    },
+    {
+        "id": "p3_success",
+        "topic_title": "Success & Achievement",
+        "questions": [
+            "How do you think people define success differently across cultures?",
+            "Do you think success is more about talent or hard work?",
+            "Why do you think some people are afraid of failure?",
+            "To what extent do you agree that financial wealth is the best measure of success?",
+        ],
+    },
+    {
+        "id": "p3_globalization",
+        "topic_title": "Globalisation & Trade",
+        "questions": [
+            "How has globalisation affected the economy of your country?",
+            "Do you think globalisation benefits rich countries more than poor countries?",
+            "What are the advantages and disadvantages of multinational companies operating worldwide?",
+            "How can countries protect their local industries in a globalised world?",
+        ],
+    },
+    {
+        "id": "p3_tradition",
+        "topic_title": "Tradition & Change",
+        "questions": [
+            "Why do you think some traditions disappear while others survive?",
+            "Do you think it is important for young people to follow the traditions of their parents?",
+            "How has modernisation affected traditional customs in your country?",
+            "To what extent do you agree that holding on to tradition can hold a society back?",
+        ],
+    },
+    {
+        "id": "p3_nature",
+        "topic_title": "Nature & Wildlife",
+        "questions": [
+            "Why do you think some people feel disconnected from nature in modern life?",
+            "How can cities be designed to include more natural spaces?",
+            "Do you think enough is being done to protect endangered species?",
+            "What are the advantages and disadvantages of keeping animals in zoos?",
+        ],
+    },
+    {
+        "id": "p3_entertainment",
+        "topic_title": "Entertainment & Leisure",
+        "questions": [
+            "How has the entertainment industry changed in recent years?",
+            "Do you think people spend too much time on entertainment and not enough on productive activities?",
+            "Why do you think live events, such as concerts, remain popular despite streaming services?",
+            "What are the advantages and disadvantages of free online entertainment?",
+        ],
+    },
+    {
+        "id": "p3_fashion",
+        "topic_title": "Fashion & Appearance",
+        "questions": [
+            "Why do you think people care so much about their appearance?",
+            "How has the fashion industry changed with the rise of social media?",
+            "Do you think the fashion industry has a negative impact on the environment?",
+            "To what extent do you agree that people are judged too much on how they look?",
+        ],
+    },
+    {
+        "id": "p3_equality",
+        "topic_title": "Equality & Fairness",
+        "questions": [
+            "Why do you think inequality still exists in many parts of the world?",
+            "How can governments work towards greater equality in society?",
+            "Do you think men and women now have equal opportunities in most countries?",
+            "To what extent do you agree that education is the key to reducing inequality?",
+        ],
+    },
+    {
+        "id": "p3_innovation",
+        "topic_title": "Innovation & Progress",
+        "questions": [
+            "Why do you think some countries are more innovative than others?",
+            "How has innovation in technology improved people's daily lives?",
+            "Do you think there are risks associated with rapid technological progress?",
+            "What are the advantages and disadvantages of governments investing heavily in innovation?",
+        ],
+    },
+]
+
+
+def generate_metadata_part3(
+    avoid_topics: list[str] | None = None,
+) -> dict | None:
+    """Pick 1 random Part 3 discussion theme. Returns exercise dict."""
+    avoid = set(avoid_topics or [])
+    candidates = [t for t in PART3_DISCUSSION_SETS if t["topic_title"] not in avoid]
+    if not candidates:
+        candidates = PART3_DISCUSSION_SETS[:]
+    selected = random.choice(candidates)
+    return {
+        "topic_title": selected["topic_title"],
+        "topics": [{"area": selected["topic_title"], "questions": selected["questions"]}],
+    }
+
+
 def generate_metadata(
     avoid_topics: list[str] | None = None,
     avoid_domains: list[str] | None = None,
