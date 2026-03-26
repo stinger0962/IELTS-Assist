@@ -30,6 +30,25 @@ type SkillType = 'speaking' | 'writing' | 'reading' | 'listening' | 'grammar';
 const CRITERION_SKILLS: SkillType[] = ['speaking', 'writing'];
 const ACCURACY_SKILLS: SkillType[] = ['reading', 'listening', 'grammar'];
 
+const CRITERION_DESCRIPTIONS: Record<string, string> = {
+  // Speaking
+  fluency_coherence: 'Speak smoothly with logical flow',
+  lexical_resource: 'Use varied, precise vocabulary',
+  grammatical_range_accuracy: 'Use complex structures accurately',
+  pronunciation: 'Clear pronunciation and natural intonation',
+  // Writing
+  task_response: 'Address all parts of the question',
+  coherence_cohesion: 'Organize ideas with clear paragraphing',
+};
+
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  mcq: 'Multiple Choice',
+  true_false_not_given: 'True / False / Not Given',
+  completion: 'Completion',
+  matching: 'Matching',
+  yes_no_not_given: 'Yes / No / Not Given',
+};
+
 export default function SkillProgress() {
   const { skill } = useParams<{ skill: string }>();
   const navigate = useNavigate();
@@ -132,14 +151,18 @@ export default function SkillProgress() {
           {criterionInsights.criteria.map((c) => {
             const barPct = Math.min((c.average / 9) * 100, 100);
             const ta = trendArrow(c.trend);
+            const desc = CRITERION_DESCRIPTIONS[c.name];
             return (
-              <div key={c.name} className="sp-criterion">
-                <span className="sp-criterion-label">{c.label.split(' ').map(w => w[0]).join('')}</span>
-                <div className="sp-bar-track">
-                  <div className="sp-bar-fill" style={{ width: `${barPct}%`, background: bandColor(c.average) }} />
+              <div key={c.name} className="sp-criterion-row">
+                <div className="sp-criterion">
+                  <span className="sp-criterion-label">{c.label}</span>
+                  <div className="sp-bar-track">
+                    <div className="sp-bar-fill" style={{ width: `${barPct}%`, background: bandColor(c.average) }} />
+                  </div>
+                  <span className="sp-criterion-band">{c.average.toFixed(1)}</span>
+                  <span className="sp-trend" style={{ color: ta.color }}>{ta.symbol}</span>
                 </div>
-                <span className="sp-criterion-band">{c.average.toFixed(1)}</span>
-                <span className="sp-trend" style={{ color: ta.color }}>{ta.symbol}</span>
+                {desc && <div className="sp-criterion-desc">{desc}</div>}
               </div>
             );
           })}
@@ -232,6 +255,27 @@ export default function SkillProgress() {
           </div>
         </div>
 
+        {accuracyInsights.question_type_breakdown && accuracyInsights.question_type_breakdown.length > 0 && (
+          <div className="sp-section">
+            <h2 className="sp-section-title">Accuracy by Question Type</h2>
+            {accuracyInsights.question_type_breakdown.map((qt) => {
+              const barPct = Math.min(qt.accuracy, 100);
+              return (
+                <div key={qt.type} className="sp-criterion-row">
+                  <div className="sp-criterion">
+                    <span className="sp-criterion-label sp-qt-label">{QUESTION_TYPE_LABELS[qt.type] || qt.type}</span>
+                    <div className="sp-bar-track">
+                      <div className="sp-bar-fill" style={{ width: `${barPct}%`, background: accuracyColor(qt.accuracy) }} />
+                    </div>
+                    <span className="sp-criterion-band">{qt.accuracy.toFixed(0)}%</span>
+                  </div>
+                  <div className="sp-criterion-desc">{qt.correct}/{qt.total} correct</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {accuracyInsights.recent_sessions.length > 0 && (
           <div className="sp-section">
             <h2 className="sp-section-title">Recent Sessions</h2>
@@ -304,9 +348,12 @@ const styles = `
   .sp-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
   .sp-section-title { font-size: 0.9rem; font-weight: 600; margin-bottom: var(--spacing-sm); color: var(--color-text-primary); }
 
-  .sp-criterion { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .sp-criterion:last-child { margin-bottom: 0; }
-  .sp-criterion-label { font-size: 0.75rem; color: var(--color-text-secondary); width: 32px; flex-shrink: 0; font-weight: 600; }
+  .sp-criterion-row { margin-bottom: 12px; }
+  .sp-criterion-row:last-child { margin-bottom: 0; }
+  .sp-criterion { display: flex; align-items: center; gap: 8px; }
+  .sp-criterion-desc { font-size: 0.7rem; color: var(--color-text-secondary); margin-top: 2px; padding-left: 0; }
+  .sp-criterion-label { font-size: 0.75rem; color: var(--color-text-secondary); width: 36px; flex-shrink: 0; font-weight: 600; }
+  .sp-qt-label { width: auto; min-width: 60px; max-width: 120px; font-size: 0.7rem; }
   .sp-bar-track { flex: 1; height: 10px; background: var(--color-border); border-radius: 5px; overflow: hidden; }
   .sp-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
   .sp-criterion-band { font-size: 0.85rem; font-weight: 700; width: 28px; text-align: right; }

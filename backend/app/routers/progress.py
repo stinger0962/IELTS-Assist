@@ -371,6 +371,157 @@ def get_writing_insights(
 
 # ── Accuracy-based insights (reading, listening, grammar) ────────────────────
 
+
+def _extract_question_type_stats(user_answers_str: str, exercise_content_str: str, skill: str):
+    """Parse user_answers and exercise content to build per-question-type accuracy.
+
+    Returns dict[str, {"correct": int, "total": int}].
+
+    user_answers is a JSON string of a flat key-value map, e.g.:
+      Reading new format: {"q_0_1": "True", "q_1_3": "B", "mh_0_A": "iii"}
+      Reading legacy:     {"tfng_1": "True", "mc_0": "A", "mh_1": "B"}
+      Listening:          {"comp_0": "50", "mc_0": "B", "match_0_1": "C"}
+
+    exercise_content is the GeneratedPractice.content JSON with full exercise data.
+    """
+    stats: dict = {}
+
+    try:
+        answers = json.loads(user_answers_str) if user_answers_str else {}
+    except (json.JSONDecodeError, TypeError):
+        return stats
+
+    if not isinstance(answers, dict):
+        return stats
+
+    try:
+        content = json.loads(exercise_content_str) if exercise_content_str else {}
+    except (json.JSONDecodeError, TypeError):
+        content = {}
+
+    if not isinstance(content, dict):
+        content = {}
+
+    def inc(qtype: str, is_correct: bool):
+        if qtype not in stats:
+            stats[qtype] = {"correct": 0, "total": 0}
+        stats[qtype]["total"] += 1
+        if is_correct:
+            stats[qtype]["correct"] += 1
+
+    def _normalize_completion(s: str) -> str:
+        """Normalize for flexible completion matching (lowercase, strip punctuation/articles)."""
+        import re
+        s = s.lower().strip().rstrip('.').strip()
+        s = re.sub(r"^(the|a|an)\s+", "", s)
+        s = re.sub(r"['\"-]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    def _completion_match(user: str, correct: str) -> bool:
+        """Flexible matching for completion/short-answer questions."""
+        if not user:
+            return False
+        nu, nc = _normalize_completion(user), _normalize_completion(correct)
+        if nu == nc:
+            return True
+        # Plural variants
+        for suffix in ["s", "es"]:
+            if nu + suffix == nc or nc + suffix == nu:
+                return True
+        # 1-edit distance tolerance for longer words
+        if len(nu) >= 4 and len(nc) >= 4:
+            if abs(len(nu) - len(nc)) <= 1:
+                diffs = sum(1 for a, b in zip(nu, nc) if a != b) + abs(len(nu) - len(nc))
+                if diffs <= 1:
+                    return True
+        return False
+
+    questions = content.get("questions", {})
+    groups = questions.get("groups", [])
+
+    if skill in ("reading", "grammar") and groups:
+        # New format: groups with type field
+        for gi, group in enumerate(groups):
+            gtype = group.get("type", "unknown")
+            if gtype == "matching_headings":
+                group_answers = group.get("answers", [])
+                for ans in group_answers:
+                    pnum = ans.get("paragraph_number", "")
+                    key = f"mh_{gi}_{pnum}"
+                    user_ans = answers.get(key, "")
+                    correct_ans = ans.get("answer", "")
+                    inc(gtype, user_ans == correct_ans)
+            else:
+                items = group.get("items", [])
+                for item in items:
+                    qnum = item.get("question_number", "")
+                    key = f"q_{gi}_{qnum}"
+                    user_ans = answers.get(key, "")
+                    correct_ans = item.get("answer", "")
+                    if gtype in ("true_false_not_given", "multiple_choice", "matching_information"):
+                        inc(gtype, user_ans == correct_ans)
+                    else:
+                        # completion types, short_answer
+                        inc(gtype, _completion_match(user_ans, correct_ans))
+
+    elif skill == "reading" and not groups:
+        # Legacy format: tfng_*, mc_*, mh_* keys
+        answer_key = content.get("answer_key", {})
+        tfng_answers = answer_key.get("true_false_not_given", [])
+        for tfa in tfng_answers:
+            qnum = tfa.get("question_number", "")
+            key = f"tfng_{qnum}"
+            user_ans = answers.get(key, "")
+            inc("true_false_not_given", user_ans == tfa.get("answer", ""))
+
+        second_type = answer_key.get("second_type", "")
+        second_answers = answer_key.get(second_type, [])
+        if second_type == "multiple_choice":
+            for i, item in enumerate(second_answers):
+                key = f"mc_{i}"
+                user_ans = answers.get(key, "")
+                inc("multiple_choice", user_ans == item.get("answer", ""))
+        elif second_type == "matching_headings":
+            for item in second_answers:
+                pnum = item.get("paragraph_number", "")
+                key = f"mh_{pnum}"
+                user_ans = answers.get(key, "")
+                inc("matching_headings", user_ans == item.get("answer", ""))
+
+    elif skill == "listening":
+        qs = questions if isinstance(questions, list) else content.get("questions", [])
+        if not isinstance(qs, list):
+            qs = []
+
+        # Count completion and MCQ questions to reconstruct index mapping
+        completion_qs = [q for q in qs if q.get("type") == "completion"]
+        mcq_qs = [q for q in qs if q.get("type") == "mcq"]
+        matching_blocks = content.get("matching", [])
+
+        for i, q in enumerate(completion_qs):
+            key = f"comp_{i}"
+            user_ans = answers.get(key, "")
+            inc("completion", _completion_match(user_ans, q.get("answer", "")))
+
+        for i, q in enumerate(mcq_qs):
+            key = f"mc_{i}"
+            user_ans = (answers.get(key, "") or "").strip().upper()
+            inc("multiple_choice", user_ans == (q.get("answer", "") or "").strip().upper())
+
+        for bi, block in enumerate(matching_blocks):
+            block_answers = block.get("answers", {})
+            stems = block.get("stems", [])
+            for stem in stems:
+                qnum = stem.get("question_number", "")
+                key = f"match_{bi}_{qnum}"
+                user_ans = (answers.get(key, "") or "").strip().upper()
+                correct_ans = (block_answers.get(str(qnum), "") or "").strip().upper()
+                inc("matching", user_ans == correct_ans)
+
+    return stats
+
+
 @router.get("/progress/accuracy-insights")
 def get_accuracy_insights(
     skill: str,
@@ -396,6 +547,9 @@ def get_accuracy_insights(
     )
 
     sessions = []
+    # Accumulate question-type stats across all sessions
+    qtype_totals: dict = {}  # {type: {"correct": int, "total": int}}
+
     for up, gp in rows:
         correct = up.correct_count or 0
         total_q = up.total_questions or 0
@@ -409,6 +563,20 @@ def get_accuracy_insights(
             "topic": gp.topic,
         })
 
+        # Parse per-question-type stats for this session
+        try:
+            session_qtype = _extract_question_type_stats(
+                up.user_answers, gp.content, skill
+            )
+            for qtype, counts in session_qtype.items():
+                if qtype not in qtype_totals:
+                    qtype_totals[qtype] = {"correct": 0, "total": 0}
+                qtype_totals[qtype]["correct"] += counts["correct"]
+                qtype_totals[qtype]["total"] += counts["total"]
+        except Exception:
+            # If parsing fails for a session, skip its breakdown contribution
+            logger.debug("Failed to parse question_type stats for practice %s", up.practice_id, exc_info=True)
+
     total = len(sessions)
     if total == 0:
         return {
@@ -421,6 +589,7 @@ def get_accuracy_insights(
             "total_questions_answered": 0,
             "total_correct": 0,
             "recent_sessions": [],
+            "question_type_breakdown": [],
         }
 
     all_accuracy = [s["accuracy"] for s in sessions]
@@ -448,6 +617,18 @@ def get_accuracy_insights(
         for s in sessions[:5]
     ]
 
+    # Build question_type_breakdown sorted by total (descending)
+    question_type_breakdown = []
+    for qtype, counts in sorted(qtype_totals.items(), key=lambda x: x[1]["total"], reverse=True):
+        t = counts["total"]
+        c = counts["correct"]
+        question_type_breakdown.append({
+            "type": qtype,
+            "correct": c,
+            "total": t,
+            "accuracy": round(c / t * 100, 1) if t > 0 else 0,
+        })
+
     return {
         "total_sessions": total,
         "overall_accuracy": overall_accuracy,
@@ -458,4 +639,5 @@ def get_accuracy_insights(
         "total_questions_answered": sum(s["total_questions"] for s in sessions),
         "total_correct": sum(s["correct"] for s in sessions),
         "recent_sessions": recent,
+        "question_type_breakdown": question_type_breakdown,
     }

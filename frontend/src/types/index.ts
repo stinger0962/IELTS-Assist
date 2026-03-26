@@ -526,6 +526,7 @@ export interface AccuracyInsights {
   total_questions_answered: number;
   total_correct: number;
   recent_sessions: { date: string; score: number; accuracy: number; correct: number; total_questions: number; topic: string }[];
+  question_type_breakdown?: { type: string; correct: number; total: number; accuracy: number }[];
 }
 
 export interface AIGrammarPractice {

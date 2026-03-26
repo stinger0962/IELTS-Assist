@@ -8,7 +8,8 @@ import {
   BookOpen,
   AlertCircle,
   GraduationCap,
-  TrendingUp
+  TrendingUp,
+  ChevronRight
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { progressAPI, goalsAPI } from '../api';
@@ -87,8 +88,11 @@ function SkillCard({ progress, skillName, goalProgress, onClick }: {
   return (
     <div className="skill-card skill-card-clickable" onClick={onClick} style={{ cursor: 'pointer' }}>
       <div className="skill-header">
-        <span className="skill-name">{skillName} ▸</span>
-        <span className="skill-band">{progress.band_score.toFixed(1)}</span>
+        <span className="skill-name">{skillName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span className="skill-band">{progress.band_score.toFixed(1)}</span>
+          <ChevronRight size={16} className="skill-chevron" />
+        </div>
       </div>
       <div className="skill-progress">
         <div className="ring-wrapper">
@@ -676,8 +680,23 @@ export default function Dashboard() {
           white-space: nowrap;
         }
 
+        .skill-card-clickable {
+          transition: all 0.15s ease;
+        }
         .skill-card-clickable:hover {
           border-color: var(--color-primary);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          transform: translateY(-1px);
+        }
+        .skill-card-clickable:active {
+          transform: translateY(0);
+          box-shadow: none;
+          border-color: var(--color-primary);
+          background: color-mix(in srgb, var(--color-primary) 3%, var(--color-background));
+        }
+        .skill-chevron {
+          color: var(--color-text-secondary);
+          opacity: 0.5;
         }
 
         .empty-state {
