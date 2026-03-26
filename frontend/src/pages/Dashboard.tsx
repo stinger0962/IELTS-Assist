@@ -69,21 +69,25 @@ function StatCard({ icon: Icon, label, value, subValue, color }: {
   );
 }
 
-function SkillCard({ progress, skillName, goalProgress, onClick }: {
+function SkillCard({ progress, skillName, goalProgress, targetBand, onClick }: {
   progress: UserProgress;
   skillName: string;
   goalProgress?: GoalTodayProgressItem;
+  targetBand: number;
   onClick?: () => void;
 }) {
   const hasGoal = goalProgress && goalProgress.target > 0;
+  // Ring always shows band progress toward target
   const ringPct = hasGoal
     ? Math.min(100, Math.round((goalProgress.actual / goalProgress.target) * 100))
-    : progress.total_exercises > 0
-      ? Math.round((progress.correct_answers / progress.total_exercises) * 100)
+    : progress.band_score > 0
+      ? Math.min(100, Math.round((progress.band_score / targetBand) * 100))
       : 0;
   const ringLabel = hasGoal
     ? `${goalProgress.actual}/${goalProgress.target}`
-    : `${ringPct}%`;
+    : progress.band_score > 0
+      ? `${progress.band_score.toFixed(1)}/${targetBand}`
+      : '—';
 
   return (
     <div className="skill-card skill-card-clickable" onClick={onClick} style={{ cursor: 'pointer' }}>
@@ -97,7 +101,7 @@ function SkillCard({ progress, skillName, goalProgress, onClick }: {
       <div className="skill-progress">
         <div className="ring-wrapper">
           <ProgressRing progress={ringPct} size={60} strokeWidth={6} />
-          <span className="ring-sub">{hasGoal ? 'today' : 'accuracy'}</span>
+          <span className="ring-sub">{hasGoal ? 'today' : 'to target'}</span>
         </div>
         <div className="skill-stats">
           <div className="skill-stat">
@@ -214,6 +218,7 @@ export default function Dashboard() {
               key={p.id}
               progress={p}
               skillName={getSkillName(p.skill)}
+              targetBand={user?.target_band || 7.0}
               goalProgress={todayProgress.find(tp => tp.skill === p.skill && tp.goal_type === 'daily_minutes')}
               onClick={() => navigate(`/progress/${p.skill}`)}
             />
