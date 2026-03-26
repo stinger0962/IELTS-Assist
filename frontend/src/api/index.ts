@@ -63,6 +63,8 @@ export const progressAPI = {
     study_time_minutes?: number;
   }) => api.post('/progress', data),
   getSpeakingInsights: () => api.get('/progress/speaking-insights'),
+  getWritingInsights: () => api.get('/progress/writing-insights'),
+  getAccuracyInsights: (skill: string) => api.get(`/progress/accuracy-insights?skill=${skill}`),
   getSessions: (limit = 10) => api.get(`/sessions?limit=${limit}`),
   createSession: (data: { skill?: string; duration_minutes: number; notes?: string }) =>
     api.post('/sessions', data),

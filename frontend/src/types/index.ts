@@ -516,6 +516,18 @@ export interface SpeakingInsights {
   recent_sessions: SpeakingSessionSummary[];
 }
 
+export interface AccuracyInsights {
+  total_sessions: number;
+  overall_accuracy: number | null;
+  accuracy_trend: string;
+  overall_average_band: number | null;
+  best_accuracy: number | null;
+  worst_accuracy: number | null;
+  total_questions_answered: number;
+  total_correct: number;
+  recent_sessions: { date: string; score: number; accuracy: number; correct: number; total_questions: number; topic: string }[];
+}
+
 export interface AIGrammarPractice {
   practice_db_id?: number;
   meta: {

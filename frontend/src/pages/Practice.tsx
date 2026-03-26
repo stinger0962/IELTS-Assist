@@ -637,19 +637,38 @@ export default function Practice() {
               ) : aiSpeakingExercises.length === 0 ? (
                 <p className="empty-list">No exercises yet — click Generate below.</p>
               ) : (
-                aiSpeakingExercises.map((ex, i) => {
-                  const mod = ex.meta.module;
-                  const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
-                    : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
-                    : mod === 'speaking_full_test' ? 'Full Test · ~14 min'
-                    : `Long Turn · ${ex.meta.domain || 'speaking'}`;
-                  return (
-                    <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
-                      <span className="exercise-title">{ex.meta.topic}</span>
-                      <span className="exercise-meta">{label}</span>
-                    </button>
-                  );
-                })
+                <>
+                  {/* Full Test cards */}
+                  {aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').length > 0 && (
+                    <>
+                      <div className="section-label">Full Test</div>
+                      {aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').map((ex, i) => (
+                        <button key={`ft-${i}`} className="exercise-item exercise-item-highlight" onClick={() => handleSelectAISpeaking(ex)}>
+                          <span className="exercise-title">{ex.meta.topic}</span>
+                          <span className="exercise-meta">Full Test · ~14 min</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {/* Quick Practice cards */}
+                  {aiSpeakingExercises.filter(ex => ex.meta.module !== 'speaking_full_test').length > 0 && (
+                    <>
+                      <div className="section-label">Quick Practice</div>
+                      {aiSpeakingExercises.filter(ex => ex.meta.module !== 'speaking_full_test').map((ex, i) => {
+                        const mod = ex.meta.module;
+                        const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
+                          : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
+                          : `Long Turn · ${ex.meta.domain || 'speaking'}`;
+                        return (
+                          <button key={`qp-${i}`} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
+                            <span className="exercise-title">{ex.meta.topic}</span>
+                            <span className="exercise-meta">{label}</span>
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
               )}
               {aiSpeakingExercises.length < 3 && (
                 speakingPoolEmpty ? (
@@ -723,8 +742,10 @@ const listStyles = `
   .exercise-list { padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
   .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); text-align: left; }
   .exercise-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
+  .exercise-item-highlight { border-color: var(--color-primary); background: linear-gradient(135deg, var(--color-background), color-mix(in srgb, var(--color-primary) 5%, var(--color-background))); }
   .exercise-title { font-weight: 500; color: var(--color-text-primary); }
   .exercise-meta { font-size: 0.75rem; color: var(--color-text-secondary); }
+  .section-label { font-size: 0.7rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; padding: var(--spacing-sm) 0 4px; }
   .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-md) 0; }
   .generating-msg { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) 0; font-size: 0.875rem; color: var(--color-text-secondary); }
   .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-background); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }

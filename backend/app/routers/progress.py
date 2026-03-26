@@ -252,3 +252,210 @@ def get_speaking_insights(
         "overall_average": overall_avg,
         "recent_sessions": recent,
     }
+
+
+# ── Writing insights ─────────────────────────────────────────────────────────
+
+WRITING_CRITERION_KEYS = [
+    ("task_response", "Task Response"),
+    ("coherence_cohesion", "Coherence & Cohesion"),
+    ("lexical_resource", "Lexical Resource"),
+    ("grammatical_range_accuracy", "Grammar Range & Accuracy"),
+]
+
+WRITING_WEAKNESS_RECOMMENDATIONS = {
+    "task_response": "Address all parts of the question. Develop your position clearly with specific examples.",
+    "coherence_cohesion": "Use paragraphing strategically. Improve logical flow between ideas.",
+    "lexical_resource": "Build topic-specific vocabulary. Avoid repetition by using synonyms and paraphrases.",
+    "grammatical_range_accuracy": "Practice complex sentence structures. Proofread for accuracy.",
+}
+
+
+@router.get("/progress/writing-insights")
+def get_writing_insights(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aggregate writing criterion data across all submitted sessions."""
+    rows = (
+        db.query(UserPractice, GeneratedPractice)
+        .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
+        .filter(
+            UserPractice.user_id == current_user.id,
+            GeneratedPractice.skill == "writing",
+            UserPractice.submitted_at.isnot(None),
+        )
+        .order_by(UserPractice.submitted_at.desc())
+        .all()
+    )
+
+    sessions = []
+    for up, gp in rows:
+        try:
+            data = json.loads(up.user_answers) if up.user_answers else {}
+            grading = data.get("grading", {})
+            er = grading.get("examiner_result", {})
+            bands = {}
+            for key, _ in WRITING_CRITERION_KEYS:
+                b = er.get(key, {}).get("band")
+                if b is not None:
+                    bands[key] = float(b)
+            if bands and er.get("overall_band") is not None:
+                sessions.append({
+                    "bands": bands,
+                    "overall": float(er["overall_band"]),
+                    "date": up.submitted_at.isoformat() if up.submitted_at else None,
+                    "topic": gp.topic,
+                })
+        except Exception:
+            continue
+
+    total = len(sessions)
+    if total == 0:
+        return {
+            "total_sessions": 0,
+            "criteria": [],
+            "weakest_criterion": None,
+            "weakest_recommendation": None,
+            "best_session_band": None,
+            "worst_session_band": None,
+            "overall_average": None,
+            "recent_sessions": [],
+        }
+
+    criteria = []
+    weakest_key = None
+    weakest_avg = 10.0
+    for key, label in WRITING_CRITERION_KEYS:
+        all_bands = [s["bands"][key] for s in sessions if key in s["bands"]]
+        if not all_bands:
+            criteria.append({"name": key, "label": label, "average": 0, "trend": "insufficient"})
+            continue
+        avg = round(sum(all_bands) / len(all_bands) * 2) / 2
+        if total >= 6:
+            recent_3 = [s["bands"][key] for s in sessions[:3] if key in s["bands"]]
+            prev_3 = [s["bands"][key] for s in sessions[3:6] if key in s["bands"]]
+            if recent_3 and prev_3:
+                delta = (sum(recent_3) / len(recent_3)) - (sum(prev_3) / len(prev_3))
+                trend = "improving" if delta > 0.25 else "declining" if delta < -0.25 else "stable"
+            else:
+                trend = "insufficient"
+        else:
+            trend = "insufficient"
+        criteria.append({"name": key, "label": label, "average": avg, "trend": trend})
+        if avg < weakest_avg:
+            weakest_avg = avg
+            weakest_key = key
+
+    overall_bands = [s["overall"] for s in sessions]
+    overall_avg = round(sum(overall_bands) / len(overall_bands) * 2) / 2
+    recent = [{"date": s["date"], "overall_band": s["overall"], "topic": s["topic"]} for s in sessions[:5]]
+
+    weakest_label = None
+    for key, label in WRITING_CRITERION_KEYS:
+        if key == weakest_key:
+            weakest_label = label
+            break
+
+    return {
+        "total_sessions": total,
+        "criteria": criteria,
+        "weakest_criterion": weakest_label,
+        "weakest_recommendation": WRITING_WEAKNESS_RECOMMENDATIONS.get(weakest_key) if weakest_key else None,
+        "best_session_band": max(overall_bands),
+        "worst_session_band": min(overall_bands),
+        "overall_average": overall_avg,
+        "recent_sessions": recent,
+    }
+
+
+# ── Accuracy-based insights (reading, listening, grammar) ────────────────────
+
+@router.get("/progress/accuracy-insights")
+def get_accuracy_insights(
+    skill: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aggregate accuracy data for reading, listening, or grammar."""
+    valid_skills = {"reading", "listening", "grammar"}
+    if skill not in valid_skills:
+        from fastapi import HTTPException
+        raise HTTPException(400, f"Invalid skill. Must be one of: {', '.join(valid_skills)}")
+
+    rows = (
+        db.query(UserPractice, GeneratedPractice)
+        .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
+        .filter(
+            UserPractice.user_id == current_user.id,
+            GeneratedPractice.skill == skill,
+            UserPractice.submitted_at.isnot(None),
+        )
+        .order_by(UserPractice.submitted_at.desc())
+        .all()
+    )
+
+    sessions = []
+    for up, gp in rows:
+        correct = up.correct_count or 0
+        total_q = up.total_questions or 0
+        accuracy = round(correct / total_q * 100, 1) if total_q > 0 else 0
+        sessions.append({
+            "score": float(up.score) if up.score else 0,
+            "correct": correct,
+            "total_questions": total_q,
+            "accuracy": accuracy,
+            "date": up.submitted_at.isoformat() if up.submitted_at else None,
+            "topic": gp.topic,
+        })
+
+    total = len(sessions)
+    if total == 0:
+        return {
+            "total_sessions": 0,
+            "overall_accuracy": None,
+            "accuracy_trend": "insufficient",
+            "overall_average_band": None,
+            "best_accuracy": None,
+            "worst_accuracy": None,
+            "total_questions_answered": 0,
+            "total_correct": 0,
+            "recent_sessions": [],
+        }
+
+    all_accuracy = [s["accuracy"] for s in sessions]
+    all_bands = [s["score"] for s in sessions if s["score"] > 0]
+    overall_accuracy = round(sum(all_accuracy) / len(all_accuracy), 1)
+
+    # Trend: last 3 vs previous 3
+    if total >= 6:
+        recent_3 = all_accuracy[:3]
+        prev_3 = all_accuracy[3:6]
+        delta = (sum(recent_3) / len(recent_3)) - (sum(prev_3) / len(prev_3))
+        accuracy_trend = "improving" if delta > 5 else "declining" if delta < -5 else "stable"
+    else:
+        accuracy_trend = "insufficient"
+
+    recent = [
+        {
+            "date": s["date"],
+            "score": s["score"],
+            "accuracy": s["accuracy"],
+            "correct": s["correct"],
+            "total_questions": s["total_questions"],
+            "topic": s["topic"],
+        }
+        for s in sessions[:5]
+    ]
+
+    return {
+        "total_sessions": total,
+        "overall_accuracy": overall_accuracy,
+        "accuracy_trend": accuracy_trend,
+        "overall_average_band": round(sum(all_bands) / len(all_bands) * 2) / 2 if all_bands else None,
+        "best_accuracy": max(all_accuracy),
+        "worst_accuracy": min(all_accuracy),
+        "total_questions_answered": sum(s["total_questions"] for s in sessions),
+        "total_correct": sum(s["correct"] for s in sessions),
+        "recent_sessions": recent,
+    }
