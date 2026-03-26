@@ -14,6 +14,7 @@ import AIGrammarExerciseView from '../components/practice/AIGrammarView';
 import AISpeakingExerciseView from '../components/practice/AISpeakingView';
 import AISpeakingPart1View from '../components/practice/AISpeakingPart1View';
 import AISpeakingPart3View from '../components/practice/AISpeakingPart3View';
+import AISpeakingFullTestView from '../components/practice/AISpeakingFullTestView';
 
 // Error boundary to prevent white screens from component crashes
 class ExerciseErrorBoundary extends React.Component<
@@ -400,6 +401,8 @@ export default function Practice() {
             <AISpeakingPart1View exercise={currentAISpeaking} onBack={handleBack} />
           ) : mod === 'speaking_part3' ? (
             <AISpeakingPart3View exercise={currentAISpeaking} onBack={handleBack} />
+          ) : mod === 'speaking_full_test' ? (
+            <AISpeakingFullTestView exercise={currentAISpeaking} onBack={handleBack} />
           ) : (
             <AISpeakingExerciseView exercise={currentAISpeaking} onBack={handleBack} />
           )}
@@ -638,6 +641,7 @@ export default function Practice() {
                   const mod = ex.meta.module;
                   const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
                     : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
+                    : mod === 'speaking_full_test' ? 'Full Test · ~14 min'
                     : `Long Turn · ${ex.meta.domain || 'speaking'}`;
                   return (
                     <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>

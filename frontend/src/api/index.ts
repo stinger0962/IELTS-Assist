@@ -143,6 +143,17 @@ export const practiceAPI = {
       headers: { 'Content-Type': undefined },
     });
   },
+  submitAISpeakingFull: (audioPart1: Blob, audioPart2: Blob, audioPart3: Blob, practiceId: number) => {
+    const formData = new FormData();
+    formData.append('audio_part1', audioPart1, 'part1.webm');
+    formData.append('audio_part2', audioPart2, 'part2.webm');
+    formData.append('audio_part3', audioPart3, 'part3.webm');
+    formData.append('practice_id', practiceId.toString());
+    return api.post('/generate/submit-ai-speaking-full', formData, {
+      timeout: 90000,  // 90s — 3x Whisper + GPT-4o
+      headers: { 'Content-Type': undefined },
+    });
+  },
   getDailyWriting: () => api.get('/generate/daily-writing'),
   generateMoreWriting: () => api.post('/generate/generate-more-writing'),
   submitAIWriting: (practiceId: number, essay: string, timeSeconds: number, mode: string) =>

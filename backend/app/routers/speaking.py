@@ -74,9 +74,9 @@ def _active_speaking_cards(user_id: int, db: Session) -> list:
 
 
 def _seed_speaking_pool(db: Session, count: int = 6) -> None:
-    """Seed pool with balanced Part 1 + Part 2 + Part 3 exercises (instant, no GPT).
+    """Seed pool with balanced Part 1 + Part 2 + Part 3 + Full Test exercises (instant, no GPT).
 
-    Rotates across all 3 parts, seeding whichever has fewest.
+    Rotates across all parts, seeding whichever has fewest.
     """
     existing = db.query(GeneratedPractice).filter(
         GeneratedPractice.skill == "speaking"
@@ -88,6 +88,7 @@ def _seed_speaking_pool(db: Session, count: int = 6) -> None:
         "part1": sum(1 for gp in existing if '"speaking_part1"' in (gp.content or "")),
         "part2": sum(1 for gp in existing if '"speaking_part2"' in (gp.content or "")),
         "part3": sum(1 for gp in existing if '"speaking_part3"' in (gp.content or "")),
+        "full_test": sum(1 for gp in existing if '"speaking_full_test"' in (gp.content or "")),
     }
 
     def seed_part1():
@@ -120,7 +121,47 @@ def _seed_speaking_pool(db: Session, count: int = 6) -> None:
         counts["part3"] += 1
         return True
 
-    seeders = {"part1": seed_part1, "part2": seed_part2, "part3": seed_part3}
+    def seed_full_test():
+        # Bundle: 3 random Part 1 topics + 1 Part 2 cue card + 1 Part 3 theme
+        p1 = generate_metadata_part1(avoid_topics=list(existing_topics))
+        if not p1:
+            return False
+        # Find an unused Part 2 cue card
+        p2_card = None
+        for card in PART2_CUE_CARDS:
+            if card["topic_title"] not in existing_topics:
+                p2_card = card
+                break
+        if not p2_card:
+            p2_card = PART2_CUE_CARDS[0]  # fallback
+        p3 = generate_metadata_part3(avoid_topics=list(existing_topics))
+        if not p3:
+            return False
+
+        topic_title = f"Full Test: {p1['topic_title'][:20]} + {p2_card['topic_title'][:20]}"
+        content = {
+            "meta": {"module": "speaking_full_test", "topic": topic_title},
+            "part1": {"topics": p1["topics"]},
+            "part2": {
+                "cue_card": {
+                    "topic_line": p2_card["topic_line"],
+                    "bullets": p2_card["bullets"],
+                    "follow_up": p2_card["follow_up"],
+                },
+                "cue_card_metadata": p2_card,
+            },
+            "part3": {"topics": p3["topics"]},
+        }
+        db.add(GeneratedPractice(
+            skill="speaking", topic=topic_title,
+            content=json.dumps(content), is_validated=True,
+            generated_date=datetime.utcnow(),
+        ))
+        existing_topics.add(topic_title)
+        counts["full_test"] += 1
+        return True
+
+    seeders = {"part1": seed_part1, "part2": seed_part2, "part3": seed_part3, "full_test": seed_full_test}
     added = 0
     for _ in range(count):
         # Seed whichever part has fewest
@@ -401,3 +442,112 @@ def analyze_pronunciation(
         "overall_band": new_overall,
         "old_overall_band": old_overall,
     }
+
+
+@router.post("/submit-ai-speaking-full")
+async def submit_ai_speaking_full(
+    audio_part1: UploadFile = File(...),
+    audio_part2: UploadFile = File(...),
+    audio_part3: UploadFile = File(...),
+    practice_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full speaking test: 3 separate audio files → Whisper each → concatenate → GPT-4o grade."""
+    # Find the user practice
+    up = db.query(UserPractice).filter(
+        UserPractice.user_id == current_user.id,
+        UserPractice.practice_id == practice_id,
+        UserPractice.submitted_at.is_(None),
+    ).first()
+    if not up:
+        raise HTTPException(404, "Practice not found or already submitted")
+
+    gp = db.query(GeneratedPractice).get(up.practice_id)
+    content = json.loads(gp.content)
+
+    # Save all 3 audio files
+    SPEAKING_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    parts_data = []
+    for i, (audio_file, label) in enumerate([
+        (audio_part1, "Part 1"), (audio_part2, "Part 2"), (audio_part3, "Part 3")
+    ]):
+        audio_bytes = await audio_file.read()
+        if len(audio_bytes) < 5000:
+            logger.warning(f"[Speaking Full] {label} audio too short: {len(audio_bytes)} bytes")
+            raise HTTPException(422, f"{label} audio too short. Please record at least a few seconds for each part.")
+        audio_path = str(SPEAKING_AUDIO_DIR / f"{current_user.id}_{up.id}_part{i+1}.webm")
+        Path(audio_path).write_bytes(audio_bytes)
+        parts_data.append({"label": label, "path": audio_path, "size": len(audio_bytes)})
+        logger.info(f"[Speaking Full] {label} saved: {len(audio_bytes)} bytes ({len(audio_bytes)/1024:.0f}KB)")
+
+    # Step 1: Whisper transcription for all 3 parts (sequential to avoid rate limits)
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    transcripts = []
+    for part in parts_data:
+        try:
+            logger.info(f"[Speaking Full] Whisper: {part['label']}")
+            with open(part["path"], "rb") as f:
+                result = client.audio.transcriptions.create(model="whisper-1", file=f, response_format="text")
+            text = result.strip() if isinstance(result, str) else result.text.strip()
+            transcripts.append(f"[{part['label']}]\n{text}")
+            logger.info(f"[Speaking Full] Whisper {part['label']} OK: {len(text)} chars")
+        except Exception as e:
+            logger.error(f"[Speaking Full] Whisper {part['label']} FAILED: {e}")
+            transcripts.append(f"[{part['label']}]\n(transcription failed)")
+
+    full_transcript = "\n\n".join(transcripts)
+    logger.info(f"[Speaking Full] Combined transcript: {len(full_transcript)} chars")
+
+    if len(full_transcript.replace("[Part 1]", "").replace("[Part 2]", "").replace("[Part 3]", "").strip()) < 20:
+        for part in parts_data:
+            Path(part["path"]).unlink(missing_ok=True)
+        raise HTTPException(422, "No speech detected in any part. Please speak clearly and try again.")
+
+    # Build context for grader — include all part details
+    cue_card = {}
+    part1_topics = content.get("part1", {}).get("topics", [])
+    part2_cue = content.get("part2", {}).get("cue_card", {})
+    part3_topics = content.get("part3", {}).get("topics", [])
+
+    # Build comprehensive context for GPT
+    context_parts = []
+    if part1_topics:
+        p1_qs = []
+        for t in part1_topics:
+            p1_qs.extend(t.get("questions", []))
+        context_parts.append(f"Part 1 questions: {'; '.join(p1_qs)}")
+    if part2_cue:
+        context_parts.append(f"Part 2 cue card: {part2_cue.get('topic_line', '')} — {', '.join(part2_cue.get('bullets', []))}")
+    if part3_topics:
+        p3_qs = []
+        for t in part3_topics:
+            p3_qs.extend(t.get("questions", []))
+        context_parts.append(f"Part 3 discussion questions: {'; '.join(p3_qs)}")
+
+    cue_card = {"topic_line": "Full IELTS Speaking Test (Parts 1, 2, and 3)", "bullets": context_parts}
+
+    # Step 2: GPT-4o grading
+    try:
+        logger.info(f"[Speaking Full] GPT-4o grading, transcript={len(full_transcript)} chars")
+        grader = SpeakingGrader()
+        grading_result = grader.grade(full_transcript, cue_card, azure_scores=None)
+        logger.info(f"[Speaking Full] GPT-4o OK: overall_band={grading_result.get('examiner_result', {}).get('overall_band', '?')}")
+    except Exception as e:
+        logger.error(f"[Speaking Full] GPT-4o grading FAILED: {e}", exc_info=True)
+        for part in parts_data:
+            Path(part["path"]).unlink(missing_ok=True)
+        raise HTTPException(500, "Grading failed. Please try again.")
+
+    # Store results
+    overall = grading_result.get("examiner_result", {}).get("overall_band", 0)
+    grading_result["transcript"] = full_transcript
+    grading_result["has_pronunciation_analysis"] = False
+    grading_result["audio_paths"] = [p["path"] for p in parts_data]
+
+    up.submitted_at = datetime.utcnow()
+    up.user_answers = json.dumps(grading_result)
+    up.score = overall
+    db.commit()
+
+    return grading_result

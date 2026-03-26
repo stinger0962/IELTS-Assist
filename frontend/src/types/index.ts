@@ -458,8 +458,11 @@ export interface AISpeakingPractice {
   practice_db_id: number;
   meta: { module: string; domain?: string; topic: string };
   cue_card?: SpeakingCueCard;                // Part 2 only
-  topics?: SpeakingTopicSet[];               // Part 1 only
+  topics?: SpeakingTopicSet[];               // Part 1 / Part 3 only
   cue_card_metadata?: Record<string, any>;
+  part1?: { topics: SpeakingTopicSet[] };    // Full test only
+  part2?: { cue_card: SpeakingCueCard; cue_card_metadata?: Record<string, any> };
+  part3?: { topics: SpeakingTopicSet[] };
 }
 
 export interface SpeakingPronunciationWord {
