@@ -445,7 +445,7 @@ export default function Practice() {
     loadingMsg = 'Loading exercises…',
     genTime = '~2 min',
   ) => (
-    <div className="exercise-list">
+    <div className="exercise-list stagger-in">
       {isLoading ? (
         <div className="generating-msg"><div className="loading-spinner-sm" /><span>{loadingMsg}</span></div>
       ) : exercises.length === 0 ? (
@@ -607,7 +607,7 @@ export default function Practice() {
             aiReadingExercises, readingLoading, poolEmpty, generatingMore,
             handleGenerateMore,
             (ex, i) => (
-              <button key={i} className="exercise-item" onClick={() => handleSelectAIExercise(ex)}>
+              <button key={i} className="exercise-item" style={{ borderLeftColor: '#4F46E5' }} onClick={() => handleSelectAIExercise(ex)}>
                 <span className="exercise-title">{ex.meta.topic}</span>
                 <span className="exercise-meta">
                   {ex.meta.word_count}w · {
@@ -625,7 +625,7 @@ export default function Practice() {
             aiListeningExercises, listeningLoading, listeningPoolEmpty, listeningGeneratingMore,
             handleGenerateMoreListening,
             (ex, i) => (
-              <button key={i} className="exercise-item" onClick={() => handleSelectAIListening(ex)}>
+              <button key={i} className="exercise-item" style={{ borderLeftColor: '#10B981' }} onClick={() => handleSelectAIListening(ex)}>
                 <span className="exercise-title">{ex.meta.topic}</span>
                 <span className="exercise-meta">{ex.meta.format} · {(ex.questions.completion?.length ?? 0) + (ex.questions.multiple_choice?.length ?? 0)}q</span>
               </button>
@@ -637,7 +637,7 @@ export default function Practice() {
             aiGrammarExercises, grammarLoading, grammarPoolEmpty, grammarGeneratingMore,
             handleGenerateMoreGrammar,
             (ex, i) => (
-              <button key={i} className="exercise-item" onClick={() => handleSelectAIGrammar(ex)}>
+              <button key={i} className="exercise-item" style={{ borderLeftColor: '#8B5CF6' }} onClick={() => handleSelectAIGrammar(ex)}>
                 <span className="exercise-title">{ex.meta.grammar_topic}</span>
                 <span className="exercise-meta">{ex.meta.band_level} · {ex.meta.question_count}q</span>
               </button>
@@ -648,7 +648,7 @@ export default function Practice() {
             aiWritingExercises, writingLoading, writingPoolEmpty, writingGeneratingMore,
             handleGenerateMoreWriting,
             (ex, i) => (
-              <button key={i} className="exercise-item" onClick={() => handleSelectAIWriting(ex)}>
+              <button key={i} className="exercise-item" style={{ borderLeftColor: '#F59E0B' }} onClick={() => handleSelectAIWriting(ex)}>
                 <span className="exercise-title">{ex.meta.topic}</span>
                 <span className="exercise-meta">
                   {ESSAY_TYPE_LABELS[ex.meta.essay_type] || ex.meta.essay_type.replace(/_/g, ' ')} · {ex.meta.domain} · 250w
@@ -667,7 +667,7 @@ export default function Practice() {
                 : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
                 : `Long Turn · ${ex.meta.domain || 'speaking'}`;
               return (
-                <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
+                <button key={i} className="exercise-item" style={{ borderLeftColor: '#EF4444' }} onClick={() => handleSelectAISpeaking(ex)}>
                   <span className="exercise-title">{ex.meta.topic}</span>
                   <span className="exercise-meta">{label}</span>
                 </button>
@@ -740,11 +740,12 @@ const listStyles = `
 
   /* Exercise list */
   .exercise-list { display: flex; flex-direction: column; gap: var(--spacing-sm); }
-  .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); text-align: left; }
-  .exercise-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
-  .exercise-item-highlight { border-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
-  .exercise-title { font-weight: 500; color: var(--color-text-primary); }
-  .exercise-meta { font-size: 0.75rem; color: var(--color-text-secondary); flex-shrink: 0; margin-left: 8px; }
+  .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) calc(var(--spacing-md) + 4px); background: var(--color-surface); border: 1px solid var(--color-border); border-left: 4px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s ease; text-align: left; box-shadow: var(--shadow-card); }
+  .exercise-item:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
+  .exercise-item:active { transform: translateY(0); box-shadow: var(--shadow-card); }
+  .exercise-item-highlight { border-left-width: 4px; border-left-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
+  .exercise-title { font-weight: 600; color: var(--color-text-primary); font-size: 0.9rem; }
+  .exercise-meta { font-size: 0.72rem; color: var(--color-text-secondary); flex-shrink: 0; margin-left: 8px; }
   .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-lg) 0; }
   .generating-msg { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) 0; font-size: 0.875rem; color: var(--color-text-secondary); }
   .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-surface); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }
