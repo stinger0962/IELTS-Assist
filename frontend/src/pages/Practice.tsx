@@ -473,12 +473,12 @@ export default function Practice() {
   );
 
   // Skill tab config
-  const skillTabs: { key: SkillTab; label: string; icon: typeof BookOpen; color: string }[] = [
-    { key: 'reading', label: t('practice.reading'), icon: BookOpen, color: '#4F46E5' },
-    { key: 'listening', label: t('practice.listening'), icon: Headphones, color: '#10B981' },
-    { key: 'speaking', label: t('practice.speaking'), icon: MessageCircle, color: '#EF4444' },
-    { key: 'writing', label: t('practice.writing'), icon: Pen, color: '#F59E0B' },
-    { key: 'grammar', label: t('practice.grammar'), icon: Type, color: '#8B5CF6' },
+  const skillTabs: { key: SkillTab; label: string; icon: typeof BookOpen; color: string; gradient: string }[] = [
+    { key: 'reading', label: t('practice.reading'), icon: BookOpen, color: '#4F46E5', gradient: 'linear-gradient(135deg, #4F46E5, #6366F1)' },
+    { key: 'listening', label: t('practice.listening'), icon: Headphones, color: '#10B981', gradient: 'linear-gradient(135deg, #10B981, #34D399)' },
+    { key: 'speaking', label: t('practice.speaking'), icon: MessageCircle, color: '#EF4444', gradient: 'linear-gradient(135deg, #EF4444, #F97316)' },
+    { key: 'writing', label: t('practice.writing'), icon: Pen, color: '#F59E0B', gradient: 'linear-gradient(135deg, #F59E0B, #FBBF24)' },
+    { key: 'grammar', label: t('practice.grammar'), icon: Type, color: '#8B5CF6', gradient: 'linear-gradient(135deg, #8B5CF6, #A78BFA)' },
   ];
 
   const activeTab = skillTabs.find(s => s.key === activeSkill)!;
@@ -551,7 +551,7 @@ export default function Practice() {
               className={`skill-icon-btn ${isActive ? 'active' : ''}`}
               onClick={() => setActiveSkill(tab.key)}
             >
-              <div className="skill-icon-circle" style={isActive ? { background: tab.color, color: '#fff' } : {}}>
+              <div className="skill-icon-circle" style={isActive ? { background: tab.gradient, color: '#fff' } : {}}>
                 <tab.icon size={18} />
               </div>
               <span className="skill-icon-label" style={isActive ? { color: tab.color } : {}}>{tab.label}</span>

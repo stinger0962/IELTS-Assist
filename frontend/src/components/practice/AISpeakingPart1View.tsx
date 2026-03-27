@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { practiceAPI, progressAPI } from '../../api';
 import type { AISpeakingPractice, SpeakingGradingResult, SpeakingInsights } from '../../types';
+import { ConfettiBurst, PersonalBestBadge, CountUp } from '../Celebrations';
 
 interface Props {
   exercise: AISpeakingPractice;
@@ -248,11 +249,17 @@ export default function AISpeakingPart1View({ exercise, onBack }: Props) {
 
   return (
     <div className="p1-container">
+      <ConfettiBurst />
       {ex && (
         <>
           <div className="p1-overall">
             <span className="p1-overall-label">Overall Band</span>
-            <span className="p1-overall-band" style={{ color: bandColor(ex.overall_band) }}>{ex.overall_band}</span>
+            <span className="p1-overall-band" style={{ color: bandColor(ex.overall_band) }}>
+              <CountUp value={ex.overall_band} decimals={1} />
+            </span>
+            {speakingAvg && ex.overall_band > (speakingAvg.best_session_band || 0) && speakingAvg.total_sessions > 1 && (
+              <PersonalBestBadge />
+            )}
             <span className="p1-overall-part">Part 1 Interview</span>
           </div>
 

@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
-  Flame,
   Clock,
   Target,
   TrendingUp,
   ChevronRight
 } from 'lucide-react';
+import { StreakFire } from '../components/Celebrations';
 import { useAppStore } from '../store';
 import { progressAPI, goalsAPI } from '../api';
 import type { GoalTodayProgressItem, ProgressStats, StudySession, UserProgress } from '../types';
@@ -174,13 +174,16 @@ export default function Dashboard() {
 
       {/* Stats Overview */}
       <div className="stats-grid">
-        <StatCard
-          icon={Flame}
-          label={t('dashboard.studyStreak')}
-          value={stats?.streak_days || 0}
-          subValue={t('dashboard.days')}
-          color="#F59E0B"
-        />
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'transparent' }}>
+            <StreakFire days={stats?.streak_days || 0} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{stats?.streak_days || 0}</span>
+            <span className="stat-label">{t('dashboard.studyStreak')}</span>
+            <span className="stat-sub">{t('dashboard.days')}</span>
+          </div>
+        </div>
         <StatCard
           icon={Clock}
           label={t('dashboard.totalStudyTime')}

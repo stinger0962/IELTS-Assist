@@ -3,6 +3,7 @@ import { practiceAPI, progressAPI } from '../../api';
 import type {
   AISpeakingPractice, SpeakingGradingResult, SpeakingPronunciationWord, SpeakingInsights,
 } from '../../types';
+import { ConfettiBurst, CountUp } from '../Celebrations';
 
 interface AISpeakingViewProps {
   exercise: AISpeakingPractice;
@@ -367,12 +368,13 @@ export default function AISpeakingExerciseView({ exercise, onBack }: AISpeakingV
 
   return (
     <div className="speaking-container">
+      <ConfettiBurst />
       {ex && (
         <>
           <div className="speaking-overall">
             <span className="overall-label">Overall Band</span>
             <span className="overall-band" style={{ color: bandColor(ex.overall_band) }}>
-              {ex.overall_band}
+              <CountUp value={ex.overall_band} decimals={1} />
             </span>
           </div>
 

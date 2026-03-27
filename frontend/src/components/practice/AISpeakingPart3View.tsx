@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { practiceAPI, progressAPI } from '../../api';
 import type { AISpeakingPractice, SpeakingGradingResult, SpeakingInsights } from '../../types';
+import { ConfettiBurst, CountUp } from '../Celebrations';
 
 interface Props {
   exercise: AISpeakingPractice;
@@ -250,9 +251,10 @@ export default function AISpeakingPart3View({ exercise, onBack }: Props) {
     <div className="p1-container">
       {ex && (
         <>
+          <ConfettiBurst />
           <div className="p1-overall">
             <span className="p1-overall-label">Overall Band</span>
-            <span className="p1-overall-band" style={{ color: bandColor(ex.overall_band) }}>{ex.overall_band}</span>
+            <span className="p1-overall-band" style={{ color: bandColor(ex.overall_band) }}><CountUp value={ex.overall_band} decimals={1} /></span>
             <span className="p1-overall-part">Part 3 Discussion</span>
           </div>
 
