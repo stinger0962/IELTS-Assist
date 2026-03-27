@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Sparkles, RefreshCw, ChevronLeft, Type } from 'lucide-react';
-import { practiceAPI } from '../api';
+import { practiceAPI, progressAPI } from '../api';
 import type {
   AIReadingPractice, AIListeningPractice, AIGrammarPractice,
   AIWritingPractice, AISpeakingPractice,
@@ -98,7 +98,31 @@ export default function Practice() {
   const [activeSkill, setActiveSkill] = useState<SkillTab>('reading');
   const [practiceMode, setPracticeMode] = useState<PracticeMode>('practice');
 
+  // Skill insights for snapshot
+  const [skillInsights, setSkillInsights] = useState<any>(null);
+
   useEffect(() => { loadExercises(); }, []);
+
+  // Load insights when active skill changes
+  useEffect(() => {
+    const loadInsights = async () => {
+      try {
+        if (activeSkill === 'speaking') {
+          const res = await progressAPI.getSpeakingInsights();
+          setSkillInsights(res.data);
+        } else if (activeSkill === 'writing') {
+          const res = await progressAPI.getWritingInsights();
+          setSkillInsights(res.data);
+        } else {
+          const res = await progressAPI.getAccuracyInsights(activeSkill);
+          setSkillInsights(res.data);
+        }
+      } catch {
+        setSkillInsights(null);
+      }
+    };
+    loadInsights();
+  }, [activeSkill]);
 
   const loadAIReadingExercises = async () => {
     setReadingLoading(true);
@@ -459,24 +483,81 @@ export default function Practice() {
 
   const activeTab = skillTabs.find(s => s.key === activeSkill)!;
 
+  // Snapshot renderer
+  const renderSnapshot = () => {
+    if (!skillInsights) return null;
+    const isCriterion = activeSkill === 'speaking' || activeSkill === 'writing';
+    const ins = skillInsights as any;
+    if (!ins.total_sessions || ins.total_sessions === 0) return null;
+
+    return (
+      <div className="skill-snapshot">
+        <div className="snapshot-header">
+          <span className="snapshot-title">{activeTab.label} Progress</span>
+          <span className="snapshot-sessions">{ins.total_sessions} sessions</span>
+        </div>
+        {isCriterion ? (
+          <>
+            <div className="snapshot-stats">
+              <span className="snapshot-band" style={{ color: ins.overall_average >= 7 ? '#10B981' : ins.overall_average >= 6 ? '#F59E0B' : '#EF4444' }}>
+                Band {ins.overall_average?.toFixed(1)}
+              </span>
+              {ins.weakest_criterion && (
+                <span className="snapshot-weak">Focus: {ins.weakest_criterion}</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="snapshot-stats">
+            <span className="snapshot-band" style={{ color: (ins.overall_accuracy || 0) >= 80 ? '#10B981' : (ins.overall_accuracy || 0) >= 60 ? '#F59E0B' : '#EF4444' }}>
+              {ins.overall_accuracy?.toFixed(0)}% accuracy
+            </span>
+            <span className="snapshot-weak">{ins.total_correct}/{ins.total_questions_answered} correct</span>
+          </div>
+        )}
+        {ins.recent_sessions && ins.recent_sessions.length > 0 && (
+          <div className="snapshot-recent">
+            {ins.recent_sessions.slice(0, 3).map((s: any, i: number) => (
+              <div key={i} className="snapshot-session">
+                <span className="snapshot-date">
+                  {new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+                <span className="snapshot-topic">{s.topic || '—'}</span>
+                <span className="snapshot-score" style={{
+                  color: isCriterion
+                    ? (s.overall_band >= 7 ? '#10B981' : s.overall_band >= 6 ? '#F59E0B' : '#EF4444')
+                    : ((s.accuracy || 0) >= 80 ? '#10B981' : (s.accuracy || 0) >= 60 ? '#F59E0B' : '#EF4444')
+                }}>
+                  {isCriterion ? s.overall_band : `${s.accuracy?.toFixed(0)}%`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Main list
   return (
     <div className="practice">
-      {/* Skill tabs */}
-      <div className="skill-tabs-scroll">
-        <div className="skill-tabs">
-          {skillTabs.map((tab) => (
+      {/* Skill icon grid — always fully visible */}
+      <div className="skill-icon-grid">
+        {skillTabs.map((tab) => {
+          const isActive = activeSkill === tab.key;
+          return (
             <button
               key={tab.key}
-              className={`skill-tab ${activeSkill === tab.key ? 'active' : ''}`}
+              className={`skill-icon-btn ${isActive ? 'active' : ''}`}
               onClick={() => setActiveSkill(tab.key)}
-              style={activeSkill === tab.key ? { color: tab.color, borderColor: tab.color } : {}}
             >
-              <tab.icon size={16} />
-              <span>{tab.label}</span>
+              <div className="skill-icon-circle" style={isActive ? { background: tab.color, color: '#fff' } : {}}>
+                <tab.icon size={18} />
+              </div>
+              <span className="skill-icon-label" style={isActive ? { color: tab.color } : {}}>{tab.label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
       {/* Mode toggle */}
@@ -596,6 +677,9 @@ export default function Practice() {
         </>
       )}
 
+      {/* Skill snapshot + recent scores */}
+      {renderSnapshot()}
+
       <style>{listStyles}</style>
     </div>
   );
@@ -635,13 +719,14 @@ const sharedExerciseStyles = `
 const listStyles = `
   .practice { max-width: 600px; margin: 0 auto; }
 
-  /* Skill tabs — horizontal scrollable */
-  .skill-tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: var(--spacing-sm); scrollbar-width: none; }
-  .skill-tabs-scroll::-webkit-scrollbar { display: none; }
-  .skill-tabs { display: flex; gap: 4px; min-width: max-content; }
-  .skill-tab { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--color-text-secondary); font-size: 0.85rem; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent; }
-  .skill-tab.active { font-weight: 700; border-bottom-width: 3px; }
-  .skill-tab:not(.active):hover { color: var(--color-text-primary); }
+  /* Skill icon grid — always fully visible */
+  .skill-icon-grid { display: flex; justify-content: space-between; margin-bottom: var(--spacing-sm); padding: 4px 0; }
+  .skill-icon-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; padding: 4px 0; -webkit-tap-highlight-color: transparent; flex: 1; }
+  .skill-icon-btn:active { transform: scale(0.92); }
+  .skill-icon-circle { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-border); color: var(--color-text-secondary); transition: all 0.15s ease; }
+  .skill-icon-btn.active .skill-icon-circle { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .skill-icon-label { font-size: 0.65rem; font-weight: 500; color: var(--color-text-secondary); transition: all 0.15s ease; }
+  .skill-icon-btn.active .skill-icon-label { font-weight: 700; }
 
   /* Mode toggle */
   .mode-toggle { display: flex; background: var(--color-border); border-radius: var(--radius-md); padding: 3px; margin-bottom: var(--spacing-md); }
@@ -672,4 +757,18 @@ const listStyles = `
   .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
   .loading-spinner-sm { width: 14px; height: 14px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Skill snapshot */
+  .skill-snapshot { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-top: var(--spacing-md); }
+  .snapshot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .snapshot-title { font-size: 0.85rem; font-weight: 600; color: var(--color-text-primary); }
+  .snapshot-sessions { font-size: 0.72rem; color: var(--color-text-secondary); }
+  .snapshot-stats { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .snapshot-band { font-size: 1rem; font-weight: 700; }
+  .snapshot-weak { font-size: 0.75rem; color: var(--color-text-secondary); }
+  .snapshot-recent { border-top: 1px solid var(--color-border); padding-top: 8px; }
+  .snapshot-session { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .snapshot-date { font-size: 0.72rem; color: var(--color-text-secondary); width: 48px; flex-shrink: 0; }
+  .snapshot-topic { font-size: 0.78rem; color: var(--color-text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .snapshot-score { font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
 `;
