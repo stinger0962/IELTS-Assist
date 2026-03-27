@@ -106,7 +106,8 @@ body {
   .main-content {
     margin-left: 0;
     padding: var(--spacing-md);
-    padding-top: 60px; /* reserve space for fixed mobile menu button */
+    padding-top: var(--spacing-md);
+    padding-bottom: 72px; /* reserve space for bottom nav */
   }
 }
 

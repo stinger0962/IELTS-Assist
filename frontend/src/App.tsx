@@ -7,6 +7,7 @@ import './i18n';
 import './styles/global.css';
 
 import Sidebar from './components/Sidebar';
+import BottomNav from './components/BottomNav';
 import Dashboard from './pages/Dashboard';
 import Practice from './pages/Practice';
 import Mistakes from './pages/Mistakes';
@@ -33,6 +34,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="main-content">
         {children}
       </main>
+      <BottomNav />
     </div>
   );
 }

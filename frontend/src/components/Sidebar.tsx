@@ -148,10 +148,10 @@ export default function Sidebar() {
 
         @media (max-width: 1024px) {
           .mobile-menu-btn {
-            display: flex;
+            display: none;
           }
           .sidebar-overlay {
-            display: block;
+            display: none;
           }
           .sidebar {
             transform: translateX(-100%);
