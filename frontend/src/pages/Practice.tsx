@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { BookOpen, Headphones, Pen, MessageCircle, Sparkles, RefreshCw, ChevronLeft, Type } from 'lucide-react';
 import { practiceAPI } from '../api';
 import type {
-  SkillType,
   AIReadingPractice, AIListeningPractice, AIGrammarPractice,
   AIWritingPractice, AISpeakingPractice,
 } from '../types';
@@ -45,13 +44,6 @@ class ExerciseErrorBoundary extends React.Component<
   }
 }
 
-
-const skillConfig = [
-  { type: 'reading' as SkillType, icon: BookOpen, color: '#4F46E5' },
-  { type: 'listening' as SkillType, icon: Headphones, color: '#10B981' },
-  { type: 'writing' as SkillType, icon: Pen, color: '#F59E0B' },
-  { type: 'speaking' as SkillType, icon: MessageCircle, color: '#EF4444' },
-];
 
 const ESSAY_TYPE_LABELS: Record<string, string> = {
   opinion: 'Opinion Essay',
@@ -99,6 +91,12 @@ export default function Practice() {
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<{ correct: number; total: number } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Tab + mode state
+  type SkillTab = 'reading' | 'listening' | 'grammar' | 'writing' | 'speaking';
+  type PracticeMode = 'practice' | 'exam';
+  const [activeSkill, setActiveSkill] = useState<SkillTab>('reading');
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>('practice');
 
   useEffect(() => { loadExercises(); }, []);
 
@@ -412,287 +410,190 @@ export default function Practice() {
     );
   }
 
+  // ─── Helpers for rendering exercise lists ────
+  const renderExerciseList = (
+    exercises: any[],
+    isLoading: boolean,
+    isPoolEmpty: boolean,
+    isGenerating: boolean,
+    onGenerateMore: () => void,
+    renderCard: (ex: any, i: number) => React.ReactNode,
+    loadingMsg = 'Loading exercises…',
+    genTime = '~2 min',
+  ) => (
+    <div className="exercise-list">
+      {isLoading ? (
+        <div className="generating-msg"><div className="loading-spinner-sm" /><span>{loadingMsg}</span></div>
+      ) : exercises.length === 0 ? (
+        <p className="empty-list">No exercises yet — click Generate below.</p>
+      ) : (
+        exercises.map((ex, i) => renderCard(ex, i))
+      )}
+      {exercises.length < 3 && (
+        isPoolEmpty ? (
+          <div className="pool-empty-msg">
+            <span>Generating in background ({genTime})</span>
+            <button className="retry-link" onClick={onGenerateMore} disabled={isGenerating}>
+              {isGenerating ? 'Checking…' : 'Retry'}
+            </button>
+          </div>
+        ) : (
+          <button className="generate-more-btn" onClick={onGenerateMore} disabled={isGenerating}>
+            {isGenerating
+              ? <><div className="loading-spinner-sm" /> Checking pool…</>
+              : <><RefreshCw size={13} /> Generate More</>}
+          </button>
+        )
+      )}
+    </div>
+  );
+
+  // Skill tab config
+  const skillTabs: { key: SkillTab; label: string; icon: typeof BookOpen; color: string }[] = [
+    { key: 'reading', label: t('practice.reading'), icon: BookOpen, color: '#4F46E5' },
+    { key: 'listening', label: t('practice.listening'), icon: Headphones, color: '#10B981' },
+    { key: 'speaking', label: t('practice.speaking'), icon: MessageCircle, color: '#EF4444' },
+    { key: 'writing', label: t('practice.writing'), icon: Pen, color: '#F59E0B' },
+    { key: 'grammar', label: t('practice.grammar'), icon: Type, color: '#8B5CF6' },
+  ];
+
+  const activeTab = skillTabs.find(s => s.key === activeSkill)!;
+
   // Main list
   return (
     <div className="practice">
-      <header className="page-header">
-        <h1>{t('practice.title')}</h1>
-      </header>
+      {/* Skill tabs */}
+      <div className="skill-tabs-scroll">
+        <div className="skill-tabs">
+          {skillTabs.map((tab) => (
+            <button
+              key={tab.key}
+              className={`skill-tab ${activeSkill === tab.key ? 'active' : ''}`}
+              onClick={() => setActiveSkill(tab.key)}
+              style={activeSkill === tab.key ? { color: tab.color, borderColor: tab.color } : {}}
+            >
+              <tab.icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="mode-toggle">
+        <button
+          className={`mode-btn ${practiceMode === 'practice' ? 'active' : ''}`}
+          onClick={() => setPracticeMode('practice')}
+        >
+          Practice
+        </button>
+        <button
+          className={`mode-btn ${practiceMode === 'exam' ? 'active' : ''}`}
+          onClick={() => setPracticeMode('exam')}
+        >
+          Exam
+        </button>
+      </div>
 
       {loading ? (
         <div className="loading"><div className="loading-spinner" /></div>
-      ) : (
-        <div className="practice-grid">
-
-          {/* Reading — AI */}
-          <div className="practice-section">
-            <div className="section-header" style={{ borderColor: skillConfig[0].color }}>
-              <BookOpen size={24} style={{ color: skillConfig[0].color }} />
-              <h2>{t('practice.reading')}</h2>
-              <span className="ai-chip"><Sparkles size={11} /> AI</span>
+      ) : practiceMode === 'exam' ? (
+        /* ─── Exam mode ─── */
+        <div className="exercise-list">
+          {activeSkill === 'speaking' ? (
+            aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').length > 0 ? (
+              aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').map((ex, i) => (
+                <button key={i} className="exercise-item exercise-item-highlight" onClick={() => handleSelectAISpeaking(ex)}>
+                  <span className="exercise-title">{ex.meta.topic}</span>
+                  <span className="exercise-meta">Full Test · ~14 min</span>
+                </button>
+              ))
+            ) : (
+              <p className="empty-list">No full test available. Generate more speaking exercises.</p>
+            )
+          ) : (
+            <div className="exam-coming-soon">
+              <Sparkles size={32} />
+              <h3>Full {activeTab.label} Test</h3>
+              <p>Coming soon — full-length IELTS {activeTab.label.toLowerCase()} test simulation.</p>
             </div>
-            <div className="exercise-list">
-              {readingLoading ? (
-                <div className="generating-msg">
-                  <div className="loading-spinner-sm" />
-                  <span>Generating today's exercises…</span>
-                </div>
-              ) : aiReadingExercises.length === 0 ? (
-                <p className="empty-list">No exercises yet — click Generate below.</p>
-              ) : (
-                aiReadingExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => handleSelectAIExercise(ex)}>
-                    <span className="exercise-title">{ex.meta.topic}</span>
-                    <span className="exercise-meta">
-                      {ex.meta.word_count}w · {
-                        ex.questions.groups
-                          ? ex.questions.groups.reduce((n, g) => n + (g.answers?.length ?? g.items?.length ?? 0), 0)
-                          : (ex.questions.true_false_not_given?.length ?? 0) +
-                            (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type!.items.length : 3)
-                      }q
-                    </span>
-                  </button>
-                ))
-              )}
-              {aiReadingExercises.length < 3 && (
-                poolEmpty ? (
-                  <div className="pool-empty-msg">
-                    <span>Next exercise generating in background (~2 min)</span>
-                    <button className="retry-link" onClick={handleGenerateMore} disabled={generatingMore}>
-                      {generatingMore ? 'Checking…' : 'Retry'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="generate-more-btn"
-                    onClick={handleGenerateMore}
-                    disabled={generatingMore}
-                  >
-                    {generatingMore
-                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
-                      : <><RefreshCw size={13} /> Generate More</>}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-
-          {/* Listening — AI */}
-          <div className="practice-section">
-            <div className="section-header" style={{ borderColor: skillConfig[1].color }}>
-              <Headphones size={24} style={{ color: skillConfig[1].color }} />
-              <h2>{t('practice.listening')}</h2>
-              <span className="ai-chip"><Sparkles size={11} /> AI</span>
-            </div>
-            <div className="exercise-list">
-              {listeningLoading ? (
-                <div className="generating-msg">
-                  <div className="loading-spinner-sm" />
-                  <span>Loading listening exercises…</span>
-                </div>
-              ) : aiListeningExercises.length === 0 ? (
-                <p className="empty-list">No exercises yet — click Generate below.</p>
-              ) : (
-                aiListeningExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => handleSelectAIListening(ex)}>
-                    <span className="exercise-title">{ex.meta.topic}</span>
-                    <span className="exercise-meta">
-                      {ex.meta.format} · {(ex.questions.completion?.length ?? 0) + (ex.questions.multiple_choice?.length ?? 0)}q
-                    </span>
-                  </button>
-                ))
-              )}
-              {aiListeningExercises.length < 3 && (
-                listeningPoolEmpty ? (
-                  <div className="pool-empty-msg">
-                    <span>Next exercise generating in background (~3 min)</span>
-                    <button className="retry-link" onClick={handleGenerateMoreListening} disabled={listeningGeneratingMore}>
-                      {listeningGeneratingMore ? 'Checking…' : 'Retry'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="generate-more-btn"
-                    onClick={handleGenerateMoreListening}
-                    disabled={listeningGeneratingMore}
-                  >
-                    {listeningGeneratingMore
-                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
-                      : <><RefreshCw size={13} /> Generate More</>}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-
-          {/* Grammar — AI */}
-          <div className="practice-section">
-            <div className="section-header" style={{ borderColor: '#8B5CF6' }}>
-              <Type size={24} style={{ color: '#8B5CF6' }} />
-              <h2>{t('practice.grammar')}</h2>
-              <span className="ai-chip"><Sparkles size={11} /> AI</span>
-            </div>
-            <div className="exercise-list">
-              {grammarLoading ? (
-                <div className="generating-msg">
-                  <div className="loading-spinner-sm" />
-                  <span>Loading grammar exercises…</span>
-                </div>
-              ) : aiGrammarExercises.length === 0 ? (
-                <p className="empty-list">No exercises yet — click Generate below.</p>
-              ) : (
-                aiGrammarExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => handleSelectAIGrammar(ex)}>
-                    <span className="exercise-title">{ex.meta.grammar_topic}</span>
-                    <span className="exercise-meta">
-                      {ex.meta.band_level} · {ex.meta.question_count}q
-                    </span>
-                  </button>
-                ))
-              )}
-              {aiGrammarExercises.length < 3 && (
-                grammarPoolEmpty ? (
-                  <div className="pool-empty-msg">
-                    <span>Next exercise generating in background (~2 min)</span>
-                    <button className="retry-link" onClick={handleGenerateMoreGrammar} disabled={grammarGeneratingMore}>
-                      {grammarGeneratingMore ? 'Checking…' : 'Retry'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="generate-more-btn"
-                    onClick={handleGenerateMoreGrammar}
-                    disabled={grammarGeneratingMore}
-                  >
-                    {grammarGeneratingMore
-                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
-                      : <><RefreshCw size={13} /> Generate More</>}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-
-          {/* Writing — AI */}
-          <div className="practice-section">
-            <div className="section-header" style={{ borderColor: skillConfig[2].color }}>
-              <Pen size={24} style={{ color: skillConfig[2].color }} />
-              <h2>{t('practice.writing')}</h2>
-              <span className="ai-chip"><Sparkles size={11} /> AI</span>
-            </div>
-            <div className="exercise-list">
-              {writingLoading ? (
-                <div className="generating-msg">
-                  <div className="loading-spinner-sm" />
-                  <span>Loading writing prompts…</span>
-                </div>
-              ) : aiWritingExercises.length === 0 ? (
-                <p className="empty-list">No prompts yet — click Generate below.</p>
-              ) : (
-                aiWritingExercises.map((ex, i) => (
-                  <button key={i} className="exercise-item" onClick={() => handleSelectAIWriting(ex)}>
-                    <span className="exercise-title">{ex.meta.topic}</span>
-                    <span className="exercise-meta">
-                      {ESSAY_TYPE_LABELS[ex.meta.essay_type] || ex.meta.essay_type.replace(/_/g, ' ')} · {ex.meta.domain} · 250w
-                    </span>
-                  </button>
-                ))
-              )}
-              {aiWritingExercises.length < 3 && (
-                writingPoolEmpty ? (
-                  <div className="pool-empty-msg">
-                    <span>Generating more prompts…</span>
-                    <button className="retry-link" onClick={handleGenerateMoreWriting} disabled={writingGeneratingMore}>
-                      {writingGeneratingMore ? 'Checking…' : 'Retry'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="generate-more-btn"
-                    onClick={handleGenerateMoreWriting}
-                    disabled={writingGeneratingMore}
-                  >
-                    {writingGeneratingMore
-                      ? <><div className="loading-spinner-sm" /> Checking pool…</>
-                      : <><RefreshCw size={13} /> Generate More</>}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-
-          {/* Speaking — AI */}
-          <div className="practice-section">
-            <div className="section-header" style={{ borderColor: skillConfig[3].color }}>
-              <MessageCircle size={24} style={{ color: skillConfig[3].color }} />
-              <h2>{t('practice.speaking')}</h2>
-              <span className="ai-chip"><Sparkles size={11} /> AI</span>
-            </div>
-            <div className="exercise-list">
-              {speakingLoading ? (
-                <div className="generating-msg">
-                  <div className="loading-spinner-sm" />
-                  <span>Loading speaking exercises...</span>
-                </div>
-              ) : aiSpeakingExercises.length === 0 ? (
-                <p className="empty-list">No exercises yet — click Generate below.</p>
-              ) : (
-                <>
-                  {/* Full Test cards */}
-                  {aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').length > 0 && (
-                    <>
-                      <div className="section-label">Full Test</div>
-                      {aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').map((ex, i) => (
-                        <button key={`ft-${i}`} className="exercise-item exercise-item-highlight" onClick={() => handleSelectAISpeaking(ex)}>
-                          <span className="exercise-title">{ex.meta.topic}</span>
-                          <span className="exercise-meta">Full Test · ~14 min</span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                  {/* Quick Practice cards */}
-                  {aiSpeakingExercises.filter(ex => ex.meta.module !== 'speaking_full_test').length > 0 && (
-                    <>
-                      <div className="section-label">Quick Practice</div>
-                      {aiSpeakingExercises.filter(ex => ex.meta.module !== 'speaking_full_test').map((ex, i) => {
-                        const mod = ex.meta.module;
-                        const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
-                          : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
-                          : `Long Turn · ${ex.meta.domain || 'speaking'}`;
-                        return (
-                          <button key={`qp-${i}`} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
-                            <span className="exercise-title">{ex.meta.topic}</span>
-                            <span className="exercise-meta">{label}</span>
-                          </button>
-                        );
-                      })}
-                    </>
-                  )}
-                </>
-              )}
-              {aiSpeakingExercises.length < 3 && (
-                speakingPoolEmpty ? (
-                  <div className="pool-empty-msg">
-                    <span>Next exercise generating in background (~2 min)</span>
-                    <button className="retry-link" onClick={handleGenerateMoreSpeaking} disabled={speakingGeneratingMore}>
-                      {speakingGeneratingMore ? 'Checking...' : 'Retry'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="generate-more-btn"
-                    onClick={handleGenerateMoreSpeaking}
-                    disabled={speakingGeneratingMore}
-                  >
-                    {speakingGeneratingMore
-                      ? <><div className="loading-spinner-sm" /> Checking pool...</>
-                      : <><RefreshCw size={13} /> Generate More</>}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
+          )}
         </div>
+      ) : (
+        /* ─── Practice mode ─── */
+        <>
+          {activeSkill === 'reading' && renderExerciseList(
+            aiReadingExercises, readingLoading, poolEmpty, generatingMore,
+            handleGenerateMore,
+            (ex, i) => (
+              <button key={i} className="exercise-item" onClick={() => handleSelectAIExercise(ex)}>
+                <span className="exercise-title">{ex.meta.topic}</span>
+                <span className="exercise-meta">
+                  {ex.meta.word_count}w · {
+                    ex.questions.groups
+                      ? ex.questions.groups.reduce((n: number, g: any) => n + (g.answers?.length ?? g.items?.length ?? 0), 0)
+                      : (ex.questions.true_false_not_given?.length ?? 0) +
+                        (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type!.items.length : 3)
+                  }q
+                </span>
+              </button>
+            ),
+          )}
+
+          {activeSkill === 'listening' && renderExerciseList(
+            aiListeningExercises, listeningLoading, listeningPoolEmpty, listeningGeneratingMore,
+            handleGenerateMoreListening,
+            (ex, i) => (
+              <button key={i} className="exercise-item" onClick={() => handleSelectAIListening(ex)}>
+                <span className="exercise-title">{ex.meta.topic}</span>
+                <span className="exercise-meta">{ex.meta.format} · {(ex.questions.completion?.length ?? 0) + (ex.questions.multiple_choice?.length ?? 0)}q</span>
+              </button>
+            ),
+            'Loading listening exercises…', '~3 min',
+          )}
+
+          {activeSkill === 'grammar' && renderExerciseList(
+            aiGrammarExercises, grammarLoading, grammarPoolEmpty, grammarGeneratingMore,
+            handleGenerateMoreGrammar,
+            (ex, i) => (
+              <button key={i} className="exercise-item" onClick={() => handleSelectAIGrammar(ex)}>
+                <span className="exercise-title">{ex.meta.grammar_topic}</span>
+                <span className="exercise-meta">{ex.meta.band_level} · {ex.meta.question_count}q</span>
+              </button>
+            ),
+          )}
+
+          {activeSkill === 'writing' && renderExerciseList(
+            aiWritingExercises, writingLoading, writingPoolEmpty, writingGeneratingMore,
+            handleGenerateMoreWriting,
+            (ex, i) => (
+              <button key={i} className="exercise-item" onClick={() => handleSelectAIWriting(ex)}>
+                <span className="exercise-title">{ex.meta.topic}</span>
+                <span className="exercise-meta">
+                  {ESSAY_TYPE_LABELS[ex.meta.essay_type] || ex.meta.essay_type.replace(/_/g, ' ')} · {ex.meta.domain} · 250w
+                </span>
+              </button>
+            ),
+          )}
+
+          {activeSkill === 'speaking' && renderExerciseList(
+            aiSpeakingExercises.filter(ex => ex.meta.module !== 'speaking_full_test'),
+            speakingLoading, speakingPoolEmpty, speakingGeneratingMore,
+            handleGenerateMoreSpeaking,
+            (ex, i) => {
+              const mod = ex.meta.module;
+              const label = mod === 'speaking_part1' ? 'Interview · 3 topics'
+                : mod === 'speaking_part3' ? `Discussion · ${ex.meta.topic}`
+                : `Long Turn · ${ex.meta.domain || 'speaking'}`;
+              return (
+                <button key={i} className="exercise-item" onClick={() => handleSelectAISpeaking(ex)}>
+                  <span className="exercise-title">{ex.meta.topic}</span>
+                  <span className="exercise-meta">{label}</span>
+                </button>
+              );
+            },
+          )}
+        </>
       )}
 
       <style>{listStyles}</style>
@@ -732,23 +633,36 @@ const sharedExerciseStyles = `
 `;
 
 const listStyles = `
-  .practice { max-width: 1200px; margin: 0 auto; }
-  .page-header { margin-bottom: var(--spacing-lg); }
-  .practice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-lg); }
-  @media (max-width: 1024px) { .practice-grid { grid-template-columns: 1fr; } }
-  .practice-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
-  .section-header { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-lg); border-bottom: 3px solid; background: var(--color-background); }
-  .ai-chip { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; background: rgba(79,70,229,0.12); color: var(--color-primary); padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.7rem; font-weight: 700; }
-  .exercise-list { padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
-  .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); text-align: left; }
+  .practice { max-width: 600px; margin: 0 auto; }
+
+  /* Skill tabs — horizontal scrollable */
+  .skill-tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: var(--spacing-sm); scrollbar-width: none; }
+  .skill-tabs-scroll::-webkit-scrollbar { display: none; }
+  .skill-tabs { display: flex; gap: 4px; min-width: max-content; }
+  .skill-tab { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--color-text-secondary); font-size: 0.85rem; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent; }
+  .skill-tab.active { font-weight: 700; border-bottom-width: 3px; }
+  .skill-tab:not(.active):hover { color: var(--color-text-primary); }
+
+  /* Mode toggle */
+  .mode-toggle { display: flex; background: var(--color-border); border-radius: var(--radius-md); padding: 3px; margin-bottom: var(--spacing-md); }
+  .mode-btn { flex: 1; padding: 8px 16px; border: none; background: none; border-radius: calc(var(--radius-md) - 2px); font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); transition: all 0.15s ease; }
+  .mode-btn.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  /* Exam coming soon */
+  .exam-coming-soon { text-align: center; padding: var(--spacing-2xl) var(--spacing-md); color: var(--color-text-secondary); }
+  .exam-coming-soon h3 { font-size: 1.1rem; color: var(--color-text-primary); margin: var(--spacing-sm) 0 var(--spacing-xs); }
+  .exam-coming-soon p { font-size: 0.85rem; line-height: 1.5; }
+
+  /* Exercise list */
+  .exercise-list { display: flex; flex-direction: column; gap: var(--spacing-sm); }
+  .exercise-item { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); text-align: left; }
   .exercise-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
-  .exercise-item-highlight { border-color: var(--color-primary); background: linear-gradient(135deg, var(--color-background), color-mix(in srgb, var(--color-primary) 5%, var(--color-background))); }
+  .exercise-item-highlight { border-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
   .exercise-title { font-weight: 500; color: var(--color-text-primary); }
-  .exercise-meta { font-size: 0.75rem; color: var(--color-text-secondary); }
-  .section-label { font-size: 0.7rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; padding: var(--spacing-sm) 0 4px; }
-  .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-md) 0; }
+  .exercise-meta { font-size: 0.75rem; color: var(--color-text-secondary); flex-shrink: 0; margin-left: 8px; }
+  .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-lg) 0; }
   .generating-msg { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) 0; font-size: 0.875rem; color: var(--color-text-secondary); }
-  .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-background); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }
+  .generate-more-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-surface); border: 1px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.8rem; color: var(--color-text-secondary); transition: all var(--transition-fast); margin-top: 2px; }
   .generate-more-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
   .generate-more-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .pool-empty-msg { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-sm) var(--spacing-md); background: rgba(245,158,11,0.08); border: 1px dashed rgba(245,158,11,0.4); border-radius: var(--radius-md); font-size: 0.8rem; color: var(--color-text-secondary); gap: var(--spacing-sm); }

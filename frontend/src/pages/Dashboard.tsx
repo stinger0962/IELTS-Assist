@@ -5,15 +5,12 @@ import {
   Flame,
   Clock,
   Target,
-  BookOpen,
-  AlertCircle,
-  GraduationCap,
   TrendingUp,
   ChevronRight
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { progressAPI, goalsAPI } from '../api';
-import type { GoalTodayProgressItem, ProgressStats, StudySession, Goal, UserProgress } from '../types';
+import type { GoalTodayProgressItem, ProgressStats, StudySession, UserProgress } from '../types';
 
 function ProgressRing({ progress, size = 80, strokeWidth = 8 }: { progress: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -130,7 +127,6 @@ export default function Dashboard() {
   const { user, setStats } = useAppStore();
   const [stats, setLocalStats] = useState<ProgressStats | null>(null);
   const [sessions, setSessions] = useState<StudySession[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
   const [todayProgress, setTodayProgress] = useState<GoalTodayProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -140,16 +136,14 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [statsRes, sessionsRes, goalsRes, progressRes] = await Promise.all([
+      const [statsRes, sessionsRes, progressRes] = await Promise.all([
         progressAPI.getStats(),
         progressAPI.getSessions(5),
-        goalsAPI.getAll(false, 5),
         goalsAPI.getTodayProgress(),
       ]);
       setLocalStats(statsRes.data);
       setStats(statsRes.data);
       setSessions(sessionsRes.data);
-      setGoals(goalsRes.data);
       setTodayProgress(progressRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -226,99 +220,32 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Quick Actions */}
-      <section className="section">
-        <h2>{t('dashboard.quickActions')}</h2>
-        <div className="quick-actions">
-          <button className="action-card" onClick={() => navigate('/practice')}>
-            <BookOpen size={24} />
-            <span>{t('dashboard.startPractice')}</span>
-          </button>
-          <button className="action-card" onClick={() => navigate('/mistakes')}>
-            <AlertCircle size={24} />
-            <span>{t('dashboard.reviewMistakes')}</span>
-          </button>
-          <button className="action-card" onClick={() => navigate('/topics')}>
-            <GraduationCap size={24} />
-            <span>{t('dashboard.reviewTopics')}</span>
-          </button>
-        </div>
-      </section>
-
-      <div className="dashboard-grid">
-        {/* Recent Activity */}
+      {/* Recent Activity — compact, 3 items */}
+      {sessions.length > 0 && (
         <section className="section">
           <h2>{t('dashboard.recentActivity')}</h2>
           <div className="card">
-            {sessions.length > 0 ? (
-              <div className="activity-list">
-                {sessions.map((session) => (
-                  <div key={session.id} className="activity-item">
-                    <div className="activity-icon">
-                      <Clock size={16} />
-                    </div>
-                    <div className="activity-info">
-                      <span className="activity-title">
-                        {session.skill ? getSkillName(session.skill) : 'Study Session'}
-                      </span>
-                      <span className="activity-time">
-                        {new Date(session.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <span className="activity-duration">{session.duration_minutes} min</span>
+            <div className="activity-list">
+              {sessions.slice(0, 3).map((session) => (
+                <div key={session.id} className="activity-item">
+                  <div className="activity-icon">
+                    <Clock size={16} />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="empty-state">{t('dashboard.noActivity')}</p>
-            )}
+                  <div className="activity-info">
+                    <span className="activity-title">
+                      {session.skill ? getSkillName(session.skill) : 'Study Session'}
+                    </span>
+                    <span className="activity-time">
+                      {new Date(session.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <span className="activity-duration">{session.duration_minutes} min</span>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
-
-        {/* Active Goals */}
-        <section className="section">
-          <h2>{t('goals.active')}</h2>
-          <div className="card">
-            {goals.length > 0 ? (
-              <div className="goals-list">
-                {goals.map((goal) => {
-                  const prog = todayProgress.find(p => p.goal_id === goal.id);
-                  const pct = prog && prog.target > 0
-                    ? Math.min(100, Math.round((prog.actual / prog.target) * 100))
-                    : null;
-                  return (
-                    <div key={goal.id} className="goal-item">
-                      <Target size={16} />
-                      <div className="goal-item-content">
-                        <span className="goal-title">{goal.title}</span>
-                        {pct !== null && (
-                          <div className="goal-mini-progress">
-                            <div className="goal-mini-track">
-                              <div className="goal-mini-fill" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="goal-mini-label">
-                              {prog!.goal_type === 'weekly_exercises'
-                                ? `${prog!.actual}/${prog!.target} this week`
-                                : `${prog!.actual}/${prog!.target} min today`}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {goal.target_date && (
-                        <span className="goal-date">
-                          {new Date(goal.target_date).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="empty-state">{t('goals.noGoals')}</p>
-            )}
-          </div>
-        </section>
-      </div>
+      )}
 
       <style>{`
         .dashboard {
