@@ -654,17 +654,18 @@ export default function Practice() {
         /* ─── Practice mode ─── */
         <>
           {activeSkill === 'reading' && renderExerciseList(
-            aiReadingExercises, readingLoading, poolEmpty, generatingMore,
+            aiReadingExercises.filter(ex => ex.meta?.module !== 'reading_full_test'),
+            readingLoading, poolEmpty, generatingMore,
             handleGenerateMore,
             (ex, i) => (
               <button key={i} className="exercise-item" style={{ borderLeftColor: '#4F46E5' }} onClick={() => handleSelectAIExercise(ex)}>
                 <span className="exercise-title">{ex.meta.topic}</span>
                 <span className="exercise-meta">
                   {ex.meta.word_count}w · {
-                    ex.questions.groups
+                    ex.questions?.groups
                       ? ex.questions.groups.reduce((n: number, g: any) => n + (g.answers?.length ?? g.items?.length ?? 0), 0)
-                      : (ex.questions.true_false_not_given?.length ?? 0) +
-                        (Array.isArray(ex.questions.second_type?.items) ? ex.questions.second_type!.items.length : 3)
+                      : (ex.questions?.true_false_not_given?.length ?? 0) +
+                        (Array.isArray(ex.questions?.second_type?.items) ? ex.questions.second_type!.items.length : 3)
                   }q
                 </span>
               </button>
