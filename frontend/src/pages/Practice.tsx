@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { BookOpen, Headphones, Pen, MessageCircle, Sparkles, RefreshCw, ChevronLeft, Type } from 'lucide-react';
 import { practiceAPI, progressAPI } from '../api';
 import type {
@@ -57,6 +58,7 @@ const ESSAY_TYPE_LABELS: Record<string, string> = {
 
 export default function Practice() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
 
   const [aiReadingExercises, setAIReadingExercises] = useState<AIReadingPractice[]>([]);
   const [currentAIExercise, setCurrentAIExercise] = useState<AIReadingPractice | null>(null);
@@ -95,7 +97,11 @@ export default function Practice() {
   // Tab + mode state
   type SkillTab = 'reading' | 'listening' | 'grammar' | 'writing' | 'speaking';
   type PracticeMode = 'practice' | 'exam';
-  const [activeSkill, setActiveSkill] = useState<SkillTab>('reading');
+  const validSkills: SkillTab[] = ['reading', 'listening', 'grammar', 'writing', 'speaking'];
+  const paramSkill = searchParams.get('skill') as SkillTab | null;
+  const [activeSkill, setActiveSkill] = useState<SkillTab>(
+    paramSkill && validSkills.includes(paramSkill) ? paramSkill : 'reading'
+  );
   const [practiceMode, setPracticeMode] = useState<PracticeMode>('practice');
 
   // Skill insights for snapshot

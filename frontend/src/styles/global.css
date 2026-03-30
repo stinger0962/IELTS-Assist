@@ -109,7 +109,13 @@ body {
   padding: var(--spacing-lg);
   transition: margin-left var(--transition-normal);
   overflow-x: hidden;
-  min-width: 0; /* allow flex child to shrink below content size */
+  min-width: 0;
+  animation: pageIn 0.25s ease-out;
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 1024px) {

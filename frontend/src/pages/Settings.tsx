@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Globe, Target, Calendar } from 'lucide-react';
+import { Sun, Moon, Globe, Target, Calendar, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store';
 import { authAPI } from '../api';
+import { getSoundEnabled, setSoundEnabled, playClick } from '../hooks/useSoundEffects';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -147,6 +148,30 @@ export default function Settings() {
               value={formData.test_date}
               onChange={(e) => setFormData({ ...formData, test_date: e.target.value })}
             />
+          </div>
+        </div>
+        {/* Sound Effects */}
+        <div className="settings-card">
+          <div className="settings-icon">
+            {getSoundEnabled() ? <Volume2 size={24} /> : <VolumeX size={24} />}
+          </div>
+          <div className="settings-info">
+            <h3>Sound Effects</h3>
+            <p>Play sounds on interactions</p>
+          </div>
+          <div className="settings-control">
+            <button
+              className={`theme-btn ${getSoundEnabled() ? 'active' : ''}`}
+              onClick={() => { setSoundEnabled(true); playClick(); }}
+            >
+              <Volume2 size={18} /> On
+            </button>
+            <button
+              className={`theme-btn ${!getSoundEnabled() ? 'active' : ''}`}
+              onClick={() => setSoundEnabled(false)}
+            >
+              <VolumeX size={18} /> Off
+            </button>
           </div>
         </div>
       </div>

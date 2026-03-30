@@ -128,7 +128,7 @@ export default function SkillProgress() {
         </div>
         <div className="sp-empty">
           <p>No practice data yet</p>
-          <button className="btn btn-primary" onClick={() => navigate('/practice')}>Start Practicing</button>
+          <button className="btn btn-primary" onClick={() => navigate(`/practice?skill=${skill}`)}>Start Practicing</button>
         </div>
         <style>{styles}</style>
       </div>
@@ -218,7 +218,7 @@ export default function SkillProgress() {
           </div>
         )}
 
-        <button className="sp-cta" onClick={() => navigate('/practice')}>Practice {skillName}</button>
+        <button className="sp-cta" onClick={() => navigate(`/practice?skill=${skill}`)}>Practice {skillName}</button>
         <style>{styles}</style>
       </div>
     );
@@ -325,7 +325,7 @@ export default function SkillProgress() {
           </div>
         )}
 
-        <button className="sp-cta" onClick={() => navigate('/practice')}>Practice {skillName}</button>
+        <button className="sp-cta" onClick={() => navigate(`/practice?skill=${skill}`)}>Practice {skillName}</button>
         <style>{styles}</style>
       </div>
     );
@@ -358,7 +358,7 @@ export default function SkillProgress() {
 
       <div className="sp-empty-inline">Complete a {skillName.toLowerCase()} exercise to see detailed insights</div>
 
-      <button className="sp-cta" onClick={() => navigate('/practice')}>Practice {skillName}</button>
+      <button className="sp-cta" onClick={() => navigate(`/practice?skill=${skill}`)}>Practice {skillName}</button>
       <style>{styles}</style>
     </div>
   );

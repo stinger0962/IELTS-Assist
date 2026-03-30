@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { playAchievement } from '../hooks/useSoundEffects';
 
 // ─── Confetti Burst ─────────────────────────────────────────────────────────
 // Drop this component anywhere to trigger a one-time confetti burst on mount.
@@ -7,6 +8,7 @@ const CONFETTI_COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', 
 const PARTICLE_COUNT = 40;
 
 export function ConfettiBurst() {
+  useEffect(() => { playAchievement(); }, []);
   const [particles] = useState(() =>
     Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
       id: i,
