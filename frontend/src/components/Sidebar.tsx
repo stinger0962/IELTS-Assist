@@ -155,9 +155,11 @@ export default function Sidebar() {
           }
           .sidebar {
             transform: translateX(-100%);
+            pointer-events: none;
           }
           .sidebar.open {
             transform: translateX(0);
+            pointer-events: auto;
           }
         }
 
