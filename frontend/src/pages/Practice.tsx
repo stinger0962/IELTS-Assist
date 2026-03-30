@@ -349,6 +349,22 @@ export default function Practice() {
     loadAIGrammarExercises();
     loadAIWritingExercises();
     loadAISpeakingExercises();
+    // Refresh skill insights for snapshot
+    setSkillInsights(null);
+    (async () => {
+      try {
+        if (activeSkill === 'speaking') {
+          const res = await progressAPI.getSpeakingInsights();
+          setSkillInsights(res.data);
+        } else if (activeSkill === 'writing') {
+          const res = await progressAPI.getWritingInsights();
+          setSkillInsights(res.data);
+        } else {
+          const res = await progressAPI.getAccuracyInsights(activeSkill);
+          setSkillInsights(res.data);
+        }
+      } catch { /* ignore */ }
+    })();
   };
 
   // Result screen
@@ -707,7 +723,7 @@ const sharedExerciseStyles = `
   .question-number { background: var(--color-primary); color: white; padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; }
   .question-text { font-size: 1.125rem; font-weight: 500; margin-bottom: var(--spacing-md); color: var(--color-text-primary); }
   .options { display: flex; flex-direction: column; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); }
-  .option { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md); background: var(--color-background); border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; transition: all var(--transition-fast); }
+  .option { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md); background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; transition: all var(--transition-fast); color: var(--color-text-primary); }
   .option:hover:not(:disabled) { border-color: var(--color-primary); }
   .option.selected { border-color: var(--color-primary); background: rgba(79,70,229,0.1); }
   .option.correct { border-color: var(--color-success); background: rgba(16,185,129,0.1); }
