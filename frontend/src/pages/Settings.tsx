@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sun, Moon, Globe, Target, Calendar, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store';
@@ -27,43 +27,40 @@ export default function Settings() {
     }
   }, [user]);
 
-  // Auto-save on change (debounced)
+  // Auto-save on change (debounced) — use ref to avoid re-trigger loops
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialLoadRef = useRef(true);
-
-  const autoSave = useCallback(async (data: typeof formData) => {
-    setSaving(true);
-    setMessage('');
-    try {
-      const res = await authAPI.updateSettings({
-        target_band: data.target_band,
-        test_date: data.test_date || undefined,
-        preferred_language: data.preferred_language,
-      });
-      if (data.preferred_language !== language) {
-        setLanguage(data.preferred_language as 'en' | 'zh');
-        i18n.changeLanguage(data.preferred_language);
-      }
-      setAuth(useAppStore.getState().token!, res.data);
-      setMessage('Saved');
-      setTimeout(() => setMessage(''), 1500);
-    } catch {
-      setMessage('Failed to save');
-    } finally {
-      setSaving(false);
-    }
-  }, [language, setLanguage, i18n, setAuth]);
+  const prevFormRef = useRef(JSON.stringify(formData));
 
   useEffect(() => {
-    // Skip auto-save on initial load
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-      return;
-    }
+    const current = JSON.stringify(formData);
+    if (current === prevFormRef.current) return; // no change
+    prevFormRef.current = current;
+
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => autoSave(formData), 600);
+    saveTimerRef.current = setTimeout(async () => {
+      setSaving(true);
+      setMessage('');
+      try {
+        const res = await authAPI.updateSettings({
+          target_band: formData.target_band,
+          test_date: formData.test_date || undefined,
+          preferred_language: formData.preferred_language,
+        });
+        if (formData.preferred_language !== language) {
+          setLanguage(formData.preferred_language as 'en' | 'zh');
+          i18n.changeLanguage(formData.preferred_language);
+        }
+        setAuth(useAppStore.getState().token!, res.data);
+        setMessage('Saved');
+        setTimeout(() => setMessage(''), 1500);
+      } catch {
+        setMessage('Failed to save');
+      } finally {
+        setSaving(false);
+      }
+    }, 600);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [formData, autoSave]);
+  });
 
   return (
     <div className="settings-page">
