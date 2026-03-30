@@ -209,7 +209,7 @@ class PracticeGenerator:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = "gpt-4o-mini"
 
-    def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None) -> dict:
+    def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None, difficulty_profile: dict | None = None) -> dict:
         """Generate a single reading practice via 2-step pipeline + validation.
 
         Step 1: Generate passage (GPT call #1)
@@ -224,12 +224,12 @@ class PracticeGenerator:
             metadata = generate_metadata(avoid_topics=avoid_topics)
 
             # Step 1: Generate passage
-            passage_data = self._generate_passage(metadata)
+            passage_data = self._generate_passage(metadata, difficulty_profile=difficulty_profile)
             if not passage_data or not passage_data.get("passage"):
                 continue
 
             # Step 2: Generate questions
-            questions_data = self._generate_questions(metadata, passage_data["passage"])
+            questions_data = self._generate_questions(metadata, passage_data["passage"], difficulty_profile=difficulty_profile)
             if not questions_data:
                 continue
 
@@ -254,7 +254,7 @@ class PracticeGenerator:
 
         return result
 
-    def _generate_passage(self, metadata: dict) -> dict | None:
+    def _generate_passage(self, metadata: dict, difficulty_profile: dict | None = None) -> dict | None:
         """GPT call #1: Generate the reading passage."""
         numbers_str = ", ".join(
             f"{k.replace('_', ' ')} = {v}" for k, v in metadata["numbers"].items()
@@ -273,11 +273,23 @@ class PracticeGenerator:
             numbers=numbers_str,
         )
 
+        difficulty_instruction = ""
+        if difficulty_profile:
+            tc = difficulty_profile.get("text_complexity", 3)
+            id_ = difficulty_profile.get("inference_demand", 3)
+            difficulty_instruction = f"""
+Difficulty profile:
+- Text complexity: {tc}/5 — {"Use simple, concrete vocabulary and short sentences" if tc <= 2 else "Use academic vocabulary, complex sentence structures, and dense information" if tc >= 4 else "Use moderate academic vocabulary"}
+- Inference demand: {id_}/5 — {"State information directly and explicitly" if id_ <= 2 else "Require readers to infer meaning, use implicit reasoning and heavy paraphrasing" if id_ >= 4 else "Mix explicit and implicit information"}
+"""
+
+        system_msg = "You are an expert IELTS passage writer. Generate valid JSON only." + difficulty_instruction
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert IELTS passage writer. Generate valid JSON only."},
+                    {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.85,
@@ -288,7 +300,7 @@ class PracticeGenerator:
             print(f"Passage generation error: {e}")
             return None
 
-    def _generate_questions(self, metadata: dict, passage: str) -> dict | None:
+    def _generate_questions(self, metadata: dict, passage: str, difficulty_profile: dict | None = None) -> dict | None:
         """GPT call #2: Generate questions with paraphrase anchors + synonym distance."""
         comp_parts = []
         for qtype, count in metadata["question_composition"]:
@@ -305,6 +317,15 @@ class PracticeGenerator:
             distances=dist_str,
             passage=passage,
         )
+
+        if difficulty_profile:
+            qd = difficulty_profile.get("question_difficulty", 3)
+            difficulty_note = f"\nQuestion difficulty: {qd}/5. " + (
+                "Use straightforward distractors and direct answer matching." if qd <= 2
+                else "Use subtle, closely-related distractors that require careful reading and inference." if qd >= 4
+                else "Use moderately challenging distractors."
+            )
+            prompt += difficulty_note
 
         try:
             response = self.client.chat.completions.create(

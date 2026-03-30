@@ -123,6 +123,10 @@ def get_daily_reading(
         if new_gps:
             db.commit()
 
+    # Filter out reading_full_test exercises for non-VIP users
+    if current_user.role != 'vip':
+        practices = [p for p in practices if p.get('meta', {}).get('module', '') != 'reading_full_test']
+
     background_tasks.add_task(_replenish, current_user.id)
     return {"practices": practices}
 

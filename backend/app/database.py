@@ -44,6 +44,7 @@ def init_db():
         # Add 'GRAMMAR' to the skilltype enum (PostgreSQL only; SQLite ignores)
         # Note: existing enum values are uppercase (READING, LISTENING, WRITING, SPEAKING)
         "ALTER TYPE skilltype ADD VALUE IF NOT EXISTS 'GRAMMAR'",
+        "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'free'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

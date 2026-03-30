@@ -15,6 +15,9 @@ import AISpeakingExerciseView from '../components/practice/AISpeakingView';
 import AISpeakingPart1View from '../components/practice/AISpeakingPart1View';
 import AISpeakingPart3View from '../components/practice/AISpeakingPart3View';
 import AISpeakingFullTestView from '../components/practice/AISpeakingFullTestView';
+import AIReadingFullTestView from '../components/practice/AIReadingFullTestView';
+import VipGate from '../components/VipGate';
+import { useAppStore } from '../store';
 
 // Error boundary to prevent white screens from component crashes
 class ExerciseErrorBoundary extends React.Component<
@@ -59,6 +62,8 @@ const ESSAY_TYPE_LABELS: Record<string, string> = {
 export default function Practice() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const { user } = useAppStore();
+  const isVip = user?.role === 'vip';
 
   const [aiReadingExercises, setAIReadingExercises] = useState<AIReadingPractice[]>([]);
   const [currentAIExercise, setCurrentAIExercise] = useState<AIReadingPractice | null>(null);
@@ -392,6 +397,16 @@ export default function Practice() {
 
   // AI Reading exercise view
   if (currentAIExercise) {
+    // Full test view for reading exams
+    if (currentAIExercise.meta?.module === 'reading_full_test') {
+      return (
+        <div className="practice">
+          <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
+          <AIReadingFullTestView exercise={currentAIExercise} onBack={handleBack} />
+          <style>{sharedExerciseStyles}</style>
+        </div>
+      );
+    }
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
@@ -603,7 +618,9 @@ export default function Practice() {
       ) : practiceMode === 'exam' ? (
         /* ─── Exam mode ─── */
         <div className="exercise-list">
-          {activeSkill === 'speaking' ? (
+          {!isVip && activeSkill !== 'speaking' ? (
+            <VipGate skillName={activeTab.label} />
+          ) : activeSkill === 'speaking' ? (
             aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').length > 0 ? (
               aiSpeakingExercises.filter(ex => ex.meta.module === 'speaking_full_test').map((ex, i) => (
                 <button key={i} className="exercise-item exercise-item-highlight" onClick={() => handleSelectAISpeaking(ex)}>
@@ -613,6 +630,17 @@ export default function Practice() {
               ))
             ) : (
               <p className="empty-list">No full test available. Generate more speaking exercises.</p>
+            )
+          ) : activeSkill === 'reading' ? (
+            aiReadingExercises.filter(ex => ex.meta?.module === 'reading_full_test').length > 0 ? (
+              aiReadingExercises.filter(ex => ex.meta?.module === 'reading_full_test').map((ex, i) => (
+                <button key={i} className="exercise-item exercise-item-highlight" style={{ borderLeftColor: '#4F46E5' }} onClick={() => handleSelectAIExercise(ex)}>
+                  <span className="exercise-title">{ex.meta.topic}</span>
+                  <span className="exercise-meta">Full Test · 60 min · {(ex.meta as any).total_questions || 30}q</span>
+                </button>
+              ))
+            ) : (
+              <p className="empty-list">No full tests available yet. Check back tomorrow.</p>
             )
           ) : (
             <div className="exam-coming-soon">

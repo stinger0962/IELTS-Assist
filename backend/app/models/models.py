@@ -24,6 +24,7 @@ class User(Base):
     target_band = Column(Float, default=7.0)
     test_date = Column(DateTime, nullable=True)
     preferred_language = Column(String(10), default="en")
+    role = Column(String(20), default="free")  # "free" or "vip"
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     

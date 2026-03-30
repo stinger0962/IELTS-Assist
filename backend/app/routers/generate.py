@@ -61,6 +61,26 @@ def daily_generate() -> None:
         db.commit()
         logger.info("Daily reading generation complete")
 
+        # Full reading exam (1 per day, server-wide)
+        from app.services.ai.reading_exam import generate_reading_exam
+        logger.info("Daily generation: adding 1 full reading exam")
+        try:
+            exam = generate_reading_exam(avoid_topics=reading_avoid)
+            if exam:
+                db.add(GeneratedPractice(
+                    skill="reading",
+                    topic=exam["meta"]["topic"],
+                    content=json.dumps(exam),
+                    is_validated=True,
+                    generated_date=datetime.utcnow(),
+                ))
+                db.commit()
+                logger.info("Daily reading exam generation complete")
+            else:
+                logger.warning("Daily reading exam generation failed — no exam produced")
+        except Exception as e:
+            logger.error(f"Daily reading exam generation error: {e}")
+
         # Listening exercises
         logger.info("Daily generation: adding 2 listening exercises")
         recent = (

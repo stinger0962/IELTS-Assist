@@ -8,6 +8,7 @@ export interface User {
   target_band: number;
   test_date?: string;
   preferred_language: string;
+  role: string;  // "free" | "vip"
   created_at: string;
 }
 
@@ -527,6 +528,22 @@ export interface AccuracyInsights {
   total_correct: number;
   recent_sessions: { date: string; score: number; accuracy: number; correct: number; total_questions: number; topic: string }[];
   question_type_breakdown?: { type: string; correct: number; total: number; accuracy: number }[];
+}
+
+export interface ReadingExamSection {
+  section_number: number;
+  difficulty_profile: { text_complexity: number; inference_demand: number; question_difficulty: number };
+  meta: { topic: string; word_count?: number; module?: string };
+  passage: { title: string; content: string };
+  questions: { groups: any[] };
+  question_count: number;
+}
+
+export interface ReadingExamResult {
+  overall: { correct: number; total: number; band: number };
+  sections: { section: number; correct: number; total: number; accuracy: number }[];
+  question_types: { type: string; correct: number; total: number; accuracy: number }[];
+  time_taken_seconds: number;
 }
 
 export interface AIGrammarPractice {

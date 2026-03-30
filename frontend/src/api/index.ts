@@ -156,6 +156,12 @@ export const practiceAPI = {
       headers: { 'Content-Type': undefined },
     });
   },
+  submitReadingExam: (practiceId: number, sections: any[], timeTaken: number) =>
+    api.post('/generate/submit-ai-reading-exam', {
+      practice_id: practiceId,
+      sections,
+      time_taken_seconds: timeTaken,
+    }),
   getDailyWriting: () => api.get('/generate/daily-writing'),
   generateMoreWriting: () => api.post('/generate/generate-more-writing'),
   submitAIWriting: (practiceId: number, essay: string, timeSeconds: number, mode: string) =>
