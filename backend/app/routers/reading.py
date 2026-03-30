@@ -29,6 +29,7 @@ def _with_db_id(practice: GeneratedPractice) -> dict:
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _active_cards(user_id: int, db: Session, skill: str = "reading") -> list:
+    """Active cards excluding full tests (those are dealt separately)."""
     return (
         db.query(UserPractice)
         .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
@@ -36,13 +37,14 @@ def _active_cards(user_id: int, db: Session, skill: str = "reading") -> list:
             UserPractice.user_id == user_id,
             UserPractice.submitted_at.is_(None),
             GeneratedPractice.skill == skill,
+            ~GeneratedPractice.content.contains('"reading_full_test"'),
         )
         .all()
     )
 
 
 def _available_for_user(user_id: int, db: Session, limit: int = None, exclude_topics: list = None):
-    """Global pool practices not yet dealt to this user."""
+    """Global pool practices not yet dealt to this user (excludes full tests)."""
     served = db.query(UserPractice.practice_id).filter(
         UserPractice.user_id == user_id
     ).subquery()
@@ -51,6 +53,7 @@ def _available_for_user(user_id: int, db: Session, limit: int = None, exclude_to
         .filter(
             GeneratedPractice.skill == "reading",
             ~GeneratedPractice.id.in_(served),
+            ~GeneratedPractice.content.contains('"reading_full_test"'),
         )
         .order_by(GeneratedPractice.generated_date.asc())
     )
@@ -123,9 +126,43 @@ def get_daily_reading(
         if new_gps:
             db.commit()
 
-    # Filter out reading_full_test exercises for non-VIP users
-    if current_user.role != 'vip':
-        practices = [p for p in practices if p.get('meta', {}).get('module', '') != 'reading_full_test']
+    # For VIP users, also deal full test cards (separate from practice cards)
+    if current_user.role == 'vip':
+        # Check if user already has an active full test
+        active_full = (
+            db.query(UserPractice)
+            .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
+            .filter(
+                UserPractice.user_id == current_user.id,
+                UserPractice.submitted_at.is_(None),
+                GeneratedPractice.skill == "reading",
+                GeneratedPractice.content.contains('"reading_full_test"'),
+            )
+            .all()
+        )
+        # Add existing active full tests to response
+        for up in active_full:
+            gp = db.get(GeneratedPractice, up.practice_id)
+            if gp:
+                practices.append(_with_db_id(gp))
+
+        # If no active full test, deal one from pool
+        if not active_full:
+            served = db.query(UserPractice.practice_id).filter(UserPractice.user_id == current_user.id).subquery()
+            full_test = (
+                db.query(GeneratedPractice)
+                .filter(
+                    GeneratedPractice.skill == "reading",
+                    GeneratedPractice.content.contains('"reading_full_test"'),
+                    ~GeneratedPractice.id.in_(served),
+                )
+                .order_by(GeneratedPractice.generated_date.desc())
+                .first()
+            )
+            if full_test:
+                db.add(UserPractice(user_id=current_user.id, practice_id=full_test.id))
+                db.commit()
+                practices.append(_with_db_id(full_test))
 
     background_tasks.add_task(_replenish, current_user.id)
     return {"practices": practices}

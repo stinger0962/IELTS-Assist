@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Globe, Target, Calendar, Volume2, VolumeX } from 'lucide-react';
+import { Sun, Moon, Globe, Target, Calendar, Volume2, VolumeX, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import { authAPI } from '../api';
 import { getSoundEnabled, setSoundEnabled, playClick } from '../hooks/useSoundEffects';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
-  const { theme, setTheme, language, setLanguage, user, setAuth } = useAppStore();
+  const navigate = useNavigate();
+  const { theme, setTheme, language, setLanguage, user, setAuth, logout } = useAppStore();
   const [formData, setFormData] = useState({
     target_band: user?.target_band || 7.0,
     test_date: user?.test_date ? new Date(user.test_date).toISOString().split('T')[0] : '',
@@ -199,6 +201,12 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Logout */}
+      <button className="logout-btn" onClick={() => { logout(); navigate('/login'); }}>
+        <LogOut size={18} />
+        <span>{t('auth.logout')}</span>
+      </button>
+
       <style>{`
         .settings-page {
           max-width: 800px;
@@ -317,6 +325,27 @@ export default function Settings() {
 
         .message.error {
           color: var(--color-error);
+        }
+
+        .logout-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--spacing-sm);
+          width: 100%;
+          padding: var(--spacing-md);
+          margin-top: var(--spacing-xl);
+          background: none;
+          border: 1px solid var(--color-error);
+          border-radius: var(--radius-md);
+          color: var(--color-error);
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .logout-btn:hover {
+          background: rgba(239, 68, 68, 0.08);
         }
       `}</style>
     </div>
