@@ -166,10 +166,50 @@ export default function Dashboard() {
     );
   }
 
+  // Smart greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    const name = user?.full_name || user?.username || '';
+    if (hour < 6) return `Burning the midnight oil, ${name}?`;
+    if (hour < 12) return `Good morning, ${name}`;
+    if (hour < 18) return `Good afternoon, ${name}`;
+    if (hour < 22) return `Good evening, ${name}`;
+    return `Late night study, ${name}?`;
+  };
+
+  // Contextual tip
+  const getTip = () => {
+    if (!stats) return null;
+    const streak = stats.streak_days || 0;
+    const exercises = stats.total_exercises || 0;
+
+    if (exercises === 0) return 'Start your first exercise to begin tracking progress!';
+    if (streak === 0) return 'Complete an exercise today to start a streak!';
+    if (streak >= 7) return `${streak}-day streak! You're building a great habit.`;
+    if (streak >= 3) return `${streak}-day streak! Keep it going.`;
+
+    // Find least practiced skill
+    const progress = stats.progress || [];
+    if (progress.length >= 2) {
+      const sorted = [...progress].sort((a, b) => {
+        const aTime = new Date(a.last_practiced || 0).getTime();
+        const bTime = new Date(b.last_practiced || 0).getTime();
+        return aTime - bTime;
+      });
+      const least = sorted[0];
+      if (least) {
+        const skillNames: Record<string, string> = { reading: 'reading', listening: 'listening', speaking: 'speaking', writing: 'writing', grammar: 'grammar' };
+        return `Try some ${skillNames[least.skill] || least.skill} practice — it's been a while.`;
+      }
+    }
+    return null;
+  };
+
   return (
     <div className="dashboard">
       <header className="page-header">
-        <h1>{t('dashboard.welcome')} {user?.full_name || user?.username || ''}!</h1>
+        <h1>{getGreeting()}</h1>
+        {getTip() && <p className="greeting-tip">{getTip()}</p>}
       </header>
 
       {/* Stats Overview */}
@@ -264,7 +304,14 @@ export default function Dashboard() {
         }
 
         .page-header h1 {
-          font-size: 1.75rem;
+          font-size: 1.5rem;
+        }
+
+        .greeting-tip {
+          font-size: 0.85rem;
+          color: var(--color-text-secondary);
+          margin-top: 4px;
+          font-style: italic;
         }
 
         .stats-grid {
