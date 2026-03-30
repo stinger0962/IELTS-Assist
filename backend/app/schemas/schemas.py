@@ -33,8 +33,9 @@ class UserResponse(BaseModel):
     target_band: float
     test_date: Optional[datetime]
     preferred_language: str
+    role: str = "free"
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
