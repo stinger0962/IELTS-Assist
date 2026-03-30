@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sun, Moon, Globe, Target, Calendar, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store';
@@ -27,30 +27,43 @@ export default function Settings() {
     }
   }, [user]);
 
-  const handleSave = async () => {
+  // Auto-save on change (debounced)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadRef = useRef(true);
+
+  const autoSave = useCallback(async (data: typeof formData) => {
     setSaving(true);
     setMessage('');
     try {
       const res = await authAPI.updateSettings({
-        target_band: formData.target_band,
-        test_date: formData.test_date || undefined,
-        preferred_language: formData.preferred_language,
+        target_band: data.target_band,
+        test_date: data.test_date || undefined,
+        preferred_language: data.preferred_language,
       });
-      
-      // Update store
-      if (formData.preferred_language !== language) {
-        setLanguage(formData.preferred_language as 'en' | 'zh');
-        i18n.changeLanguage(formData.preferred_language);
+      if (data.preferred_language !== language) {
+        setLanguage(data.preferred_language as 'en' | 'zh');
+        i18n.changeLanguage(data.preferred_language);
       }
-      
       setAuth(useAppStore.getState().token!, res.data);
-      setMessage('Settings saved successfully!');
-    } catch (error) {
-      setMessage('Failed to save settings');
+      setMessage('Saved');
+      setTimeout(() => setMessage(''), 1500);
+    } catch {
+      setMessage('Failed to save');
     } finally {
       setSaving(false);
     }
-  };
+  }, [language, setLanguage, i18n, setAuth]);
+
+  useEffect(() => {
+    // Skip auto-save on initial load
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return;
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => autoSave(formData), 600);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [formData, autoSave]);
 
   return (
     <div className="settings-page">
@@ -177,20 +190,17 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="settings-actions">
-        <button 
-          className="btn btn-primary btn-lg" 
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? 'Saving...' : t('settings.save')}
-        </button>
-        {message && (
-          <span className={`message ${message.includes('Failed') ? 'error' : 'success'}`}>
-            {message}
-          </span>
-        )}
-      </div>
+      {/* Auto-save status */}
+      {(saving || message) && (
+        <div className="settings-status">
+          {saving ? <span className="saving-indicator">Saving...</span> : null}
+          {message && (
+            <span className={`message ${message.includes('Failed') ? 'error' : 'success'}`}>
+              {message}
+            </span>
+          )}
+        </div>
+      )}
 
       <style>{`
         .settings-page {
@@ -290,14 +300,18 @@ export default function Settings() {
           font-size: 1rem;
         }
 
-        .settings-actions {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-md);
+        .settings-status {
+          text-align: center;
+          padding: var(--spacing-sm) 0;
+          font-size: 0.8rem;
+        }
+
+        .saving-indicator {
+          color: var(--color-text-secondary);
         }
 
         .message {
-          font-size: 0.875rem;
+          font-size: 0.8rem;
         }
 
         .message.success {
