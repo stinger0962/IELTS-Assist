@@ -15,6 +15,7 @@ export default function Settings() {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [soundOn, setSoundOn] = useState(getSoundEnabled());
 
   useEffect(() => {
     if (user) {
@@ -153,7 +154,7 @@ export default function Settings() {
         {/* Sound Effects */}
         <div className="settings-card">
           <div className="settings-icon">
-            {getSoundEnabled() ? <Volume2 size={24} /> : <VolumeX size={24} />}
+            {soundOn ? <Volume2 size={24} /> : <VolumeX size={24} />}
           </div>
           <div className="settings-info">
             <h3>Sound Effects</h3>
@@ -161,14 +162,14 @@ export default function Settings() {
           </div>
           <div className="settings-control">
             <button
-              className={`theme-btn ${getSoundEnabled() ? 'active' : ''}`}
-              onClick={() => { setSoundEnabled(true); playClick(); }}
+              className={`theme-btn ${soundOn ? 'active' : ''}`}
+              onClick={() => { setSoundEnabled(true); setSoundOn(true); playClick(); }}
             >
               <Volume2 size={18} /> On
             </button>
             <button
-              className={`theme-btn ${!getSoundEnabled() ? 'active' : ''}`}
-              onClick={() => setSoundEnabled(false)}
+              className={`theme-btn ${!soundOn ? 'active' : ''}`}
+              onClick={() => { setSoundEnabled(false); setSoundOn(false); }}
             >
               <VolumeX size={18} /> Off
             </button>
