@@ -148,18 +148,14 @@ export default function Sidebar() {
 
         @media (max-width: 1024px) {
           .mobile-menu-btn {
-            display: none;
-          }
-          .sidebar-overlay {
-            display: none;
-          }
-          .sidebar {
-            transform: translateX(-100%);
+            display: none !important;
             pointer-events: none;
           }
-          .sidebar.open {
-            transform: translateX(0);
-            pointer-events: auto;
+          .sidebar-overlay {
+            display: none !important;
+          }
+          .sidebar {
+            display: none !important;
           }
         }
 
