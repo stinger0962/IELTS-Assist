@@ -37,6 +37,8 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   const [result, setResult] = useState<ReadingExamResult | null>(null);
   const [error, setError] = useState('');
   const [showExplanations, setShowExplanations] = useState<number | null>(null);
+  const [reviewSection, setReviewSection] = useState<number | null>(null);
+  const [reviewTab, setReviewTab] = useState<'passage' | 'questions'>('passage');
 
   // Answers: { 0: { "q_0_0": "TRUE" }, 1: { ... }, 2: { ... } }
   const answersRef = useRef<Record<number, Record<string, string>>>({});
@@ -200,6 +202,56 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
 
   // ─── Results ────
   if (stage === 'results' && result) {
+    // Review mode — Passage/Questions tabs for a specific section
+    if (reviewSection !== null && sections[reviewSection]) {
+      const rs = sections[reviewSection];
+      const rsPassage = typeof rs.passage === 'string' ? rs.passage : rs.passage?.content || '';
+      const rsResult = result.sections.find((s) => s.section === rs.section_number);
+      return (
+        <div className="rft-container">
+          {/* Sticky top bar */}
+          <div className="rft-review-topbar">
+            <button className="rft-review-back" onClick={() => { setReviewSection(null); setReviewTab('passage'); window.scrollTo(0, 0); }}>← Results</button>
+            <span className="rft-review-title">{rs.meta?.topic}</span>
+            <span className="rft-review-badge">{rsResult ? `${rsResult.correct}/${rsResult.total}` : ''}</span>
+          </div>
+          {/* Section switcher */}
+          <div className="rft-review-section-tabs">
+            {sections.map((s: any, i: number) => {
+              const sr = result.sections.find((r) => r.section === s.section_number);
+              return (
+                <button key={i} className={reviewSection === i ? 'active' : ''} onClick={() => { setReviewSection(i); setReviewTab('passage'); window.scrollTo(0, 0); }}>
+                  S{s.section_number} · {sr ? `${sr.correct}/${sr.total}` : ''}
+                </button>
+              );
+            })}
+          </div>
+          {/* Passage / Questions toggle */}
+          <div className="rft-review-toggle">
+            <button className={reviewTab === 'passage' ? 'active' : ''} onClick={() => setReviewTab('passage')}>Passage</button>
+            <button className={reviewTab === 'questions' ? 'active' : ''} onClick={() => setReviewTab('questions')}>Questions</button>
+          </div>
+          {/* Passage tab */}
+          {reviewTab === 'passage' && (
+            <div className="rft-review-passage">
+              <h3>{rs.meta?.topic}</h3>
+              {rsPassage.split(/\n\n+/).filter((p: string) => p.trim()).map((para: string, pi: number) => (
+                <p key={pi} className="reading-passage-para">{para.trim()}</p>
+              ))}
+            </div>
+          )}
+          {/* Questions tab */}
+          {reviewTab === 'questions' && (
+            <div className="rft-review-questions">
+              {renderSectionReview(rs, reviewSection)}
+            </div>
+          )}
+          <style>{styles}</style>
+        </div>
+      );
+    }
+
+    // Results summary page
     return (
       <div className="rft-container">
         <ConfettiBurst />
@@ -212,13 +264,14 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
           <span className="rft-results-time">{formatTime(result.time_taken_seconds)} elapsed</span>
         </div>
 
-        {/* Per-section breakdown */}
+        {/* Clickable section cards with Review → */}
         <div className="rft-section-cards">
-          {result.sections.map((s) => (
-            <div key={s.section} className="rft-section-card">
+          {result.sections.map((s, si) => (
+            <div key={s.section} className="rft-section-card rft-section-card-clickable" onClick={() => { setReviewSection(si); setReviewTab('passage'); window.scrollTo(0, 0); }}>
               <span className="rft-sc-label">Section {s.section}</span>
               <span className="rft-sc-score" style={{ color: accColor(s.accuracy) }}>{s.correct}/{s.total}</span>
               <span className="rft-sc-pct">{s.accuracy.toFixed(0)}%</span>
+              <span className="rft-sc-review">Review →</span>
             </div>
           ))}
         </div>
@@ -236,39 +289,6 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
             ))}
           </div>
         )}
-
-        {/* Review — tabbed sections, not scroll-forever */}
-        <div className="rft-review">
-          <h3>Review Answers</h3>
-          <div className="rft-review-tabs">
-            {sections.map((s: any, si: number) => (
-              <button
-                key={si}
-                className={`rft-review-tab ${showExplanations === si ? 'active' : ''}`}
-                onClick={() => setShowExplanations(showExplanations === si ? null : si)}
-              >
-                S{s.section_number}
-              </button>
-            ))}
-          </div>
-          {showExplanations !== null && sections[showExplanations] && (() => {
-            const s = sections[showExplanations];
-            const passageText = typeof s.passage === 'string' ? s.passage : s.passage?.content || '';
-            return (
-              <div className="rft-review-content">
-                {/* Collapsible passage */}
-                <details className="rft-review-passage-details">
-                  <summary>View Passage: {s.meta?.topic}</summary>
-                  <div className="rft-review-passage-text reading-passage">{passageText}</div>
-                </details>
-                {/* Questions with answers */}
-                <div className="rft-answers-list">
-                  {renderSectionReview(s, showExplanations)}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
 
         <button className="btn btn-primary btn-lg" onClick={onBack} style={{ width: '100%', marginTop: 16 }}>Finish</button>
         <style>{styles}</style>
@@ -649,9 +669,29 @@ const styles = `
 
   .rft-section-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-sm); margin-bottom: var(--spacing-md); }
   .rft-section-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); text-align: center; }
-  .rft-sc-label { display: block; font-size: 0.7rem; color: var(--color-text-secondary); }
-  .rft-sc-score { display: block; font-size: 1.1rem; font-weight: 700; }
-  .rft-sc-pct { font-size: 0.75rem; }
+  .rft-section-card-clickable { cursor: pointer; transition: all 0.2s; }
+  .rft-section-card-clickable:hover { border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(79,70,229,0.12); transform: translateY(-1px); }
+  .rft-section-card-clickable:active { transform: scale(0.97); }
+  .rft-sc-label { display: block; font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .rft-sc-score { display: block; font-size: 1.3rem; font-weight: 700; margin: 4px 0; }
+  .rft-sc-pct { font-size: 0.75rem; display: block; }
+  .rft-sc-review { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; color: var(--color-primary); margin-top: 6px; padding: 3px 10px; background: rgba(79,70,229,0.08); border-radius: 20px; }
+
+  /* ── Review Mode ── */
+  .rft-review-topbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); position: sticky; top: 0; z-index: 10; }
+  .rft-review-back { background: none; border: none; font-size: 0.85rem; font-weight: 600; color: var(--color-primary); cursor: pointer; padding: 4px 0; white-space: nowrap; }
+  .rft-review-title { font-size: 0.8rem; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rft-review-badge { font-size: 0.75rem; font-weight: 600; color: var(--color-primary); background: rgba(79,70,229,0.08); padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .rft-review-section-tabs { display: flex; gap: 4px; padding: 8px 16px; background: var(--color-background); border-bottom: 1px solid var(--color-border); }
+  .rft-review-section-tabs button { flex: 1; padding: 8px; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; color: var(--color-text-secondary); }
+  .rft-review-section-tabs button.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .rft-review-toggle { display: flex; margin: 12px 16px; background: var(--color-background); border-radius: 8px; padding: 3px; }
+  .rft-review-toggle button { flex: 1; padding: 8px; border: none; background: transparent; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); transition: all 0.2s; }
+  .rft-review-toggle button.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .rft-review-passage { padding: 16px; }
+  .rft-review-passage h3 { font-family: 'Source Serif 4', serif; font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
+  .reading-passage-para { font-family: 'Source Serif 4', serif; font-size: 0.92rem; line-height: 1.8; color: var(--color-text-primary); margin-bottom: 12px; }
+  .rft-review-questions { padding: 16px; }
 
   .rft-qt-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
   .rft-qt-section h3 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
