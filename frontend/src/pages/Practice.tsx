@@ -364,6 +364,7 @@ export default function Practice() {
     loadAIGrammarExercises();
     loadAIWritingExercises();
     loadAISpeakingExercises();
+    loadRecentExams();
     // Refresh skill insights for snapshot
     setSkillInsights(null);
     (async () => {
