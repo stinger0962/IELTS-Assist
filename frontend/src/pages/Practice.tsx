@@ -657,12 +657,27 @@ export default function Practice() {
             )
           ) : activeSkill === 'reading' ? (
             aiReadingExercises.filter(ex => ex.meta?.module === 'reading_full_test').length > 0 ? (
-              aiReadingExercises.filter(ex => ex.meta?.module === 'reading_full_test').map((ex, i) => (
-                <button key={i} className="exercise-item exercise-item-highlight" style={{ borderLeftColor: '#4F46E5' }} onClick={() => handleSelectAIExercise(ex)}>
-                  <span className="exercise-title">{ex.meta.topic}</span>
-                  <span className="exercise-meta">Full Test · 60 min · {(ex.meta as any).total_questions || 30}q</span>
-                </button>
-              ))
+              aiReadingExercises.filter(ex => ex.meta?.module === 'reading_full_test').map((ex, i) => {
+                const topics = ((ex.meta as any).topic || '').replace('Full Reading Test — ', '').split(', ');
+                const totalQ = (ex.meta as any).total_questions || 30;
+                return (
+                  <div key={i} className="exam-card" onClick={() => handleSelectAIExercise(ex)}>
+                    <div className="exam-card-header">
+                      <span className="exam-card-icon">📝</span>
+                      <div>
+                        <h3 className="exam-card-title">Full Reading Test</h3>
+                        <span className="exam-card-meta">60 min · {totalQ} questions · 3 sections</span>
+                      </div>
+                    </div>
+                    <div className="exam-card-topics">
+                      {topics.map((t: string, ti: number) => (
+                        <span key={ti} className="exam-topic-pill">S{ti + 1}: {t.trim()}</span>
+                      ))}
+                    </div>
+                    <div className="exam-card-cta">Start Exam →</div>
+                  </div>
+                );
+              })
             ) : (
               <p className="empty-list">No full tests available yet. Check back tomorrow.</p>
             )
@@ -845,6 +860,18 @@ const listStyles = `
   .exercise-item:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
   .exercise-item:active { transform: translateY(0); box-shadow: var(--shadow-card); }
   .exercise-item-highlight { border-left-width: 4px; border-left-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
+  /* Exam card */
+  .exam-card { background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 6%, var(--color-surface))); border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-border)); border-radius: var(--radius-lg); padding: 16px; cursor: pointer; transition: all 0.2s; margin-bottom: var(--spacing-sm); }
+  .exam-card:hover { border-color: var(--color-primary); box-shadow: 0 4px 12px rgba(79,70,229,0.12); transform: translateY(-1px); }
+  .exam-card:active { transform: scale(0.98); }
+  .exam-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .exam-card-icon { font-size: 1.8rem; }
+  .exam-card-title { font-size: 1.05rem; font-weight: 700; color: var(--color-text-primary); margin: 0; }
+  .exam-card-meta { font-size: 0.78rem; color: var(--color-text-secondary); }
+  .exam-card-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .exam-topic-pill { font-size: 0.72rem; padding: 3px 10px; background: rgba(79,70,229,0.08); color: var(--color-primary); border-radius: 20px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .exam-card-cta { text-align: center; font-size: 0.9rem; font-weight: 700; color: var(--color-primary); padding: 8px; background: rgba(79,70,229,0.06); border-radius: var(--radius-md); }
+
   .recent-exams { margin-top: var(--spacing-lg); }
   .recent-exams-title { font-size: 0.85rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
   .recent-exam-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; margin-bottom: 8px; transition: all 0.15s; }
