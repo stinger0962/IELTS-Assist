@@ -4,6 +4,7 @@ import { practiceAPI, progressAPI } from '../../api';
 import { completionMatch } from '../../utils/completionMatch';
 import type { ReadingExamResult } from '../../types';
 import { ConfettiBurst, CountUp } from '../Celebrations';
+import { useVocabSelection } from '../../hooks/useVocabSelection';
 
 interface Props {
   exercise: any; // AIReadingPractice with sections
@@ -38,6 +39,10 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   const [error, setError] = useState('');
   const [reviewSection, setReviewSection] = useState<number | null>(null);
   const [reviewTab, setReviewTab] = useState<'passage' | 'questions'>('passage');
+
+  // Vocab selection (review mode only)
+  const vocabEnabled = reviewSection !== null && reviewTab === 'passage';
+  const vocab = useVocabSelection({ enabled: vocabEnabled, skill: 'reading' });
 
   // Answers: { 0: { "q_0_0": "TRUE" }, 1: { ... }, 2: { ... } }
   const answersRef = useRef<Record<number, Record<string, string>>>({});
@@ -231,6 +236,34 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
             <button className={reviewTab === 'passage' ? 'active' : ''} onClick={() => setReviewTab('passage')}>Passage</button>
             <button className={reviewTab === 'questions' ? 'active' : ''} onClick={() => setReviewTab('questions')}>Questions</button>
           </div>
+          {/* Vocab popup + modal (review mode) */}
+          {vocab.popupPos && !vocab.showModal && (
+            <div className="vocab-popup" style={{ left: vocab.popupPos.x, top: vocab.popupPos.y + 10 }}
+              onMouseDown={e => { e.preventDefault(); vocab.openModal(vocab.word); }}
+              onTouchEnd={e => { e.preventDefault(); vocab.openModal(vocab.word); }}>
+              + Add to Vocab
+            </div>
+          )}
+          {vocab.showModal && (
+            <div className="vocab-modal-overlay" onClick={vocab.closeModal}>
+              <div className="vocab-modal" onClick={e => e.stopPropagation()}>
+                <h4>Add to Vocabulary</h4>
+                <label className="vocab-label">Word</label>
+                <input className="vocab-input" value={vocab.word} onChange={e => vocab.setWord(e.target.value)} />
+                <label className="vocab-label">Definition{vocab.defLoading && <span className="vocab-loading-hint"> · Looking up...</span>}</label>
+                <textarea className="vocab-textarea" placeholder={vocab.defLoading ? 'Looking up...' : 'Enter definition...'} value={vocab.def} onChange={e => vocab.setDef(e.target.value)} rows={3} />
+                {vocab.duplicate && <p className="vocab-duplicate-msg">Already in your deck</p>}
+                <div className="vocab-modal-actions">
+                  <button className="btn btn-secondary" onClick={vocab.closeModal}>Cancel</button>
+                  <button className="btn btn-primary" onClick={vocab.save} disabled={vocab.saving || vocab.defLoading || !vocab.def.trim()}>
+                    {vocab.saving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {vocab.saved && <div className="vocab-toast">Added to vocabulary!</div>}
+
           {/* Passage tab */}
           {reviewTab === 'passage' && (
             <div className="rft-review-passage">
