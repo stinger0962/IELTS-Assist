@@ -36,7 +36,6 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   const [timer, setTimer] = useState(timeLimit);
   const [result, setResult] = useState<ReadingExamResult | null>(null);
   const [error, setError] = useState('');
-  const [showExplanations, setShowExplanations] = useState<number | null>(null);
   const [reviewSection, setReviewSection] = useState<number | null>(null);
   const [reviewTab, setReviewTab] = useState<'passage' | 'questions'>('passage');
 
