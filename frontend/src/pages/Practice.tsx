@@ -70,6 +70,8 @@ export default function Practice() {
   const [generatingMore, setGeneratingMore] = useState(false);
   const [poolEmpty, setPoolEmpty] = useState(false);
   const [readingLoading, setReadingLoading] = useState(false);
+  const [recentExams, setRecentExams] = useState<any[]>([]);
+  const [reviewExam, setReviewExam] = useState<any>(null);
 
   const [aiListeningExercises, setAIListeningExercises] = useState<AIListeningPractice[]>([]);
   const [currentAIListening, setCurrentAIListening] = useState<AIListeningPractice | null>(null);
@@ -205,6 +207,13 @@ export default function Practice() {
     }
   };
 
+  const loadRecentExams = async () => {
+    try {
+      const res = await practiceAPI.getRecentExams('reading');
+      setRecentExams(Array.isArray(res.data) ? res.data : []);
+    } catch { setRecentExams([]); }
+  };
+
   const loadExercises = async () => {
     setLoading(true);
     loadAIReadingExercises();
@@ -212,6 +221,7 @@ export default function Practice() {
     loadAIGrammarExercises();
     loadAIWritingExercises();
     loadAISpeakingExercises();
+    loadRecentExams();
     setLoading(false);
   };
 
@@ -391,6 +401,21 @@ export default function Practice() {
           .result-circle { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(var(--color-primary) var(--percentage, 0%), var(--color-border) 0%); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--spacing-lg); }
           .result-score { font-size: 2.5rem; font-weight: 700; }
         `}</style>
+      </div>
+    );
+  }
+
+  // Review mode for past exams
+  if (reviewExam) {
+    return (
+      <div className="practice">
+        <AIReadingFullTestView
+          exercise={reviewExam.exercise}
+          onBack={() => setReviewExam(null)}
+          initialResult={reviewExam.result}
+          initialAnswers={reviewExam.user_answers}
+        />
+        <style>{sharedExerciseStyles}</style>
       </div>
     );
   }
@@ -641,7 +666,22 @@ export default function Practice() {
             ) : (
               <p className="empty-list">No full tests available yet. Check back tomorrow.</p>
             )
-          ) : (
+          ) : null}
+          {/* Recent completed exams */}
+          {activeSkill === 'reading' && isVip && recentExams.length > 0 && (
+            <div className="recent-exams">
+              <h4 className="recent-exams-title">Recent Exams</h4>
+              {recentExams.map((exam: any, i: number) => (
+                <button key={i} className="exercise-item exercise-item-past" onClick={() => setReviewExam(exam)}>
+                  <span className="exercise-title">{exam.topic}</span>
+                  <span className="exercise-meta">
+                    Band {exam.score} · {exam.correct_count}/{exam.total_questions} · {new Date(exam.submitted_at).toLocaleDateString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {activeSkill !== 'reading' && activeSkill !== 'speaking' ? (
             <div className="exam-coming-soon">
               <Sparkles size={32} />
               <h3>Full {activeTab.label} Test</h3>
@@ -794,6 +834,9 @@ const listStyles = `
   .exercise-item:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
   .exercise-item:active { transform: translateY(0); box-shadow: var(--shadow-card); }
   .exercise-item-highlight { border-left-width: 4px; border-left-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
+  .recent-exams { margin-top: var(--spacing-lg); }
+  .recent-exams-title { font-size: 0.85rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
+  .exercise-item-past { opacity: 0.85; border-left-color: var(--color-text-secondary) !important; }
   .exercise-title { font-weight: 600; color: var(--color-text-primary); font-size: 0.9rem; }
   .exercise-meta { font-size: 0.72rem; color: var(--color-text-secondary); flex-shrink: 0; margin-left: 8px; }
   .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-lg) 0; }

@@ -162,6 +162,8 @@ export const practiceAPI = {
       sections,
       time_taken_seconds: timeTaken,
     }),
+  getRecentExams: (skill: string = 'reading') =>
+    api.get(`/generate/recent-exams?skill=${skill}`),
   getDailyWriting: () => api.get('/generate/daily-writing'),
   generateMoreWriting: () => api.post('/generate/generate-more-writing'),
   submitAIWriting: (practiceId: number, essay: string, timeSeconds: number, mode: string) =>

@@ -146,3 +146,42 @@ def submit_reading_exam(
     db.commit()
 
     return result
+
+
+@router.get("/recent-exams")
+def get_recent_exams(
+    skill: str = "reading",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return last 3 completed full-test exams with exercise + results for review."""
+    module = f"{skill}_full_test"
+    rows = (
+        db.query(UserPractice, GeneratedPractice)
+        .join(GeneratedPractice, UserPractice.practice_id == GeneratedPractice.id)
+        .filter(
+            UserPractice.user_id == current_user.id,
+            UserPractice.submitted_at.isnot(None),
+            GeneratedPractice.skill == skill,
+            GeneratedPractice.content.like(f'%{module}%'),
+        )
+        .order_by(UserPractice.submitted_at.desc())
+        .limit(3)
+        .all()
+    )
+
+    exams = []
+    for up, gp in rows:
+        user_data = json.loads(up.user_answers) if up.user_answers else {}
+        exams.append({
+            "practice_id": gp.id,
+            "topic": gp.topic,
+            "submitted_at": up.submitted_at.isoformat() if up.submitted_at else None,
+            "score": up.score,
+            "correct_count": up.correct_count,
+            "total_questions": up.total_questions,
+            "exercise": json.loads(gp.content),
+            "user_answers": user_data.get("sections", []),
+            "result": user_data.get("result", {}),
+        })
+    return exams

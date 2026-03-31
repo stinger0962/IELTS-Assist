@@ -9,6 +9,8 @@ import { useVocabSelection } from '../../hooks/useVocabSelection';
 interface Props {
   exercise: any; // AIReadingPractice with sections
   onBack: () => void;
+  initialResult?: any; // For review mode — pre-loaded result
+  initialAnswers?: any[]; // For review mode — pre-loaded user answers
 }
 
 type Stage = 'intro' | 'exam' | 'confirm' | 'processing' | 'results';
@@ -27,15 +29,16 @@ const QT_LABELS: Record<string, string> = {
   short_answer: 'Short Answer',
 };
 
-export default function AIReadingFullTestView({ exercise, onBack }: Props) {
+export default function AIReadingFullTestView({ exercise, onBack, initialResult, initialAnswers }: Props) {
   const sections = exercise.sections || [];
   const totalQ = exercise.meta?.total_questions || sections.reduce((n: number, s: any) => n + (s.question_count || 0), 0);
   const timeLimit = (exercise.meta?.time_limit_minutes || 60) * 60;
 
-  const [stage, setStage] = useState<Stage>('intro');
+  const isReviewMode = !!initialResult;
+  const [stage, setStage] = useState<Stage>(isReviewMode ? 'results' : 'intro');
   const [activeSection, setActiveSection] = useState(0);
   const [timer, setTimer] = useState(timeLimit);
-  const [result, setResult] = useState<ReadingExamResult | null>(null);
+  const [result, setResult] = useState<ReadingExamResult | null>(initialResult || null);
   const [error, setError] = useState('');
   const [reviewSection, setReviewSection] = useState<number | null>(null);
   const [reviewTab, setReviewTab] = useState<'passage' | 'questions'>('passage');
@@ -45,7 +48,12 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   const vocab = useVocabSelection({ enabled: vocabEnabled, skill: 'reading' });
 
   // Answers: { 0: { "q_0_0": "TRUE" }, 1: { ... }, 2: { ... } }
-  const answersRef = useRef<Record<number, Record<string, string>>>({});
+  const answersRef = useRef<Record<number, Record<string, string>>>(
+    initialAnswers ? initialAnswers.reduce((acc: any, sec: any) => {
+      acc[(sec.section_number || 1) - 1] = sec.answers || {};
+      return acc;
+    }, {} as Record<number, Record<string, string>>) : {}
+  );
   const [, forceUpdate] = useState(0); // trigger re-render when answers change
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef(0);
