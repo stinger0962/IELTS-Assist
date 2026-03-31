@@ -304,7 +304,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
             const isCorrect = completionMatch(userAns, correctAns);
             return (
               <div key={qi} className={`rft-review-item ${isCorrect ? 'review-correct' : 'review-wrong'}`}>
-                <span className="rft-review-q">{item.question_number || qi + 1}. {typeof item === 'string' ? item : item.sentence || item.question || ''}</span>
+                <span className="rft-review-q">{item.question_number || qi + 1}. {typeof item === 'string' ? item : item.text || item.sentence || item.question || item.statement || ''}</span>
                 <span>Your answer: <strong>{userAns || '—'}</strong> {isCorrect ? <Check size={14} color="#10B981" /> : <><X size={14} color="#EF4444" /> Correct: <strong>{correctAns}</strong></>}</span>
               </div>
             );
@@ -358,8 +358,10 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
 
       {/* Passage */}
       <div className="rft-passage">
-        <h3>{section.passage?.title}</h3>
-        <div className="rft-passage-text reading-passage">{section.passage?.content}</div>
+        <h3>{typeof section.passage === 'object' ? section.passage?.title : section.meta?.topic}</h3>
+        <div className="rft-passage-text reading-passage">
+          {typeof section.passage === 'string' ? section.passage : section.passage?.content}
+        </div>
       </div>
 
       {/* Questions — exam mode (no instant feedback) */}
@@ -431,7 +433,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
               {(gtype === 'sentence_completion' || gtype === 'summary_completion' || gtype === 'short_answer') && items.map((item: any, qi: number) => {
                 const key = `q_${gi}_${qi}`;
                 const userAns = getAnswer(activeSection, key);
-                const qText = typeof item === 'string' ? item : (item.sentence || item.question || '');
+                const qText = typeof item === 'string' ? item : (item.text || item.sentence || item.question || item.statement || '');
                 return (
                   <div key={qi} className="rft-completion">
                     <p><span className="rft-qnum">{qi + 1}.</span> {qText}</p>
@@ -479,6 +481,25 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                   </div>
                 );
               })()}
+
+              {/* Matching information — items have statement + answer (paragraph letter) */}
+              {gtype === 'matching_information' && items.map((item: any, qi: number) => {
+                const key = `q_${gi}_${qi}`;
+                const userAns = getAnswer(activeSection, key);
+                return (
+                  <div key={qi} className="rft-completion">
+                    <p><span className="rft-qnum">{item.question_number || qi + 1}.</span> {item.statement || item.question || ''}</p>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Paragraph letter (A, B, C...)"
+                      value={userAns}
+                      onChange={e => setAnswer(activeSection, key, e.target.value.toUpperCase())}
+                      style={{ maxWidth: 120 }}
+                    />
+                  </div>
+                );
+              })}
             </div>
           );
         })}
