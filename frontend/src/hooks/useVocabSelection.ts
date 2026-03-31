@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { topicsAPI } from '../api';
 import { parseDictionaryEntry } from '../utils/dictionary';
-import { useStore } from '../store';
+import { useAppStore } from '../store';
 
 interface UseVocabSelectionOptions {
   enabled: boolean;
@@ -9,7 +9,7 @@ interface UseVocabSelectionOptions {
 }
 
 export function useVocabSelection({ enabled, skill = 'reading' }: UseVocabSelectionOptions) {
-  const language = useStore((s: any) => s.language) || 'en';
+  const language = useAppStore((s: any) => s.language) || 'en';
   const [word, setWord] = useState('');
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [showModal, setShowModal] = useState(false);
