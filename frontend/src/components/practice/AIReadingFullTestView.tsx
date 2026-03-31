@@ -444,11 +444,14 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                 const key = `q_${gi}_${qi}`;
                 const userAns = getAnswer(activeSection, key);
                 const qText = typeof item === 'string' ? item : (item.text || item.sentence || item.question || item.statement || '');
-                // Skip items with no text (broken summary_completion)
-                if (!qText && !item.question_number) return null;
+                const hint = item.explanation ? item.explanation.split('.')[0] : '';
                 return (
                   <div key={qi} className="rft-completion">
-                    <p><span className="rft-qnum">{item.question_number || qi + 1}.</span> {qText || `Fill in the blank (max ${item.word_limit || 3} words)`}</p>
+                    <p>
+                      <span className="rft-qnum">{item.question_number || qi + 1}.</span>{' '}
+                      {qText || (hint ? `Based on the passage: ${hint}` : `Complete with information from the passage`)}
+                      {!qText && item.word_limit && <span className="rft-word-limit"> (max {item.word_limit} words)</span>}
+                    </p>
                     <input
                       type="text"
                       className="form-input"
@@ -629,18 +632,19 @@ const styles = `
   .rft-explanations { margin-bottom: var(--spacing-md); }
   .rft-explanations h3 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
   .rft-review-section { margin-bottom: var(--spacing-md); }
-  .rft-review-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-sm); max-height: 300px; overflow-y: auto; }
-  .rft-review-passage h4 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
-  .rft-review-passage p { font-size: 0.85rem; line-height: 1.7; white-space: pre-line; }
+  .rft-review-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
+  .rft-review-passage h4 { font-size: 0.95rem; margin-bottom: var(--spacing-sm); }
+  .rft-review-passage p { font-size: 0.88rem; line-height: 1.8; white-space: pre-line; }
   .rft-expand-btn { width: 100%; text-align: left; padding: 10px var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px; }
   .rft-answers-list { padding: var(--spacing-sm); }
-  .rft-review-group { margin-bottom: var(--spacing-md); }
-  .rft-review-group h4 { font-size: 0.82rem; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs); }
-  .rft-review-item { padding: 6px 8px; border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 0.82rem; }
-  .rft-review-item.review-correct { background: rgba(16,185,129,0.08); }
-  .rft-review-item.review-wrong { background: rgba(239,68,68,0.08); }
-  .rft-review-q { display: block; font-weight: 500; margin-bottom: 2px; }
-  .rft-review-explain { font-size: 0.78rem; color: var(--color-text-secondary); margin-top: 4px; font-style: italic; }
+  .rft-review-group { margin-bottom: var(--spacing-lg); }
+  .rft-review-group h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: var(--spacing-sm); padding: 4px 8px; background: rgba(79,70,229,0.06); border-radius: var(--radius-sm); display: inline-block; }
+  .rft-review-item { padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); font-size: 0.88rem; border-left: 3px solid transparent; }
+  .rft-review-item.review-correct { background: rgba(16,185,129,0.06); border-left-color: #10B981; }
+  .rft-review-item.review-wrong { background: rgba(239,68,68,0.06); border-left-color: #EF4444; }
+  .rft-review-q { display: block; font-weight: 600; margin-bottom: 4px; line-height: 1.5; }
+  .rft-review-explain { font-size: 0.82rem; color: var(--color-text-secondary); margin-top: 6px; font-style: italic; line-height: 1.5; padding: 6px 8px; background: var(--color-background); border-radius: var(--radius-sm); }
+  .rft-word-limit { font-size: 0.75rem; color: var(--color-text-secondary); font-style: italic; }
 
   .rft-error { text-align: center; padding: var(--spacing-2xl); color: #EF4444; }
 

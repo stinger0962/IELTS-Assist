@@ -69,25 +69,49 @@ def submit_reading_exam(
 
         for gi, group in enumerate(groups):
             q_type = group.get("type", "unknown")
-            answers = group.get("answers", [])
             items = group.get("items", [])
-            answer_list = answers if answers else items
+            group_answers = group.get("answers", [])
 
-            for qi, correct_answer in enumerate(answer_list):
-                key = f"q_{gi}_{qi}"
-                user_ans = user_answers.get(key, "")
-                correct_val = correct_answer if isinstance(correct_answer, str) else str(correct_answer)
+            if q_type not in question_type_stats:
+                question_type_stats[q_type] = {"correct": 0, "total": 0}
 
-                is_correct = user_ans.strip().lower() == correct_val.strip().lower()
-                sec_correct += 1 if is_correct else 0
-                sec_total += 1
-
-                # Track per question type
-                if q_type not in question_type_stats:
-                    question_type_stats[q_type] = {"correct": 0, "total": 0}
-                question_type_stats[q_type]["total"] += 1
-                if is_correct:
-                    question_type_stats[q_type]["correct"] += 1
+            if q_type == "matching_headings":
+                # items is a single object with headings + paragraphs; answers is list of {paragraph_number, answer}
+                for ai, ans_obj in enumerate(group_answers):
+                    key = f"mh_{gi}_{ans_obj.get('paragraph_number', ai)}"
+                    user_ans = user_answers.get(key, "").strip().upper()
+                    correct_val = str(ans_obj.get("answer", "")).strip().upper()
+                    is_correct = user_ans == correct_val
+                    sec_correct += 1 if is_correct else 0
+                    sec_total += 1
+                    question_type_stats[q_type]["total"] += 1
+                    if is_correct:
+                        question_type_stats[q_type]["correct"] += 1
+            elif q_type == "multiple_choice":
+                for qi, item in enumerate(items):
+                    q_num = item.get("question_number", qi)
+                    key = f"q_{gi}_{q_num}"
+                    user_ans = user_answers.get(key, "").strip().upper()
+                    correct_val = str(item.get("answer", "")).strip().upper()
+                    is_correct = user_ans == correct_val
+                    sec_correct += 1 if is_correct else 0
+                    sec_total += 1
+                    question_type_stats[q_type]["total"] += 1
+                    if is_correct:
+                        question_type_stats[q_type]["correct"] += 1
+            else:
+                # T/F/NG, Y/N/NG, sentence_completion, summary_completion,
+                # short_answer, matching_information — items have answer field
+                for qi, item in enumerate(items):
+                    key = f"q_{gi}_{qi}"
+                    user_ans = user_answers.get(key, "").strip().lower()
+                    correct_val = str(item.get("answer", "")).strip().lower() if isinstance(item, dict) else str(item).strip().lower()
+                    is_correct = user_ans == correct_val
+                    sec_correct += 1 if is_correct else 0
+                    sec_total += 1
+                    question_type_stats[q_type]["total"] += 1
+                    if is_correct:
+                        question_type_stats[q_type]["correct"] += 1
 
         total_correct += sec_correct
         total_questions += sec_total
