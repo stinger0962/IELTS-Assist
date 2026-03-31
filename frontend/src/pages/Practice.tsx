@@ -681,7 +681,7 @@ export default function Practice() {
               ))}
             </div>
           )}
-          {activeSkill !== 'reading' && activeSkill !== 'speaking' ? (
+          {activeSkill !== 'reading' && activeSkill !== 'speaking' && (
             <div className="exam-coming-soon">
               <Sparkles size={32} />
               <h3>Full {activeTab.label} Test</h3>
