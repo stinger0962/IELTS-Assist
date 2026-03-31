@@ -237,19 +237,29 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
           </div>
         )}
 
-        {/* Expandable explanations per section */}
+        {/* Expandable review per section — passage + questions with feedback */}
         <div className="rft-explanations">
           <h3>Review Answers</h3>
           {sections.map((s: any, si: number) => (
-            <button key={si} className="rft-expand-btn" onClick={() => setShowExplanations(showExplanations === si ? null : si)}>
-              Section {s.section_number}: {s.meta?.topic || ''} {showExplanations === si ? '▲' : '▼'}
-            </button>
-          ))}
-          {showExplanations !== null && sections[showExplanations] && (
-            <div className="rft-answers-list">
-              {renderSectionReview(sections[showExplanations], showExplanations)}
+            <div key={si}>
+              <button className="rft-expand-btn" onClick={() => setShowExplanations(showExplanations === si ? null : si)}>
+                Section {s.section_number}: {s.meta?.topic || ''} {showExplanations === si ? '▲' : '▼'}
+              </button>
+              {showExplanations === si && (
+                <div className="rft-review-section">
+                  {/* Show passage */}
+                  <div className="rft-review-passage">
+                    <h4>{typeof s.passage === 'object' ? s.passage?.title : s.meta?.topic}</h4>
+                    <p className="reading-passage">{typeof s.passage === 'string' ? s.passage : s.passage?.content}</p>
+                  </div>
+                  {/* Show questions with answers */}
+                  <div className="rft-answers-list">
+                    {renderSectionReview(s, si)}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
 
         <button className="btn btn-primary btn-lg" onClick={onBack} style={{ width: '100%', marginTop: 16 }}>Finish</button>
@@ -370,14 +380,14 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
         {groups.map((group: any, gi: number) => {
           const gtype = group.type;
           const items = group.items || [];
-          const _answers = group.answers || [];
-          void _answers; // used by completion types below
+          const typeLabel = QT_LABELS[gtype] || gtype.replace(/_/g, ' ');
           const opts = gtype === 'true_false_not_given' ? ['TRUE', 'FALSE', 'NOT GIVEN']
             : gtype === 'yes_no_not_given' ? ['YES', 'NO', 'NOT GIVEN']
             : null;
 
           return (
             <div key={gi} className="rft-group">
+              <div className="rft-group-header">{typeLabel}</div>
               {group.instructions && <p className="rft-group-instructions">{group.instructions}</p>}
 
               {/* T/F/NG or Y/N/NG */}
@@ -429,18 +439,20 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                 );
               })}
 
-              {/* Completion (sentence, summary, short answer) */}
+              {/* Completion types: sentence, summary, short answer */}
               {(gtype === 'sentence_completion' || gtype === 'summary_completion' || gtype === 'short_answer') && items.map((item: any, qi: number) => {
                 const key = `q_${gi}_${qi}`;
                 const userAns = getAnswer(activeSection, key);
                 const qText = typeof item === 'string' ? item : (item.text || item.sentence || item.question || item.statement || '');
+                // Skip items with no text (broken summary_completion)
+                if (!qText && !item.question_number) return null;
                 return (
                   <div key={qi} className="rft-completion">
-                    <p><span className="rft-qnum">{qi + 1}.</span> {qText}</p>
+                    <p><span className="rft-qnum">{item.question_number || qi + 1}.</span> {qText || `Fill in the blank (max ${item.word_limit || 3} words)`}</p>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="Your answer..."
+                      placeholder={`Answer (max ${item.word_limit || 3} words)`}
                       value={userAns}
                       onChange={e => setAnswer(activeSection, key, e.target.value)}
                     />
@@ -466,14 +478,9 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                       return (
                         <div key={para.number} className="rft-match-row">
                           <span>Paragraph {para.number}: <em>{para.title}</em></span>
-                          <select
-                            value={userAns}
-                            onChange={e => setAnswer(activeSection, key, e.target.value)}
-                          >
+                          <select value={userAns} onChange={e => setAnswer(activeSection, key, e.target.value)}>
                             <option value="">Select...</option>
-                            {headings.map((h: any) => (
-                              <option key={h.id} value={h.id}>{h.id}</option>
-                            ))}
+                            {headings.map((h: any) => <option key={h.id} value={h.id}>{h.id}</option>)}
                           </select>
                         </div>
                       );
@@ -482,24 +489,29 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                 );
               })()}
 
-              {/* Matching information — items have statement + answer (paragraph letter) */}
-              {gtype === 'matching_information' && items.map((item: any, qi: number) => {
-                const key = `q_${gi}_${qi}`;
-                const userAns = getAnswer(activeSection, key);
-                return (
-                  <div key={qi} className="rft-completion">
-                    <p><span className="rft-qnum">{item.question_number || qi + 1}.</span> {item.statement || item.question || ''}</p>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="Paragraph letter (A, B, C...)"
-                      value={userAns}
-                      onChange={e => setAnswer(activeSection, key, e.target.value.toUpperCase())}
-                      style={{ maxWidth: 120 }}
-                    />
-                  </div>
-                );
-              })}
+              {/* Matching information */}
+              {gtype === 'matching_information' && (
+                <>
+                  <p className="rft-group-instructions">Which paragraph contains the following information? Write the correct letter (A, B, C, D...)</p>
+                  {items.map((item: any, qi: number) => {
+                    const key = `q_${gi}_${qi}`;
+                    const userAns = getAnswer(activeSection, key);
+                    return (
+                      <div key={qi} className="rft-match-row">
+                        <span><span className="rft-qnum">{item.question_number || qi + 1}.</span> {item.statement || item.question || ''}</span>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="A, B, C..."
+                          value={userAns}
+                          onChange={e => setAnswer(activeSection, key, e.target.value.toUpperCase())}
+                          style={{ maxWidth: 60, textAlign: 'center', flexShrink: 0 }}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           );
         })}
@@ -552,8 +564,9 @@ const styles = `
   /* Questions */
   .rft-questions { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
   .rft-questions h3 { margin-bottom: var(--spacing-md); }
-  .rft-group { margin-bottom: var(--spacing-lg); }
-  .rft-group:last-child { margin-bottom: 0; }
+  .rft-group { margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-md); }
+  .rft-group:last-child { margin-bottom: 0; border-bottom: none; }
+  .rft-group-header { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: var(--spacing-sm); padding: 4px 8px; background: rgba(79,70,229,0.06); border-radius: var(--radius-sm); display: inline-block; }
   .rft-group-instructions { font-size: 0.85rem; color: var(--color-text-secondary); font-style: italic; margin-bottom: var(--spacing-sm); }
   .rft-qnum { font-weight: 700; color: var(--color-primary); margin-right: 4px; }
 
@@ -615,6 +628,10 @@ const styles = `
 
   .rft-explanations { margin-bottom: var(--spacing-md); }
   .rft-explanations h3 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
+  .rft-review-section { margin-bottom: var(--spacing-md); }
+  .rft-review-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-sm); max-height: 300px; overflow-y: auto; }
+  .rft-review-passage h4 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
+  .rft-review-passage p { font-size: 0.85rem; line-height: 1.7; white-space: pre-line; }
   .rft-expand-btn { width: 100%; text-align: left; padding: 10px var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px; }
   .rft-answers-list { padding: var(--spacing-sm); }
   .rft-review-group { margin-bottom: var(--spacing-md); }
