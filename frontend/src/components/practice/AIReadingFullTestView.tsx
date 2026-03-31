@@ -144,6 +144,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   if (stage === 'intro') {
     return (
       <div className="rft-container">
+        <button className="rft-back-to-practice" onClick={onBack}>← Back</button>
         <div className="rft-intro">
           <h2>Full Reading Test</h2>
           <p className="rft-intro-desc">
@@ -253,6 +254,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
     // Results summary page
     return (
       <div className="rft-container">
+        <button className="rft-back-to-practice" onClick={onBack}>← Back to Practice</button>
         <ConfettiBurst />
         <div className="rft-results-overall">
           <span className="rft-results-label">Overall Band</span>
@@ -589,6 +591,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
 
 const styles = `
   .rft-container { max-width: 700px; margin: 0 auto; padding: var(--spacing-md); }
+  .rft-back-to-practice { background: none; border: none; font-size: 0.85rem; font-weight: 600; color: var(--color-primary); cursor: pointer; padding: 8px 0; margin-bottom: 8px; display: block; }
 
   /* Intro */
   .rft-intro { text-align: center; padding: var(--spacing-xl) 0; }
@@ -686,7 +689,7 @@ const styles = `
   .rft-review-section-tabs button.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .rft-review-toggle { display: flex; margin: 12px 16px; background: var(--color-background); border-radius: 8px; padding: 3px; }
   .rft-review-toggle button { flex: 1; padding: 8px; border: none; background: transparent; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); transition: all 0.2s; }
-  .rft-review-toggle button.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .rft-review-toggle button.active { background: var(--color-primary); color: white; box-shadow: 0 1px 3px rgba(79,70,229,0.3); }
   .rft-review-passage { padding: 16px; }
   .rft-review-passage h3 { font-family: 'Source Serif 4', serif; font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
   .reading-passage-para { font-family: 'Source Serif 4', serif; font-size: 0.92rem; line-height: 1.8; color: var(--color-text-primary); margin-bottom: 12px; }

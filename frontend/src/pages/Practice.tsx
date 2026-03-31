@@ -397,11 +397,10 @@ export default function Practice() {
 
   // AI Reading exercise view
   if (currentAIExercise) {
-    // Full test view for reading exams
+    // Full test view for reading exams — component handles its own navigation
     if (currentAIExercise.meta?.module === 'reading_full_test') {
       return (
         <div className="practice">
-          <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
           <AIReadingFullTestView exercise={currentAIExercise} onBack={handleBack} />
           <style>{sharedExerciseStyles}</style>
         </div>
