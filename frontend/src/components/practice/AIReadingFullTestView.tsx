@@ -237,29 +237,37 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
           </div>
         )}
 
-        {/* Expandable review per section — passage + questions with feedback */}
-        <div className="rft-explanations">
+        {/* Review — tabbed sections, not scroll-forever */}
+        <div className="rft-review">
           <h3>Review Answers</h3>
-          {sections.map((s: any, si: number) => (
-            <div key={si}>
-              <button className="rft-expand-btn" onClick={() => setShowExplanations(showExplanations === si ? null : si)}>
-                Section {s.section_number}: {s.meta?.topic || ''} {showExplanations === si ? '▲' : '▼'}
+          <div className="rft-review-tabs">
+            {sections.map((s: any, si: number) => (
+              <button
+                key={si}
+                className={`rft-review-tab ${showExplanations === si ? 'active' : ''}`}
+                onClick={() => setShowExplanations(showExplanations === si ? null : si)}
+              >
+                S{s.section_number}
               </button>
-              {showExplanations === si && (
-                <div className="rft-review-section">
-                  {/* Show passage */}
-                  <div className="rft-review-passage">
-                    <h4>{typeof s.passage === 'object' ? s.passage?.title : s.meta?.topic}</h4>
-                    <p className="reading-passage">{typeof s.passage === 'string' ? s.passage : s.passage?.content}</p>
-                  </div>
-                  {/* Show questions with answers */}
-                  <div className="rft-answers-list">
-                    {renderSectionReview(s, si)}
-                  </div>
+            ))}
+          </div>
+          {showExplanations !== null && sections[showExplanations] && (() => {
+            const s = sections[showExplanations];
+            const passageText = typeof s.passage === 'string' ? s.passage : s.passage?.content || '';
+            return (
+              <div className="rft-review-content">
+                {/* Collapsible passage */}
+                <details className="rft-review-passage-details">
+                  <summary>View Passage: {s.meta?.topic}</summary>
+                  <div className="rft-review-passage-text reading-passage">{passageText}</div>
+                </details>
+                {/* Questions with answers */}
+                <div className="rft-answers-list">
+                  {renderSectionReview(s, showExplanations)}
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })()}
         </div>
 
         <button className="btn btn-primary btn-lg" onClick={onBack} style={{ width: '100%', marginTop: 16 }}>Finish</button>
@@ -366,13 +374,29 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
         </div>
       </div>
 
-      {/* Passage */}
-      <div className="rft-passage">
-        <h3>{typeof section.passage === 'object' ? section.passage?.title : section.meta?.topic}</h3>
-        <div className="rft-passage-text reading-passage">
-          {typeof section.passage === 'string' ? section.passage : section.passage?.content}
-        </div>
-      </div>
+      {/* Passage — label paragraphs A, B, C... if matching_information exists */}
+      {(() => {
+        const passageText = typeof section.passage === 'string' ? section.passage : section.passage?.content || '';
+        const hasMatchingInfo = groups.some((g: any) => g.type === 'matching_information');
+        const paragraphs = passageText.split(/\n\n+/).filter((p: string) => p.trim());
+        return (
+          <div className="rft-passage">
+            <h3>{typeof section.passage === 'object' ? section.passage?.title : section.meta?.topic}</h3>
+            {hasMatchingInfo ? (
+              <div className="rft-passage-text reading-passage">
+                {paragraphs.map((para: string, pi: number) => (
+                  <div key={pi} className="rft-labeled-para">
+                    <span className="rft-para-label">{String.fromCharCode(65 + pi)}</span>
+                    <p>{para}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rft-passage-text reading-passage">{passageText}</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Questions — exam mode (no instant feedback) */}
       <div className="rft-questions">
@@ -629,12 +653,22 @@ const styles = `
   .rft-qt-score { font-weight: 600; }
   .rft-qt-pct { font-weight: 700; width: 36px; text-align: right; }
 
-  .rft-explanations { margin-bottom: var(--spacing-md); }
-  .rft-explanations h3 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
-  .rft-review-section { margin-bottom: var(--spacing-md); }
-  .rft-review-passage { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
-  .rft-review-passage h4 { font-size: 0.95rem; margin-bottom: var(--spacing-sm); }
-  .rft-review-passage p { font-size: 0.88rem; line-height: 1.8; white-space: pre-line; }
+  /* Labeled paragraphs for matching information */
+  .rft-labeled-para { display: flex; gap: 8px; margin-bottom: var(--spacing-md); }
+  .rft-para-label { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; margin-top: 2px; }
+  .rft-labeled-para p { flex: 1; margin: 0; }
+
+  /* Review section — tabbed, not scroll-forever */
+  .rft-review { margin-bottom: var(--spacing-md); }
+  .rft-review h3 { font-size: 0.9rem; margin-bottom: var(--spacing-sm); }
+  .rft-review-tabs { display: flex; gap: 6px; margin-bottom: var(--spacing-md); }
+  .rft-review-tab { padding: 8px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); flex: 1; text-align: center; }
+  .rft-review-tab.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .rft-review-content { }
+  .rft-review-passage-details { margin-bottom: var(--spacing-md); }
+  .rft-review-passage-details summary { font-size: 0.85rem; font-weight: 600; color: var(--color-primary); cursor: pointer; padding: var(--spacing-sm); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+  .rft-review-passage-details[open] summary { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+  .rft-review-passage-text { font-size: 0.85rem; line-height: 1.8; white-space: pre-line; padding: var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); max-height: 300px; overflow-y: auto; }
   .rft-expand-btn { width: 100%; text-align: left; padding: 10px var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px; }
   .rft-answers-list { padding: var(--spacing-sm); }
   .rft-review-group { margin-bottom: var(--spacing-lg); }
