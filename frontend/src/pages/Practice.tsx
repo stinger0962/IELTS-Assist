@@ -671,14 +671,25 @@ export default function Practice() {
           {activeSkill === 'reading' && isVip && recentExams.length > 0 && (
             <div className="recent-exams">
               <h4 className="recent-exams-title">Recent Exams</h4>
-              {recentExams.map((exam: any, i: number) => (
-                <button key={i} className="exercise-item exercise-item-past" onClick={() => setReviewExam(exam)}>
-                  <span className="exercise-title">{exam.topic}</span>
-                  <span className="exercise-meta">
-                    Band {exam.score} · {exam.correct_count}/{exam.total_questions} · {new Date(exam.submitted_at).toLocaleDateString()}
-                  </span>
-                </button>
-              ))}
+              {recentExams.map((exam: any, i: number) => {
+                const topics = (exam.topic || '').replace('Full Reading Test — ', '').split(', ');
+                const pct = exam.total_questions > 0 ? Math.round(exam.correct_count / exam.total_questions * 100) : 0;
+                const date = new Date(exam.submitted_at);
+                const dateStr = `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                return (
+                  <button key={i} className="recent-exam-card" onClick={() => setReviewExam(exam)}>
+                    <div className="rec-band" style={{ color: exam.score >= 7 ? '#10B981' : exam.score >= 6 ? '#F59E0B' : '#EF4444' }}>
+                      {exam.score}
+                    </div>
+                    <div className="rec-details">
+                      <span className="rec-date">{dateStr}</span>
+                      <span className="rec-score">{exam.correct_count}/{exam.total_questions} correct · {pct}%</span>
+                      <span className="rec-topics">{topics.slice(0, 2).join(', ')}{topics.length > 2 ? '...' : ''}</span>
+                    </div>
+                    <span className="rec-arrow">→</span>
+                  </button>
+                );
+              })}
             </div>
           )}
           {activeSkill !== 'reading' && activeSkill !== 'speaking' && (
@@ -767,8 +778,8 @@ export default function Practice() {
         </>
       )}
 
-      {/* Skill snapshot + recent scores */}
-      {renderSnapshot()}
+      {/* Skill snapshot + recent scores (practice mode only) */}
+      {practiceMode === 'practice' && renderSnapshot()}
 
       <style>{listStyles}</style>
     </div>
@@ -836,7 +847,14 @@ const listStyles = `
   .exercise-item-highlight { border-left-width: 4px; border-left-color: var(--color-primary); background: linear-gradient(135deg, var(--color-surface), color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))); }
   .recent-exams { margin-top: var(--spacing-lg); }
   .recent-exams-title { font-size: 0.85rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
-  .exercise-item-past { opacity: 0.85; border-left-color: var(--color-text-secondary) !important; }
+  .recent-exam-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; text-align: left; margin-bottom: 8px; transition: all 0.15s; }
+  .recent-exam-card:hover { border-color: var(--color-primary); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+  .rec-band { font-size: 1.5rem; font-weight: 700; min-width: 40px; text-align: center; }
+  .rec-details { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .rec-date { font-size: 0.75rem; font-weight: 600; color: var(--color-text-secondary); }
+  .rec-score { font-size: 0.8rem; font-weight: 600; color: var(--color-text-primary); }
+  .rec-topics { font-size: 0.72rem; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rec-arrow { color: var(--color-primary); font-weight: 600; font-size: 1.1rem; }
   .exercise-title { font-weight: 600; color: var(--color-text-primary); font-size: 0.9rem; }
   .exercise-meta { font-size: 0.72rem; color: var(--color-text-secondary); flex-shrink: 0; margin-left: 8px; }
   .empty-list { font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; padding: var(--spacing-lg) 0; }
