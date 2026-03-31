@@ -280,6 +280,11 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
   const section = sections[activeSection];
   const groups = section?.questions?.groups || [];
 
+  // Count paragraphs for matching_information dropdown options
+  const passageTextForParaCount = typeof section.passage === 'string' ? section.passage : section.passage?.content || '';
+  const paragraphCount = passageTextForParaCount.split(/\n\n+/).filter((p: string) => p.trim()).length;
+  const paragraphLetters = Array.from({ length: paragraphCount }, (_, i) => String.fromCharCode(65 + i));
+
   function renderSectionReview(sec: any, secIdx: number) {
     const grps = sec?.questions?.groups || [];
     return grps.map((group: any, gi: number) => {
@@ -360,7 +365,7 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
               <button
                 key={i}
                 className={`rft-tab ${activeSection === i ? 'active' : ''}`}
-                onClick={() => setActiveSection(i)}
+                onClick={() => { setActiveSection(i); window.scrollTo(0, 0); }}
               >
                 <span>S{s.section_number}</span>
                 <span className="rft-tab-count">{answered}/{s.question_count}</span>
@@ -385,10 +390,10 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
             {hasMatchingInfo ? (
               <div className="rft-passage-text reading-passage">
                 {paragraphs.map((para: string, pi: number) => (
-                  <div key={pi} className="rft-labeled-para">
+                  <p key={pi} className="rft-labeled-para">
                     <span className="rft-para-label">{String.fromCharCode(65 + pi)}</span>
-                    <p>{para}</p>
-                  </div>
+                    {para}
+                  </p>
                 ))}
               </div>
             ) : (
@@ -526,14 +531,16 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
                     return (
                       <div key={qi} className="rft-match-row">
                         <span><span className="rft-qnum">{item.question_number || qi + 1}.</span> {item.statement || item.question || ''}</span>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="A, B, C..."
+                        <select
                           value={userAns}
-                          onChange={e => setAnswer(activeSection, key, e.target.value.toUpperCase())}
-                          style={{ maxWidth: 60, textAlign: 'center', flexShrink: 0 }}
-                        />
+                          onChange={e => setAnswer(activeSection, key, e.target.value)}
+                          style={{ flexShrink: 0 }}
+                        >
+                          <option value="">Select</option>
+                          {paragraphLetters.map(letter => (
+                            <option key={letter} value={letter}>{letter}</option>
+                          ))}
+                        </select>
                       </div>
                     );
                   })}
@@ -547,10 +554,10 @@ export default function AIReadingFullTestView({ exercise, onBack }: Props) {
       {/* Navigation */}
       <div className="rft-nav">
         {activeSection > 0 && (
-          <button className="btn" onClick={() => setActiveSection(activeSection - 1)}>Previous Section</button>
+          <button className="btn" onClick={() => { setActiveSection(activeSection - 1); window.scrollTo(0, 0); }}>Previous Section</button>
         )}
         {activeSection < sections.length - 1 ? (
-          <button className="btn btn-primary" onClick={() => setActiveSection(activeSection + 1)}>Next Section</button>
+          <button className="btn btn-primary" onClick={() => { setActiveSection(activeSection + 1); window.scrollTo(0, 0); }}>Next Section</button>
         ) : (
           <button className="btn btn-primary" onClick={() => setStage('confirm')}>Submit Exam</button>
         )}
@@ -654,9 +661,8 @@ const styles = `
   .rft-qt-pct { font-weight: 700; width: 36px; text-align: right; }
 
   /* Labeled paragraphs for matching information */
-  .rft-labeled-para { display: flex; gap: 8px; margin-bottom: var(--spacing-md); }
-  .rft-para-label { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; margin-top: 2px; }
-  .rft-labeled-para p { flex: 1; margin: 0; }
+  .rft-labeled-para { margin-bottom: var(--spacing-md); }
+  .rft-para-label { float: left; width: 22px; height: 22px; border-radius: 50%; background: var(--color-primary); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; margin-right: 6px; margin-top: 2px; line-height: 22px; }
 
   /* Review section — tabbed, not scroll-forever */
   .rft-review { margin-bottom: var(--spacing-md); }
