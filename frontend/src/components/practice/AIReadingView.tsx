@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Check, X, Sparkles } from 'lucide-react';
 import { practiceAPI, progressAPI, mistakesAPI } from '../../api';
 import { completionMatch } from '../../utils/completionMatch';
@@ -23,6 +23,7 @@ function AIReadingExerciseView({
   const [explanationsLoading, setExplanationsLoading] = useState(false);
 
   const vocab = useVocabSelection({ enabled: true, skill: 'reading' });
+  const [viewTab, setViewTab] = useState<'passage' | 'questions'>('passage');
 
   // Detect format: new (groups) vs legacy (true_false_not_given + second_type)
   const isNewFormat = !!(exercise.questions.groups && exercise.questions.groups.length > 0);
@@ -538,19 +539,27 @@ function AIReadingExerciseView({
 
       {vocab.saved && <div className="vocab-toast">Added to vocabulary!</div>}
 
-      {/* Passage */}
-      <div className="exercise-passage">
-        <div className="passage-meta">
-          <h3>{exercise.meta.topic}</h3>
-          <span className="passage-badge">
-            <Sparkles size={12} /> AI · {exercise.meta.word_count} words · Band {exercise.meta.target_band}
-          </span>
-        </div>
-        {paragraphs.map((para, i) => <p key={i} className="passage-para">{para}</p>)}
+      {/* Passage / Questions tab toggle */}
+      <div className="reading-tab-toggle">
+        <button className={viewTab === 'passage' ? 'active' : ''} onClick={() => { setViewTab('passage'); window.scrollTo(0, 0); }}>Passage</button>
+        <button className={viewTab === 'questions' ? 'active' : ''} onClick={() => { setViewTab('questions'); window.scrollTo(0, 0); }}>Questions</button>
       </div>
 
+      {/* Passage */}
+      {viewTab === 'passage' && (
+        <div className="exercise-passage">
+          <div className="passage-meta">
+            <h3>{exercise.meta.topic}</h3>
+            <span className="passage-badge">
+              <Sparkles size={12} /> AI · {exercise.meta.word_count} words · Band {exercise.meta.target_band}
+            </span>
+          </div>
+          {paragraphs.map((para, i) => <p key={i} className="passage-para">{para}</p>)}
+        </div>
+      )}
+
       {/* Questions panel */}
-      <div className="exercise-questions">
+      {viewTab === 'questions' && <div className="exercise-questions">
 
         {isNewFormat ? (
           // New format: render each group
@@ -700,11 +709,13 @@ function AIReadingExerciseView({
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       <style>{`
-        .ai-exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); align-items: start; }
-        @media (max-width: 1024px) { .ai-exercise-view { grid-template-columns: 1fr; } }
+        .ai-exercise-view { display: flex; flex-direction: column; gap: var(--spacing-md); }
+        .reading-tab-toggle { display: flex; background: var(--color-background); border-radius: 8px; padding: 3px; margin-bottom: var(--spacing-sm); position: sticky; top: 0; z-index: 5; }
+        .reading-tab-toggle button { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); transition: all 0.2s; }
+        .reading-tab-toggle button.active { background: var(--color-primary); color: white; box-shadow: 0 1px 3px rgba(79,70,229,0.3); }
         .passage-meta { margin-bottom: var(--spacing-md); }
         .passage-meta h3 { margin-bottom: var(--spacing-xs); }
         .passage-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(79,70,229,0.1); color: var(--color-primary); padding: 2px 8px; border-radius: var(--radius-full); font-size: 0.75rem; }
