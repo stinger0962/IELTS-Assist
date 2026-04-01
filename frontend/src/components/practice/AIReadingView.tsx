@@ -713,7 +713,7 @@ function AIReadingExerciseView({
 
       <style>{`
         .ai-exercise-view { display: flex; flex-direction: column; gap: var(--spacing-md); }
-        .reading-tab-toggle { display: flex; background: var(--color-background); border-radius: 8px; padding: 3px; margin-bottom: var(--spacing-sm); position: sticky; top: 0; z-index: 5; }
+        .reading-tab-toggle { display: flex; background: var(--color-background); border-radius: 8px; padding: 3px; margin-bottom: var(--spacing-sm); position: sticky; top: 36px; z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .reading-tab-toggle button { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: var(--color-text-secondary); transition: all 0.2s; }
         .reading-tab-toggle button.active { background: var(--color-primary); color: white; box-shadow: 0 1px 3px rgba(79,70,229,0.3); }
         .passage-meta { margin-bottom: var(--spacing-md); }

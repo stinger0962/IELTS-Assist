@@ -434,7 +434,9 @@ export default function Practice() {
     }
     return (
       <div className="practice">
-        <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
+        <div className="reading-sticky-header">
+          <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
+        </div>
         <AIReadingExerciseView exercise={currentAIExercise} onComplete={handleComplete} />
         <style>{sharedExerciseStyles}</style>
       </div>
@@ -806,6 +808,7 @@ export default function Practice() {
 
 
 const sharedExerciseStyles = `
+  .reading-sticky-header { position: sticky; top: 0; z-index: 6; background: var(--color-background); padding-bottom: 4px; }
   .back-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--color-text-secondary); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); margin-bottom: var(--spacing-md); }
   .back-btn:hover { color: var(--color-primary); background: rgba(79,70,229,0.06); }
   .exercise-view { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
