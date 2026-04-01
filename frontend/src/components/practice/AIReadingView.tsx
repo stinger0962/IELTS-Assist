@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, Sparkles } from 'lucide-react';
-import { practiceAPI, progressAPI, mistakesAPI, topicsAPI } from '../../api';
-import { useAppStore } from '../../store';
+import { practiceAPI, progressAPI, mistakesAPI } from '../../api';
 import { completionMatch } from '../../utils/completionMatch';
-import { parseDictionaryEntry } from '../../utils/dictionary';
+import { useVocabSelection } from '../../hooks/useVocabSelection';
 import type {
   AIReadingPractice, TFNGAnswerItem, MCQQuestionItem, MCQAnswerItem,
   MatchingHeadingData, MatchingAnswerItem, ReadingQuestionGroup,
@@ -16,24 +15,14 @@ function AIReadingExerciseView({
   exercise: AIReadingPractice;
   onComplete: (correct: number, total: number) => void;
 }) {
-  const { language } = useAppStore();
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
   const [startTime] = useState(Date.now());
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explanationsLoading, setExplanationsLoading] = useState(false);
-  const [vocabWord, setVocabWord] = useState('');
-  const [vocabPopupPos, setVocabPopupPos] = useState<{ x: number; y: number } | null>(null);
-  const [showVocabModal, setShowVocabModal] = useState(false);
-  const [vocabDef, setVocabDef] = useState('');
-  const [vocabDefZh, setVocabDefZh] = useState('');
-  const [vocabPhonetic, setVocabPhonetic] = useState('');
-  const [vocabAudioUrl, setVocabAudioUrl] = useState('');
-  const [vocabDefLoading, setVocabDefLoading] = useState(false);
-  const [vocabSaving, setVocabSaving] = useState(false);
-  const [vocabDuplicate, setVocabDuplicate] = useState(false);
-  const [vocabSaved, setVocabSaved] = useState(false);
+
+  const vocab = useVocabSelection({ enabled: true, skill: 'reading' });
 
   // Detect format: new (groups) vs legacy (true_false_not_given + second_type)
   const isNewFormat = !!(exercise.questions.groups && exercise.questions.groups.length > 0);
@@ -249,89 +238,6 @@ function AIReadingExerciseView({
     (exercise.answer_key?.second_type_answers as MatchingAnswerItem[] | undefined)?.find(a => a.paragraph_number === paraNum)?.answer;
 
   const paragraphs = exercise.passage.split(/\n\n+/).filter(Boolean);
-
-  const openVocabModal = async (word: string) => {
-    setVocabWord(word);
-    setVocabDef('');
-    setVocabDefZh('');
-    setVocabPhonetic('');
-    setVocabAudioUrl('');
-    setVocabDefLoading(true);
-    setShowVocabModal(true);
-    setVocabPopupPos(null);
-    try {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = parseDictionaryEntry(data);
-        const phonetic = data[0]?.phonetic || data[0]?.phonetics?.find((p: any) => p.text)?.text || '';
-        const audioUrl = data[0]?.phonetics?.find((p: any) => p.audio?.endsWith('.mp3'))?.audio || '';
-        setVocabPhonetic(phonetic);
-        setVocabAudioUrl(audioUrl);
-        if (formatted) {
-          setVocabDef(formatted);
-          if (language === 'zh') {
-            const quotes: string[] = [];
-            const tokenized = formatted.replace(/"([^"]*)"/g, (_, q) => {
-              quotes.push(`"${q}"`);
-              return `__Q${quotes.length - 1}__`;
-            });
-            topicsAPI.translateDefinition(word, tokenized)
-              .then(r => {
-                if (r.data.content_zh) {
-                  const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
-                  setVocabDefZh(restored);
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      }
-    } catch { /* ignore — user can type manually */ } finally {
-      setVocabDefLoading(false);
-    }
-  };
-
-  const handleTextSelect = () => {
-    const sel = window.getSelection();
-    const text = sel?.toString().trim() ?? '';
-    if (text.length >= 2 && text.length <= 60 && !text.includes('\n')) {
-      try {
-        const rect = sel!.getRangeAt(0).getBoundingClientRect();
-        setVocabWord(text);
-        setVocabPopupPos({ x: rect.left + rect.width / 2, y: rect.bottom });
-      } catch { /* ignore */ }
-    } else {
-      setVocabPopupPos(null);
-    }
-  };
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const onSelChange = () => {
-      clearTimeout(timer);
-      timer = setTimeout(handleTextSelect, 200);
-    };
-    document.addEventListener('selectionchange', onSelChange);
-    return () => { clearTimeout(timer); document.removeEventListener('selectionchange', onSelChange); };
-  }, []);
-
-  const handleSaveVocab = async () => {
-    if (!vocabDef.trim()) return;
-    setVocabSaving(true);
-    setVocabDuplicate(false);
-    try {
-      await topicsAPI.create({ title: vocabWord, content: vocabDef, content_zh: vocabDefZh || undefined, skill: 'reading', category: 'vocabulary', phonetic: vocabPhonetic || undefined, audio_url: vocabAudioUrl || undefined });
-      setVocabSaved(true);
-      setShowVocabModal(false);
-      setVocabDef('');
-      setTimeout(() => setVocabSaved(false), 3000);
-    } catch (error: any) {
-      if (error?.response?.status === 409) setVocabDuplicate(true);
-    } finally {
-      setVocabSaving(false);
-    }
-  };
 
   // ── Render a question group (new format) ──
   const renderGroup = (group: ReadingQuestionGroup, groupIdx: number) => {
@@ -603,49 +509,34 @@ function AIReadingExerciseView({
   return (
     <div className="ai-exercise-view">
       {/* Floating "Add to Vocab" popup on text selection */}
-      {vocabPopupPos && !showVocabModal && (
-        <div
-          className="vocab-popup"
-          style={{ left: vocabPopupPos.x, top: vocabPopupPos.y + 10 }}
-          onMouseDown={e => { e.preventDefault(); openVocabModal(vocabWord); }}
-          onTouchEnd={e => { e.preventDefault(); openVocabModal(vocabWord); }}
-        >
+      {vocab.popupPos && !vocab.showModal && (
+        <div className="vocab-popup" style={{ left: vocab.popupPos.x, top: vocab.popupPos.y + 10 }}
+          onMouseDown={e => { e.preventDefault(); vocab.openModal(vocab.word); }}
+          onTouchEnd={e => { e.preventDefault(); vocab.openModal(vocab.word); }}>
           + Add to Vocab
         </div>
       )}
 
-      {/* Vocab modal */}
-      {showVocabModal && (
-        <div className="vocab-modal-overlay" onClick={() => { setShowVocabModal(false); setVocabDef(''); }}>
+      {vocab.showModal && (
+        <div className="vocab-modal-overlay" onClick={vocab.closeModal}>
           <div className="vocab-modal" onClick={e => e.stopPropagation()}>
             <h4>Add to Vocabulary</h4>
             <label className="vocab-label">Word</label>
-            <input className="vocab-input" value={vocabWord} onChange={e => setVocabWord(e.target.value)} />
-            <label className="vocab-label">
-              Definition
-              {vocabDefLoading && <span className="vocab-loading-hint"> · Looking up...</span>}
-            </label>
-            <textarea
-              className="vocab-textarea"
-              placeholder={vocabDefLoading ? 'Looking up definition...' : 'Edit or enter a definition...'}
-              value={vocabDef}
-              onChange={e => setVocabDef(e.target.value)}
-              rows={3}
-              autoFocus={!vocabDefLoading}
-            />
-            {vocabDuplicate && <p className="vocab-duplicate-msg">This word is already in your deck</p>}
+            <input className="vocab-input" value={vocab.word} onChange={e => vocab.setWord(e.target.value)} />
+            <label className="vocab-label">Definition{vocab.defLoading && <span className="vocab-loading-hint"> · Looking up...</span>}</label>
+            <textarea className="vocab-textarea" placeholder={vocab.defLoading ? 'Looking up...' : 'Enter definition...'} value={vocab.def} onChange={e => vocab.setDef(e.target.value)} rows={3} />
+            {vocab.duplicate && <p className="vocab-duplicate-msg">Already in your deck</p>}
             <div className="vocab-modal-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowVocabModal(false); setVocabDef(''); setVocabDuplicate(false); }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveVocab} disabled={vocabSaving || vocabDefLoading || !vocabDef.trim()}>
-                {vocabSaving ? 'Saving...' : 'Save'}
+              <button className="btn btn-secondary" onClick={vocab.closeModal}>Cancel</button>
+              <button className="btn btn-primary" onClick={vocab.save} disabled={vocab.saving || vocab.defLoading || !vocab.def.trim()}>
+                {vocab.saving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Vocab saved toast */}
-      {vocabSaved && <div className="vocab-toast">Added to vocabulary!</div>}
+      {vocab.saved && <div className="vocab-toast">Added to vocabulary!</div>}
 
       {/* Passage */}
       <div className="exercise-passage">
