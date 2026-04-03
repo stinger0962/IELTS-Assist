@@ -233,11 +233,20 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
     if (questions.completion?.length > 0) {
       groups.push({ type: 'completion', items: questions.completion.map((item: any) => typeof item === 'string' ? { text: '', answer: item } : item) });
     }
+    if (questions.matching?.length > 0) {
+      // Each matching block has stems, options, answers — extract into a group
+      for (const block of questions.matching) {
+        groups.push({
+          type: 'matching',
+          items: block.stems || [],
+          options: block.options || [],
+          answers: block.answers || {},
+          instruction: block.instruction || 'Match the items below.',
+        });
+      }
+    }
     if (questions.multiple_choice?.length > 0) {
       groups.push({ type: 'multiple_choice', items: questions.multiple_choice });
-    }
-    if (questions.matching?.length > 0) {
-      groups.push({ type: 'matching', items: questions.matching });
     }
     return groups;
   }
@@ -516,16 +525,24 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
           {renderQuestions(sec, currentSection, false, false)}
         </div>
 
-        {audioEnded && (
-          <div className="lt-advance-row">
+        <div className="lt-advance-row">
+          {audioEnded ? (
             <button className="btn btn-primary" onClick={() => {
               if (postTimerRef.current) clearInterval(postTimerRef.current);
               advanceSection();
             }}>
-              {currentSection < sections.length - 1 ? 'Next Section' : 'Review Answers'}
+              {currentSection < sections.length - 1 ? 'Next Section →' : 'Review Answers →'}
             </button>
-          </div>
-        )}
+          ) : (
+            <button className="btn btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => {
+              if (audioRef.current) { audioRef.current.pause(); }
+              setAudioEnded(true);
+              setIsPlaying(false);
+            }}>
+              Skip Audio →
+            </button>
+          )}
+        </div>
 
         <style>{styles}</style>
       </div>
