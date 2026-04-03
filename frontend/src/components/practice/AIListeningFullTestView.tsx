@@ -224,9 +224,27 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
     return sec?.audio_url || sec?.meta?.audio_url || '';
   };
 
+  // Convert flat listening format {completion:[], multiple_choice:[], matching:[]} to groups format
+  function toGroups(questions: any): any[] {
+    if (!questions) return [];
+    if (questions.groups) return questions.groups;
+    // Flat format — convert to groups
+    const groups: any[] = [];
+    if (questions.completion?.length > 0) {
+      groups.push({ type: 'completion', items: questions.completion.map((item: any) => typeof item === 'string' ? { text: '', answer: item } : item) });
+    }
+    if (questions.multiple_choice?.length > 0) {
+      groups.push({ type: 'multiple_choice', items: questions.multiple_choice });
+    }
+    if (questions.matching?.length > 0) {
+      groups.push({ type: 'matching', items: questions.matching });
+    }
+    return groups;
+  }
+
   // Render questions for a section
   function renderQuestions(sec: any, secIdx: number, disabled: boolean, showResults: boolean) {
-    const groups = sec?.questions?.groups || [];
+    const groups = toGroups(sec?.questions);
     let globalQNum = 0; // track question numbers across groups
 
     return groups.map((group: any, gi: number) => {

@@ -63,7 +63,20 @@ def submit_listening_exam(
         user_section = next((s for s in body.sections if s.get("section_number") == sec_num), None)
         user_answers = user_section.get("answers", {}) if user_section else {}
 
-        groups = exam_section.get("questions", {}).get("groups", [])
+        questions = exam_section.get("questions", {})
+        # Convert flat listening format to groups if needed
+        if isinstance(questions, dict) and "groups" in questions:
+            groups = questions["groups"]
+        elif isinstance(questions, dict):
+            groups = []
+            if questions.get("completion"):
+                groups.append({"type": "completion", "items": questions["completion"]})
+            if questions.get("multiple_choice"):
+                groups.append({"type": "multiple_choice", "items": questions["multiple_choice"]})
+            if questions.get("matching"):
+                groups.append({"type": "matching", "items": questions["matching"]})
+        else:
+            groups = []
         sec_correct = 0
         sec_total = 0
 
