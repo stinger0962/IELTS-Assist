@@ -38,6 +38,7 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
   const [result, setResult] = useState<ReadingExamResult | null>(initialResult || null);
   const [error, setError] = useState('');
   const [reviewSection, setReviewSection] = useState<number | null>(null);
+  const [reviewSectionIdx, setReviewSectionIdx] = useState(0);
   const [reviewTab, setReviewTab] = useState<'transcript' | 'questions'>('transcript');
 
   // Timers
@@ -552,28 +553,36 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
   // ── Review (pre-submit) ──
   if (stage === 'review') {
     const answered = countAnswered();
+    const reviewSec = sections[reviewSectionIdx] || sections[0];
+    const secAnswered = Object.values(answersRef.current[reviewSectionIdx] || {}).filter(v => v.trim() !== '').length;
+    const secTotal = reviewSec?.question_count || 0;
     return (
       <div className="rft-container">
-        <h2 style={{ textAlign: 'center', marginBottom: 16 }}>Review Your Answers</h2>
-        <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', marginBottom: 16 }}>
+        <h2 style={{ textAlign: 'center', marginBottom: 8 }}>Review Your Answers</h2>
+        <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', marginBottom: 12, fontSize: '0.85rem' }}>
           {answered} / {totalQ} questions answered
         </p>
-        {sections.map((sec: any, si: number) => (
-          <div key={si} className="lt-review-section">
-            <h3 className="lt-review-section-title">Section {sec.section_number}: {sec.meta?.topic || ''}</h3>
-            <div className="listening-questions">
-              {renderQuestions(sec, si, false, false)}
-            </div>
-          </div>
-        ))}
-        <div className="rft-nav">
-          <button className="btn" onClick={() => {
-            setCurrentSection(0);
-            setPrepCountdown(30);
-            setStage('section_prep');
-          }}>Restart Audio</button>
-          <button className="btn btn-primary" onClick={() => setStage('confirm')}>Submit Exam</button>
+        {/* Section tabs */}
+        <div className="rft-review-section-tabs">
+          {sections.map((s: any, i: number) => {
+            const sAns = Object.values(answersRef.current[i] || {}).filter(v => (v as string).trim() !== '').length;
+            return (
+              <button key={i} className={reviewSectionIdx === i ? 'active' : ''} onClick={() => { setReviewSectionIdx(i); window.scrollTo(0, 0); }}>
+                S{s.section_number} · {sAns}/{s.question_count || 0}
+              </button>
+            );
+          })}
         </div>
+        {/* Questions for active section */}
+        <div className="listening-questions" style={{ padding: '16px 0' }}>
+          <h4 style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+            Section {reviewSec.section_number}: {reviewSec.meta?.topic || ''}
+          </h4>
+          {renderQuestions(reviewSec, reviewSectionIdx, false, false)}
+        </div>
+        <button className="btn btn-primary btn-lg" onClick={() => setStage('confirm')} style={{ width: '100%' }}>
+          Submit Exam ({answered}/{totalQ} answered)
+        </button>
         <style>{styles}</style>
       </div>
     );
