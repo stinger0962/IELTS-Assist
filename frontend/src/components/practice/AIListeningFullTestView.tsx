@@ -554,8 +554,6 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
   if (stage === 'review') {
     const answered = countAnswered();
     const reviewSec = sections[reviewSectionIdx] || sections[0];
-    const secAnswered = Object.values(answersRef.current[reviewSectionIdx] || {}).filter(v => v.trim() !== '').length;
-    const secTotal = reviewSec?.question_count || 0;
     return (
       <div className="rft-container">
         <h2 style={{ textAlign: 'center', marginBottom: 8 }}>Review Your Answers</h2>
