@@ -81,6 +81,26 @@ def daily_generate() -> None:
         except Exception as e:
             logger.error(f"Daily reading exam generation error: {e}")
 
+        # Generate 1 full listening exam
+        try:
+            from app.services.ai.listening_exam import generate_listening_exam
+            logger.info("Daily generation: generating 1 full listening exam")
+            exam = generate_listening_exam()
+            if exam:
+                db.add(GeneratedPractice(
+                    skill="listening",
+                    topic=exam["meta"]["topic"],
+                    content=json.dumps(exam),
+                    is_validated=True,
+                    generated_date=datetime.utcnow(),
+                ))
+                db.commit()
+                logger.info("Daily listening exam generation complete")
+            else:
+                logger.warning("Daily listening exam generation failed")
+        except Exception as e:
+            logger.error(f"Daily listening exam error: {e}")
+
         # Listening exercises
         logger.info("Daily generation: adding 2 listening exercises")
         recent = (

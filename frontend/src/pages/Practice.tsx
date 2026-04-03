@@ -16,6 +16,7 @@ import AISpeakingPart1View from '../components/practice/AISpeakingPart1View';
 import AISpeakingPart3View from '../components/practice/AISpeakingPart3View';
 import AISpeakingFullTestView from '../components/practice/AISpeakingFullTestView';
 import AIReadingFullTestView from '../components/practice/AIReadingFullTestView';
+import AIListeningFullTestView from '../components/practice/AIListeningFullTestView';
 import VipGate from '../components/VipGate';
 import { useAppStore } from '../store';
 
@@ -137,6 +138,9 @@ export default function Practice() {
     loadInsights();
   }, [activeSkill]);
 
+  // Reload recent exams when active skill changes
+  useEffect(() => { loadRecentExams(); }, [activeSkill]);
+
   const loadAIReadingExercises = async () => {
     setReadingLoading(true);
     try {
@@ -209,7 +213,7 @@ export default function Practice() {
 
   const loadRecentExams = async () => {
     try {
-      const res = await practiceAPI.getRecentExams('reading');
+      const res = await practiceAPI.getRecentExams(activeSkill);
       setRecentExams(Array.isArray(res.data) ? res.data : []);
     } catch { setRecentExams([]); }
   };
@@ -408,9 +412,12 @@ export default function Practice() {
 
   // Review mode for past exams
   if (reviewExam) {
+    const ReviewComponent = reviewExam.exercise?.meta?.module === 'listening_full_test'
+      ? AIListeningFullTestView
+      : AIReadingFullTestView;
     return (
       <div className="practice">
-        <AIReadingFullTestView
+        <ReviewComponent
           exercise={reviewExam.exercise}
           onBack={() => setReviewExam(null)}
           initialResult={reviewExam.result}
@@ -445,6 +452,14 @@ export default function Practice() {
 
   // AI Listening exercise view
   if (currentAIListening) {
+    if (currentAIListening?.meta?.module === 'listening_full_test') {
+      return (
+        <div className="practice">
+          <AIListeningFullTestView exercise={currentAIListening} onBack={handleBack} />
+          <style>{sharedExerciseStyles}</style>
+        </div>
+      );
+    }
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
@@ -684,13 +699,39 @@ export default function Practice() {
             ) : (
               <p className="empty-list">No full tests available yet. Check back tomorrow.</p>
             )
+          ) : activeSkill === 'listening' ? (
+            aiListeningExercises.filter(ex => ex.meta?.module === 'listening_full_test').length > 0 ? (
+              aiListeningExercises.filter(ex => ex.meta?.module === 'listening_full_test').map((ex, i) => {
+                const topics = ((ex.meta as any).topic || '').replace('Full Listening Test — ', '').split(', ');
+                const totalQ = (ex.meta as any).total_questions || 40;
+                return (
+                  <div key={i} className="exam-card" onClick={() => handleSelectAIListening(ex)}>
+                    <div className="exam-card-header">
+                      <span className="exam-card-icon">🎧</span>
+                      <div>
+                        <h3 className="exam-card-title">Full Listening Test</h3>
+                        <span className="exam-card-meta">30 min · {totalQ} questions · 4 sections</span>
+                      </div>
+                    </div>
+                    <div className="exam-card-topics">
+                      {topics.map((t: string, ti: number) => (
+                        <span key={ti} className="exam-topic-pill">S{ti + 1}: {t.trim()}</span>
+                      ))}
+                    </div>
+                    <div className="exam-card-cta">Start Exam →</div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="empty-list">No full tests available yet. Check back tomorrow.</p>
+            )
           ) : null}
           {/* Recent completed exams */}
-          {activeSkill === 'reading' && isVip && recentExams.length > 0 && (
+          {(activeSkill === 'reading' || activeSkill === 'listening') && isVip && recentExams.length > 0 && (
             <div className="recent-exams">
               <h4 className="recent-exams-title">Recent Exams</h4>
               {recentExams.map((exam: any, i: number) => {
-                const topics = (exam.topic || '').replace('Full Reading Test — ', '').split(', ');
+                const topics = (exam.topic || '').replace('Full Reading Test — ', '').replace('Full Listening Test — ', '').split(', ');
                 const pct = exam.total_questions > 0 ? Math.round(exam.correct_count / exam.total_questions * 100) : 0;
                 const date = new Date(exam.submitted_at);
                 const dateStr = `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
@@ -710,7 +751,7 @@ export default function Practice() {
               })}
             </div>
           )}
-          {activeSkill !== 'reading' && activeSkill !== 'speaking' && (
+          {activeSkill !== 'reading' && activeSkill !== 'listening' && activeSkill !== 'speaking' && (
             <div className="exam-coming-soon">
               <Sparkles size={32} />
               <h3>Full {activeTab.label} Test</h3>
@@ -741,7 +782,7 @@ export default function Practice() {
           )}
 
           {activeSkill === 'listening' && renderExerciseList(
-            aiListeningExercises, listeningLoading, listeningPoolEmpty, listeningGeneratingMore,
+            aiListeningExercises.filter(ex => ex.meta?.module !== 'listening_full_test'), listeningLoading, listeningPoolEmpty, listeningGeneratingMore,
             handleGenerateMoreListening,
             (ex, i) => (
               <button key={i} className="exercise-item" style={{ borderLeftColor: '#10B981' }} onClick={() => handleSelectAIListening(ex)}>

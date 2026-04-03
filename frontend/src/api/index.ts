@@ -162,6 +162,12 @@ export const practiceAPI = {
       sections,
       time_taken_seconds: timeTaken,
     }),
+  submitListeningExam: (practiceId: number, sections: any[], timeTaken: number) =>
+    api.post('/generate/submit-ai-listening-exam', {
+      practice_id: practiceId,
+      sections,
+      time_taken_seconds: timeTaken,
+    }),
   getRecentExams: (skill: string = 'reading') =>
     api.get(`/generate/recent-exams?skill=${skill}`),
   getDailyWriting: () => api.get('/generate/daily-writing'),
