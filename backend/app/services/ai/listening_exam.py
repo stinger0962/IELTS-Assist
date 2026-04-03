@@ -88,13 +88,19 @@ def _generate_section(generator: ListeningGenerator, profile: dict, avoid_topics
         if not practice:
             continue
 
-        # Count questions
+        # Count questions — listening uses flat format: {completion: [], multiple_choice: [], matching: []}
         questions = practice.get("questions", {})
         if isinstance(questions, list):
             q_count = len(questions)
+        elif questions.get("groups"):
+            q_count = sum(len(g.get("items", [])) for g in questions["groups"])
         else:
-            groups = questions.get("groups", [])
-            q_count = sum(len(g.get("items", [])) for g in groups)
+            # Flat listening format
+            q_count = (
+                len(questions.get("completion", []))
+                + len(questions.get("multiple_choice", []))
+                + len(questions.get("matching", []))
+            )
 
         return {
             "section_number": profile["section_number"],
