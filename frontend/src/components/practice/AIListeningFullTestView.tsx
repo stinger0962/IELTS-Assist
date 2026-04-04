@@ -105,6 +105,7 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
     } else {
       setStage('review');
     }
+    window.scrollTo(0, 0);
   }, [currentSection, sections.length]);
 
   // Prep countdown
