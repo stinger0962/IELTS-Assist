@@ -21,7 +21,12 @@ if not any(isinstance(h, logging.StreamHandler) for h in _root.handlers):
 
 logger = logging.getLogger(__name__)
 
-from app.config import settings
+from app.config import assert_secret_key_is_safe, settings
+
+# Fail fast: a placeholder SECRET_KEY means every JWT is forgeable. Better to
+# refuse to boot (and fail the deploy's health check) than to serve insecurely.
+assert_secret_key_is_safe(settings.SECRET_KEY)
+
 from app.database import init_db
 from app.routers import auth, generate, goals, grammar, listening, listening_exam, mistakes, practice, progress, reading, reading_exam, speaking, topics, writing
 from app.routers.generate import daily_generate

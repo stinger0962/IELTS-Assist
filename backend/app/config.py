@@ -1,6 +1,23 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
+INSECURE_SECRET_KEY = "your-secret-key-change-in-production"
+
+
+def assert_secret_key_is_safe(key: str) -> None:
+    """Refuse to run with a guessable JWT signing key.
+
+    Every token is signed and verified with this value, so the placeholder
+    default would let anyone mint a token for any account.
+    """
+    if not key or key == INSECURE_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY is unset or still the placeholder. Set it via "
+            "/root/IELTS-Assist/backend/.env (written by the deploy workflow "
+            "from GitHub Secrets)."
+        )
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "IELTS Assist API"
     VERSION: str = "1.0.0"
@@ -10,7 +27,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/ielts_assist"
     
     # Auth
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = INSECURE_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     

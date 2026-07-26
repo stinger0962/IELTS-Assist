@@ -7,6 +7,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Must be set before app.config is imported: main.py refuses to boot on a
+# placeholder SECRET_KEY, and settings are built at import time.
+os.environ.setdefault("SECRET_KEY", "test-key-not-used-in-production")
+
 from app.main import app
 from app.database import get_db
 from app.models.models import Base, User
