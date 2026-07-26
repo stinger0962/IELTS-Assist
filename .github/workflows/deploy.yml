@@ -37,15 +37,48 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SECRET_KEY,DATABASE_URL,OPENAI_API_KEY,AZURE_SPEECH_KEY,AZURE_SPEECH_REGION
           script: |
             set -e
             cd /root/IELTS-Assist
             git fetch origin main
             git reset --hard origin/main
+
+            # --- Runtime secrets (source of truth: GitHub Secrets) ---
+            # Written before the restart so the app picks them up on boot.
+            # systemd Environment= vars still win for anything defined in both;
+            # SECRET_KEY is defined ONLY here.
+            ENV_PATH=/root/IELTS-Assist/backend/.env
+            umask 077
+            printf '%s\n' \
+              "SECRET_KEY=${SECRET_KEY}" \
+              "DATABASE_URL=${DATABASE_URL}" \
+              "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+              "AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}" \
+              "AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION}" \
+              > "$ENV_PATH.tmp"
+
+            # Refuse to install a file with an empty SECRET_KEY — that would silently
+            # leave the app on the insecure default.
+            if ! grep -qE '^SECRET_KEY=.+$' "$ENV_PATH.tmp"; then
+              echo "FATAL: SECRET_KEY missing or empty — is the GitHub Secret set?" >&2
+              rm -f "$ENV_PATH.tmp"
+              exit 1
+            fi
+
+            chmod 600 "$ENV_PATH.tmp"
+            mv "$ENV_PATH.tmp" "$ENV_PATH"
+            echo "Wrote $ENV_PATH ($(wc -l < "$ENV_PATH") entries)"
 
             # Backend
             cd backend
@@ -64,5 +97,21 @@ jobs:
             cp -r dist/* /var/www/ielts-assist/
             mv /tmp/ielts-audio-backup /var/www/ielts-assist/audio 2>/dev/null || true
             chown -R www-data:www-data /var/www/ielts-assist
+
+            # --- Health check: fail the deploy if the backend did not come back ---
+            sleep 3
+            for i in 1 2 3 4 5; do
+              CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8000/ || echo 000)
+              if [ "$CODE" = "200" ]; then
+                echo "Backend healthy (HTTP $CODE)"
+                break
+              fi
+              if [ "$i" = "5" ]; then
+                echo "FATAL: backend unhealthy after restart (last code $CODE)" >&2
+                journalctl -u ielts-backend -n 30 --no-pager >&2
+                exit 1
+              fi
+              sleep 3
+            done
 
             echo "Deploy complete!"
