@@ -57,7 +57,25 @@ Writing grading = 2 calls: scoring (~4,900 in / ~800 out) + annotation (~1,100 i
 | `generator` | `gpt-5.6-luna` | `practice_generator.py`, `listening_generator.py`, `grammar_generator.py` |
 | `utility` | `gpt-5.4-nano` | `routers/generate.py` (mistake explain, vocab extract) |
 
-Confirmed available on the production account: the full `gpt-5`, `gpt-5.1`–`gpt-5.4` families including `gpt-5.4-mini` and `gpt-5.4-nano`. **`gpt-5.5`/`gpt-5.6` availability is unverified** — Task 0 confirms it and falls back to `gpt-5.4` (grader/generator) if absent.
+### Task 0 findings (verified 2026-07-26 against the production account)
+
+**Tier availability — all three 5.6 tiers are present, so no fallback is needed:**
+
+```
+gpt-5.6 -> ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra']
+gpt-5.5 -> ['gpt-5.5', 'gpt-5.5-pro', ...]
+gpt-5.4 -> ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.4-pro', ...]
+```
+
+**Parameter behaviour on `gpt-5.6-luna` — both breaking changes confirmed:**
+
+| Parameter | Result |
+|---|---|
+| `temperature=0` | ❌ `400 Unsupported value: 'temperature' does not support 0` |
+| `max_tokens=16` | ❌ `400 Unsupported parameter: 'max_tokens' is not supported` |
+| `max_completion_tokens=16` | ✅ accepted |
+
+Task 0 is therefore **complete**; the tier assignments below stand as written.
 
 ## 3. Two breaking API changes
 

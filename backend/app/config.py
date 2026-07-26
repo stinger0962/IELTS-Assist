@@ -36,7 +36,13 @@ class Settings(BaseSettings):
     
     # OpenAI
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
+    # Model tiers — override per environment without touching code.
+    # grader:    band scoring (quality-critical, per-user cost)
+    # generator: content authoring (quality matters, cost amortised across users)
+    # utility:   short mechanical calls (cheapest tier)
+    OPENAI_MODEL_GRADER: str = "gpt-5.6-luna"
+    OPENAI_MODEL_GENERATOR: str = "gpt-5.6-luna"
+    OPENAI_MODEL_UTILITY: str = "gpt-5.4-nano"
 
     # Youdao Smart Cloud (有道智云) — text translation
     YOUDAO_APP_KEY: str = ""
