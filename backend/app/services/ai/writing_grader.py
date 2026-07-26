@@ -289,18 +289,22 @@ ANNOTATION_SYSTEM_PROMPT = """You are an IELTS Writing feedback specialist. Your
 ## Scoring context (use this to focus annotations on band-limiting issues)
 Task Response: {tr_band} | Coherence: {cc_band} | Lexical: {lr_band} | Grammar: {gra_band}
 
-## Output Format (strict JSON array, no markdown)
+## Output Format (strict JSON object, no markdown)
 
-[
-  {{
-    "start_char": <int>,
-    "end_char": <int>,
-    "original_text": "<exact substring from essay>",
-    "category": "<grammar|vocabulary|spelling|punctuation|coherence|style|idea_development>",
-    "suggestion": "<specific fix or alternative>",
-    "severity": "<major|minor>"
-  }}
-]
+Return a single JSON object whose "annotations" key holds the array:
+
+{{
+  "annotations": [
+    {{
+      "start_char": <int>,
+      "end_char": <int>,
+      "original_text": "<exact substring from essay>",
+      "category": "<grammar|vocabulary|spelling|punctuation|coherence|style|idea_development>",
+      "suggestion": "<specific fix or alternative>",
+      "severity": "<major|minor>"
+    }}
+  ]
+}}
 
 IMPORTANT: start_char and end_char are 0-based character indices into the essay text.
 Verify that essay[start_char:end_char] == original_text for each annotation.
@@ -408,6 +412,26 @@ class WritingGrader:
 
         return scoring
 
+    @staticmethod
+    def _coerce_annotations(parsed) -> list:
+        """Normalise whatever shape the model returned into a list of annotations.
+
+        json_object mode forbids a bare top-level array, so the prompt asks for
+        {"annotations": [...]}. Models still occasionally emit a bare list, or a
+        single annotation object — both are accepted rather than silently dropped.
+        """
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict):
+            for key in ("annotations", "items", "data"):
+                value = parsed.get(key)
+                if isinstance(value, list):
+                    return value
+            # A lone annotation object, returned without the wrapper.
+            if "original_text" in parsed:
+                return [parsed]
+        return []
+
     def _annotate_errors(self, essay: str, prompt_data: dict, scoring: dict) -> list:
         """Layer C: 6–8 annotations (≥70% band-affecting), including idea_development."""
         er = scoring.get("examiner_result", {})
@@ -437,15 +461,7 @@ class WritingGrader:
             temperature=0.2,
             reasoning_effort="low",
         )
-        parsed = json.loads(raw)
-
-        # Handle both {"annotations": [...]} and bare [...]
-        if isinstance(parsed, dict):
-            annotations = parsed.get("annotations", [])
-        elif isinstance(parsed, list):
-            annotations = parsed
-        else:
-            annotations = []
+        annotations = self._coerce_annotations(json.loads(raw))
 
         # Validate and fix character offsets where possible
         validated = []
