@@ -11,10 +11,30 @@ def test_next_gen_uses_max_completion_tokens_and_drops_temperature():
         temperature=0,
         reasoning_effort="low",
     )
-    assert kwargs["max_completion_tokens"] == 2000
+    assert kwargs["max_completion_tokens"] == 2000 + 1024  # visible budget + reasoning headroom
     assert "max_tokens" not in kwargs
     assert "temperature" not in kwargs
     assert kwargs["reasoning_effort"] == "low"
+
+
+def test_reasoning_headroom_scales_with_effort():
+    def budget(effort):
+        return build_request(
+            model="gpt-5.6-luna", messages=[], max_output_tokens=500, reasoning_effort=effort
+        )["max_completion_tokens"]
+
+    # A small visible budget must not be swallowed by reasoning tokens.
+    assert budget("low") == 500 + 1024
+    assert budget("medium") == 500 + 3072
+    assert budget("high") == 500 + 8192
+    assert budget(None) == 500 + 1024  # default headroom when effort is unset
+
+
+def test_legacy_model_gets_no_reasoning_headroom():
+    kwargs = build_request(
+        model="gpt-4o", messages=[], max_output_tokens=500, reasoning_effort="high"
+    )
+    assert kwargs["max_tokens"] == 500
 
 
 def test_legacy_model_keeps_max_tokens_and_temperature():

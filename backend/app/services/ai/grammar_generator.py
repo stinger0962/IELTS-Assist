@@ -15,8 +15,7 @@ Produces exercises with 6 question types:
 
 import json
 from datetime import datetime
-from openai import OpenAI
-from app.config import settings
+from app.services.ai.llm import chat_json, resolve_model
 from app.services.ai.grammar_config import generate_metadata
 
 # ─── Step 1: Context + Exercises Generation ──────────────────────────────────
@@ -190,8 +189,7 @@ Return JSON only:
 
 class GrammarGenerator:
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
+        self.model = resolve_model("generator")
 
     def generate(self, avoid_topics: list[str] | None = None, prefer_band: str | None = None) -> dict | None:
         """Generate a single grammar exercise via 2-step pipeline.
@@ -287,16 +285,17 @@ class GrammarGenerator:
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            raw = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS grammar exercise writer. Generate valid JSON only."},
                     {"role": "user", "content": prompt},
                 ],
+                max_output_tokens=4000,
                 temperature=0.7,
-                max_tokens=4000,
+                reasoning_effort="medium",
             )
-            return self._parse_json(response.choices[0].message.content)
+            return self._parse_json(raw)
         except Exception as e:
             print(f"Grammar generation error: {e}")
             return None
@@ -304,16 +303,17 @@ class GrammarGenerator:
     def _validate(self, practice: dict) -> dict:
         """GPT call #2: Validate the complete grammar exercise."""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            raw = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS grammar validator. Return valid JSON only."},
                     {"role": "user", "content": f"{VALIDATION_PROMPT}\n\nExercise to evaluate:\n{json.dumps(practice)}"},
                 ],
+                max_output_tokens=500,
                 temperature=0.3,
-                max_tokens=500,
+                reasoning_effort="low",
             )
-            result = self._parse_json(response.choices[0].message.content)
+            result = self._parse_json(raw)
             return result if result else {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Grammar validation error: {e}")

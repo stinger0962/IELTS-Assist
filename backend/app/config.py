@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     OPENAI_MODEL_GRADER: str = "gpt-5.6-luna"
     OPENAI_MODEL_GENERATOR: str = "gpt-5.6-luna"
     OPENAI_MODEL_UTILITY: str = "gpt-5.4-nano"
+    # Speech-to-text for Speaking practice. Left on whisper-1 deliberately:
+    # gpt-4o-mini-transcribe is newer and ~half the price, but transcript accuracy
+    # on accented non-native speech feeds directly into Speaking band scores, so it
+    # needs a listening test before switching.
+    OPENAI_MODEL_TRANSCRIBE: str = "whisper-1"
 
     # Youdao Smart Cloud (有道智云) — text translation
     YOUDAO_APP_KEY: str = ""

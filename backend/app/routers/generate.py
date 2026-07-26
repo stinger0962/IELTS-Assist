@@ -13,7 +13,7 @@ from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from openai import OpenAI
+from app.services.ai.llm import chat_json
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -256,13 +256,14 @@ def explain_mistakes(
         'Return ONLY a JSON array: [{"key": "...", "explanation": "..."}, ...]'
     )
     try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        raw = chat_json(
+            tier="utility",
             messages=[{"role": "user", "content": prompt}],
+            max_output_tokens=1500,
             temperature=0.2,
-        )
-        raw = response.choices[0].message.content.strip()
+            reasoning_effort="low",
+            json_mode=False,  # prompt asks for a bare JSON array
+        ).strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -338,13 +339,14 @@ def extract_vocabulary(
         f"Topic: {body.topic}\n\nPassage:\n{body.passage[:3000]}"
     )
     try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        raw = chat_json(
+            tier="utility",
             messages=[{"role": "user", "content": prompt}],
+            max_output_tokens=1500,
             temperature=0.3,
-        )
-        raw = response.choices[0].message.content.strip()
+            reasoning_effort="low",
+            json_mode=False,  # prompt asks for a bare JSON array
+        ).strip()
         # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]

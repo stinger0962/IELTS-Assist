@@ -1,7 +1,6 @@
 import json
 import random
-from openai import OpenAI
-from app.config import settings
+from app.services.ai.llm import chat_json, diversity_seed, resolve_model
 from app.services.tts import synthesize_monologue, synthesize_dialogue, VOICE_PAIRS, VOICES
 from app.services.ai.listening_config import (
     generate_metadata, ACCENT_VOICE_PAIRS, ACCENT_SOLO_VOICES,
@@ -235,8 +234,7 @@ Return JSON only:
 
 class ListeningGenerator:
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
+        self.model = resolve_model("generator")
 
     def generate(self, topic_hint: str = "", format_hint: str = "") -> dict | None:
         """Generate a listening exercise via 3-step pipeline, then synthesize audio.
@@ -330,16 +328,17 @@ class ListeningGenerator:
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            content = chat_json(
+                tier="generator",
+                # diversity_seed replaces the variety temperature=0.85 used to give us
                 messages=[
-                    {"role": "system", "content": "You are an expert IELTS test writer. Generate valid JSON only."},
+                    {"role": "system", "content": "You are an expert IELTS test writer. Generate valid JSON only.\n\n" + diversity_seed()},
                     {"role": "user", "content": prompt},
                 ],
+                max_output_tokens=3500,
                 temperature=0.85,
-                max_tokens=3500,
+                reasoning_effort="low",
             )
-            content = response.choices[0].message.content
             return self._parse_json(content)
         except Exception as e:
             print(f"Transcript generation error: {e}")
@@ -363,16 +362,16 @@ class ListeningGenerator:
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            content = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS test question writer. Generate valid JSON only."},
                     {"role": "user", "content": prompt},
                 ],
+                max_output_tokens=2500,
                 temperature=0.5,
-                max_tokens=2500,
+                reasoning_effort="medium",
             )
-            content = response.choices[0].message.content
             questions_data = self._parse_json(content)
             if not questions_data:
                 return None
@@ -412,16 +411,16 @@ class ListeningGenerator:
 
     def _validate(self, practice: dict) -> dict:
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            content = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS test validator. Return valid JSON only."},
                     {"role": "user", "content": f"{LISTENING_VALIDATION_PROMPT}\n\nPractice to evaluate:\n{json.dumps(practice)}"},
                 ],
+                max_output_tokens=500,
                 temperature=0.3,
-                max_tokens=500,
+                reasoning_effort="low",
             )
-            content = response.choices[0].message.content
             return self._parse_json(content) or {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Listening validation error: {e}")

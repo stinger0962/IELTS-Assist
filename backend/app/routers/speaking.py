@@ -23,7 +23,7 @@ from app.services.ai.speaking_grader import SpeakingGrader
 from app.services.azure_speech import assess_pronunciation
 from app.services.auth import get_current_user
 
-from openai import OpenAI
+from app.services.ai.llm import get_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -287,11 +287,11 @@ async def submit_ai_speaking(
 
     # Step 1: Whisper transcription (send original webm — much smaller than WAV)
     logger.info(f"[Speaking] Step 1: Whisper transcription for user {current_user.id}")
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = get_client()
     try:
         with open(audio_path, "rb") as f:
             whisper_result = client.audio.transcriptions.create(
-                model="whisper-1",
+                model=settings.OPENAI_MODEL_TRANSCRIBE,
                 file=f,
                 response_format="text",
             )
@@ -482,13 +482,13 @@ async def submit_ai_speaking_full(
         logger.info(f"[Speaking Full] {label} saved: {len(audio_bytes)} bytes ({len(audio_bytes)/1024:.0f}KB)")
 
     # Step 1: Whisper transcription for all 3 parts (sequential to avoid rate limits)
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = get_client()
     transcripts = []
     for part in parts_data:
         try:
             logger.info(f"[Speaking Full] Whisper: {part['label']}")
             with open(part["path"], "rb") as f:
-                result = client.audio.transcriptions.create(model="whisper-1", file=f, response_format="text")
+                result = client.audio.transcriptions.create(model=settings.OPENAI_MODEL_TRANSCRIBE, file=f, response_format="text")
             text = result.strip() if isinstance(result, str) else result.text.strip()
             transcripts.append(f"[{part['label']}]\n{text}")
             logger.info(f"[Speaking Full] Whisper {part['label']} OK: {len(text)} chars")

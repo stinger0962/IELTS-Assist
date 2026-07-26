@@ -59,6 +59,14 @@ def diversity_seed() -> str:
     return random.choice(DIVERSITY_ANGLES)
 
 
+# GPT-5 models bill reasoning tokens against max_completion_tokens. A budget sized
+# for visible output alone can be swallowed entirely by reasoning, yielding an empty
+# message — so add headroom scaled to the effort level. Callers keep specifying the
+# visible-output budget they actually need.
+_REASONING_HEADROOM = {"minimal": 256, "low": 1024, "medium": 3072, "high": 8192}
+_DEFAULT_HEADROOM = 1024
+
+
 def _is_next_gen(model: str) -> bool:
     """True for GPT-5-generation models, which use the newer parameter set."""
     return model.startswith("gpt-5")
@@ -84,7 +92,8 @@ def build_request(
         kwargs["response_format"] = {"type": "json_object"}
 
     if _is_next_gen(model):
-        kwargs["max_completion_tokens"] = max_output_tokens
+        headroom = _REASONING_HEADROOM.get(reasoning_effort, _DEFAULT_HEADROOM)
+        kwargs["max_completion_tokens"] = max_output_tokens + headroom
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
         # temperature deliberately omitted: rejected by this generation.
@@ -103,14 +112,21 @@ def chat_json(
     max_output_tokens: int,
     temperature: float | None = None,
     reasoning_effort: str | None = None,
+    json_mode: bool = True,
 ) -> str:
-    """Run a JSON-mode completion for the given tier. Returns raw message content."""
+    """Run a completion for the given tier. Returns raw message content.
+
+    Pass `json_mode=False` when the prompt asks for a bare JSON *array* —
+    response_format=json_object requires a top-level object and would break
+    callers that parse a list.
+    """
     kwargs = build_request(
         model=resolve_model(tier),
         messages=messages,
         max_output_tokens=max_output_tokens,
         temperature=temperature,
         reasoning_effort=reasoning_effort,
+        json_mode=json_mode,
     )
     response = get_client().chat.completions.create(**kwargs)
     return response.choices[0].message.content

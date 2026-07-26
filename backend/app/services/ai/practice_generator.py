@@ -1,8 +1,7 @@
 import json
 import random
 from datetime import datetime
-from openai import OpenAI
-from app.config import settings
+from app.services.ai.llm import chat_json, diversity_seed, resolve_model
 from app.services.ai.reading_config import generate_metadata
 
 # ─── Step 1: Passage Generation ─────────────────────────────────────────────
@@ -206,8 +205,7 @@ Return JSON only:
 
 class PracticeGenerator:
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
+        self.model = resolve_model("generator")
 
     def generate_practice(self, topic_hint: str = "", avoid_topics: list[str] | None = None, difficulty_profile: dict | None = None) -> dict:
         """Generate a single reading practice via 2-step pipeline + validation.
@@ -286,16 +284,18 @@ Difficulty profile:
         system_msg = "You are an expert IELTS passage writer. Generate valid JSON only." + difficulty_instruction
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            raw = chat_json(
+                tier="generator",
+                # diversity_seed replaces the variety temperature=0.85 used to give us
                 messages=[
-                    {"role": "system", "content": system_msg},
+                    {"role": "system", "content": system_msg + "\n\n" + diversity_seed()},
                     {"role": "user", "content": prompt},
                 ],
+                max_output_tokens=3500,
                 temperature=0.85,
-                max_tokens=3500,
+                reasoning_effort="low",
             )
-            return self._parse_json(response.choices[0].message.content)
+            return self._parse_json(raw)
         except Exception as e:
             print(f"Passage generation error: {e}")
             return None
@@ -328,16 +328,17 @@ Difficulty profile:
             prompt += difficulty_note
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            raw = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS question writer. Generate valid JSON only."},
                     {"role": "user", "content": prompt},
                 ],
+                max_output_tokens=3000,
                 temperature=0.5,
-                max_tokens=3000,
+                reasoning_effort="medium",
             )
-            return self._parse_json(response.choices[0].message.content)
+            return self._parse_json(raw)
         except Exception as e:
             print(f"Question generation error: {e}")
             return None
@@ -345,16 +346,17 @@ Difficulty profile:
     def _validate(self, practice: dict) -> dict:
         """GPT call #3: Validate the complete practice."""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            raw = chat_json(
+                tier="generator",
                 messages=[
                     {"role": "system", "content": "You are an expert IELTS test validator. Return valid JSON only."},
                     {"role": "user", "content": f"{VALIDATION_PROMPT}\n\nPractice to evaluate:\n{json.dumps(practice)}"},
                 ],
+                max_output_tokens=500,
                 temperature=0.3,
-                max_tokens=500,
+                reasoning_effort="low",
             )
-            result = self._parse_json(response.choices[0].message.content)
+            result = self._parse_json(raw)
             return result if result else {"valid": False, "issues": ["Failed to parse validation response"]}
         except Exception as e:
             print(f"Validation error: {e}")

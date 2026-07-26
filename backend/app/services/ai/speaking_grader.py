@@ -2,12 +2,12 @@
 
 Layer 1: Whisper transcription (done before this module is called)
 Layer 2: Azure PA pronunciation scores (done before this module is called)
-Layer 3: GPT-4o grades FC, LR, GRA from transcript + Azure scores inform Pronunciation band
+Layer 3: the grader tier grades FC, LR, GRA from transcript + Azure scores inform Pronunciation band
 """
 import json
 import logging
-from openai import OpenAI
-from app.config import settings
+
+from app.services.ai.llm import chat_json, resolve_model
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +74,13 @@ Band 4: Produces basic sentence forms and some correct simple sentences but subo
 
 
 class SpeakingGrader:
-    """IELTS Speaking grader using Azure PA + GPT-4o."""
+    """IELTS Speaking grader using Azure PA + the configured grader tier."""
 
     GRADER_VERSION = "1.0"
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o"
+        # Recorded into the result payload and surfaced in the UI.
+        self.model = resolve_model("grader")
 
     def grade(self, transcript: str, cue_card: dict, azure_scores: dict | None = None) -> dict:
         """Grade a speaking response. Returns examiner result + coaching."""
@@ -110,18 +110,16 @@ class SpeakingGrader:
             f"{transcript}"
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            temperature=0,
-            max_tokens=2000,
+        raw = chat_json(
+            tier="grader",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
+            max_output_tokens=2000,
+            temperature=0,
+            reasoning_effort="medium",
         )
-
-        raw = response.choices[0].message.content
         scoring = json.loads(raw)
 
         er = scoring.get("examiner_result", {})

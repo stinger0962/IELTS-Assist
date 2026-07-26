@@ -1,6 +1,6 @@
 """IELTS Writing Task 2 — Realism-upgraded grading pipeline (v2.0).
 
-Layer A+B: Holistic scoring with soft penalties (1 GPT-4o call, temperature=0)
+Layer A+B: Holistic scoring with soft penalties (1 grader-tier call, reasoning_effort=medium)
   - Full IELTS band descriptors (bands 4–9) for all 4 criteria
   - Soft penalty system: -0.5 / -1.0 / -1.5 (max -2.0 cumulative per criterion)
   - Idea depth & development quality baked into TR evaluation
@@ -11,7 +11,7 @@ Layer A+B: Holistic scoring with soft penalties (1 GPT-4o call, temperature=0)
   - Dominant weakness flagging in coaching
   - Must quote evidence from the essay for each criterion
 
-Layer C: Learner annotations (1 GPT-4o call, temperature=0.2)
+Layer C: Learner annotations (1 grader-tier call, reasoning_effort=low)
   - 6–8 annotations, ≥70% must be band-affecting
   - Added idea_development category
   - Fallback: if this call fails, scoring result still returned
@@ -21,8 +21,8 @@ Hard caps ONLY for: <150 words, completely off-topic.
 
 import json
 import logging
-from openai import OpenAI
-from app.config import settings
+
+from app.services.ai.llm import chat_json, resolve_model
 
 logger = logging.getLogger(__name__)
 
@@ -308,13 +308,13 @@ Verify that essay[start_char:end_char] == original_text for each annotation.
 
 
 class WritingGrader:
-    """Realism-upgraded IELTS Writing Task 2 grader using GPT-4o (v2.0)."""
+    """Realism-upgraded IELTS Writing Task 2 grader using the configured grader tier (v2.0)."""
 
     GRADER_VERSION = "2.0"
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o"
+        # Recorded into the result payload and surfaced in the UI.
+        self.model = resolve_model("grader")
 
     def grade(self, essay: str, prompt_data: dict) -> dict:
         """Full grading pipeline. Returns examiner result + coaching + annotations."""
@@ -356,18 +356,16 @@ class WritingGrader:
             f"{essay}"
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            temperature=0,
-            max_tokens=2000,
+        raw = chat_json(
+            tier="grader",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
+            max_output_tokens=2000,
+            temperature=0,
+            reasoning_effort="medium",
         )
-
-        raw = response.choices[0].message.content
         scoring = json.loads(raw)
 
         er = scoring.get("examiner_result", {})
@@ -429,18 +427,16 @@ class WritingGrader:
             f"{essay}"
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            temperature=0.2,
-            max_tokens=1500,
+        raw = chat_json(
+            tier="grader",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
+            max_output_tokens=1500,
+            temperature=0.2,
+            reasoning_effort="low",
         )
-
-        raw = response.choices[0].message.content
         parsed = json.loads(raw)
 
         # Handle both {"annotations": [...]} and bare [...]
