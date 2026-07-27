@@ -61,10 +61,27 @@ for self-hosted pronunciation audio), cached in Postgres. Retires Youdao at the 
 Confirmed in the unit's `ExecStart`. A development flag: it runs a file-watcher and an extra process
 on a 2 GB box, and restarts the app on any file change.
 
-### 6. No swap on a 2 GB droplet
+### 6. No swap on a 2 GB droplet — this caused a real outage on 2026-07-26
 
-~436 MB available at inspection, `Swap: 0B`. Nothing has OOM-killed yet, but there is no headroom.
-Add a swapfile.
+`Swap: 0B`. Available memory has been observed swinging between 826 MB and **52 MB**. When two
+deploys ran concurrently and each started a vite build, the box went into I/O thrash — load average
+peaked above **54** — and nginx stopped serving even static files until the orphaned `tsc` processes
+were killed. With swap this would have been a slowdown, not an outage.
+
+Fixed since: the frontend is no longer built on the VPS (scp'd from CI instead), and deploys are
+serialised by a concurrency group. But the underlying fragility remains — **add a swapfile.**
+
+The droplet also carries several unrelated workloads competing for the same 2 GB:
+
+| Process | RSS |
+|---|---|
+| `openclaw` agent (gateway + node run) | ~200 MB |
+| `/app` stack (`run.py` ×2, `vite --host`, `npm run dev`) | ~220 MB |
+| Outline VPN server + prometheus | ~75 MB |
+| dockerd + containerd | ~70 MB |
+
+Note the `npm run dev` / `vite --host` pair has been running for **132 days** — a dev server left
+running in production, costing ~120 MB. Not IELTS-owned, but worth reclaiming.
 
 ---
 
