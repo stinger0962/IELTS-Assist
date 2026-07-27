@@ -20,7 +20,12 @@ def test_ignores_variables_the_model_does_not_declare(tmp_path):
     assert not hasattr(settings, "SOME_FUTURE_PROCESS_VAR")
 
 
-def test_still_reads_the_variables_it_does_declare(tmp_path):
+def test_still_reads_the_variables_it_does_declare(tmp_path, monkeypatch):
+    # Real environment variables outrank .env, and CI exports several of these.
+    # Clear them so this actually exercises the file rather than the environment.
+    for name in ("AZURE_SPEECH_REGION", "GOOGLE_APPLICATION_CREDENTIALS"):
+        monkeypatch.delenv(name, raising=False)
+
     env = tmp_path / ".env"
     env.write_text(
         "SECRET_KEY=k\n"
