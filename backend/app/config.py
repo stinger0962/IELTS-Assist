@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        # .env is also systemd's EnvironmentFile, so it legitimately carries
+        # process-level variables this model does not declare (PYTHONUNBUFFERED,
+        # and anything added later). Without this, pydantic rejects them and the
+        # app cannot even import.
+        extra = "ignore"
 
 @lru_cache()
 def get_settings():
