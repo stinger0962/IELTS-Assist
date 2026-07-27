@@ -11,7 +11,7 @@ def test_next_gen_uses_max_completion_tokens_and_drops_temperature():
         temperature=0,
         reasoning_effort="low",
     )
-    assert kwargs["max_completion_tokens"] == 2000 + 1024  # visible budget + reasoning headroom
+    assert kwargs["max_completion_tokens"] == 2000 + 4096  # visible budget + reasoning headroom
     assert "max_tokens" not in kwargs
     assert "temperature" not in kwargs
     assert kwargs["reasoning_effort"] == "low"
@@ -23,11 +23,12 @@ def test_reasoning_headroom_scales_with_effort():
             model="gpt-5.6-luna", messages=[], max_output_tokens=500, reasoning_effort=effort
         )["max_completion_tokens"]
 
-    # A small visible budget must not be swallowed by reasoning tokens.
-    assert budget("low") == 500 + 1024
-    assert budget("medium") == 500 + 3072
-    assert budget("high") == 500 + 8192
-    assert budget(None) == 500 + 1024  # default headroom when effort is unset
+    # A small visible budget must not be swallowed by reasoning tokens. Measured:
+    # the annotation call alone burns ~2,700 reasoning tokens before emitting text.
+    assert budget("low") == 500 + 4096
+    assert budget("medium") == 500 + 8192
+    assert budget("high") == 500 + 16384
+    assert budget(None) == 500 + 4096  # default headroom when effort is unset
 
 
 def test_legacy_model_gets_no_reasoning_headroom():
@@ -84,3 +85,30 @@ def test_diversity_seed_returns_a_known_angle():
     from app.services.ai.llm import DIVERSITY_ANGLES, diversity_seed
 
     assert diversity_seed() in DIVERSITY_ANGLES
+
+
+def test_empty_content_raises_a_diagnostic_error(monkeypatch):
+    """Regression: a length-truncated response used to surface as an opaque
+    json.loads failure. It must name the cause instead."""
+    import app.services.ai.llm as llm
+
+    class _Msg:
+        content = ""
+
+    class _Choice:
+        message = _Msg()
+        finish_reason = "length"
+
+    class _Resp:
+        choices = [_Choice()]
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    return _Resp()
+
+    monkeypatch.setattr(llm, "get_client", lambda: _Client())
+    with pytest.raises(llm.EmptyCompletionError, match="finish_reason='length'"):
+        llm.chat_json(tier="grader", messages=[], max_output_tokens=100)

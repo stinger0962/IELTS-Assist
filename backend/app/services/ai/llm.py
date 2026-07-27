@@ -60,11 +60,19 @@ def diversity_seed() -> str:
 
 
 # GPT-5 models bill reasoning tokens against max_completion_tokens. A budget sized
-# for visible output alone can be swallowed entirely by reasoning, yielding an empty
-# message — so add headroom scaled to the effort level. Callers keep specifying the
-# visible-output budget they actually need.
-_REASONING_HEADROOM = {"minimal": 256, "low": 1024, "medium": 3072, "high": 8192}
-_DEFAULT_HEADROOM = 1024
+# for visible output alone gets swallowed entirely by reasoning, and the response
+# comes back finish_reason="length" with EMPTY content — measured on the writing
+# annotation call, which burned 2,737 reasoning tokens before writing anything.
+#
+# These are deliberately generous: max_completion_tokens is a cap, not a
+# reservation, so unused headroom costs nothing. Callers keep specifying only the
+# visible-output budget they need.
+_REASONING_HEADROOM = {"minimal": 1024, "low": 4096, "medium": 8192, "high": 16384}
+_DEFAULT_HEADROOM = 4096
+
+
+class EmptyCompletionError(RuntimeError):
+    """The model spent its whole budget reasoning and returned no content."""
 
 
 def _is_next_gen(model: str) -> bool:
@@ -129,4 +137,16 @@ def chat_json(
         json_mode=json_mode,
     )
     response = get_client().chat.completions.create(**kwargs)
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    content = choice.message.content
+
+    # Fail loudly. Otherwise this surfaces downstream as an opaque
+    # "Expecting value: line 1 column 1 (char 0)" from json.loads.
+    if not content:
+        raise EmptyCompletionError(
+            f"{kwargs['model']} returned empty content "
+            f"(finish_reason={choice.finish_reason!r}, "
+            f"cap={kwargs.get('max_completion_tokens') or kwargs.get('max_tokens')}). "
+            "Raise max_output_tokens or lower reasoning_effort."
+        )
+    return content
