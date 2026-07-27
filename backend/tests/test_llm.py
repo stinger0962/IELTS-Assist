@@ -11,7 +11,7 @@ def test_next_gen_uses_max_completion_tokens_and_drops_temperature():
         temperature=0,
         reasoning_effort="low",
     )
-    assert kwargs["max_completion_tokens"] == 2000 + 4096  # visible budget + reasoning headroom
+    assert kwargs["max_completion_tokens"] == 2000 + 8192  # visible budget + reasoning headroom
     assert "max_tokens" not in kwargs
     assert "temperature" not in kwargs
     assert kwargs["reasoning_effort"] == "low"
@@ -24,11 +24,12 @@ def test_reasoning_headroom_scales_with_effort():
         )["max_completion_tokens"]
 
     # A small visible budget must not be swallowed by reasoning tokens. Measured:
-    # the annotation call alone burns ~2,700 reasoning tokens before emitting text.
-    assert budget("low") == 500 + 4096
-    assert budget("medium") == 500 + 8192
-    assert budget("high") == 500 + 16384
-    assert budget(None) == 500 + 4096  # default headroom when effort is unset
+    # the annotation call alone burns ~2,700 reasoning tokens before emitting text,
+    # so headroom is set ~3x above that to keep normal workflows clear of the cap.
+    assert budget("low") == 500 + 8192
+    assert budget("medium") == 500 + 16384
+    assert budget("high") == 500 + 32768
+    assert budget(None) == 500 + 8192  # default headroom when effort is unset
 
 
 def test_legacy_model_gets_no_reasoning_headroom():

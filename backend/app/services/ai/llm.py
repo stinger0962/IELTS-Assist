@@ -64,11 +64,13 @@ def diversity_seed() -> str:
 # comes back finish_reason="length" with EMPTY content — measured on the writing
 # annotation call, which burned 2,737 reasoning tokens before writing anything.
 #
-# These are deliberately generous: max_completion_tokens is a cap, not a
-# reservation, so unused headroom costs nothing. Callers keep specifying only the
-# visible-output budget they need.
-_REASONING_HEADROOM = {"minimal": 1024, "low": 4096, "medium": 8192, "high": 16384}
-_DEFAULT_HEADROOM = 4096
+# These are deliberately loose — roughly 3x the highest measured usage — so normal
+# workflows never reach the cap. max_completion_tokens is a cap, not a reservation:
+# unused headroom costs nothing, and only tokens actually generated are billed. The
+# cap is kept finite purely as a runaway-generation backstop. Callers keep
+# specifying only the visible-output budget they need.
+_REASONING_HEADROOM = {"minimal": 2048, "low": 8192, "medium": 16384, "high": 32768}
+_DEFAULT_HEADROOM = 8192
 
 
 class EmptyCompletionError(RuntimeError):
