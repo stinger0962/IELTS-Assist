@@ -8,6 +8,12 @@ on:
 
 run-name: "Deploy — ${{ github.event.workflow_run.display_title }}"
 
+# Two deploys at once both run `npm ci` + vite build on a 2 GB droplet, which
+# thrashes memory until the SSH action hits its command timeout. Serialise them.
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to VPS
@@ -59,14 +65,18 @@ jobs:
             # systemd Environment= vars still win for anything defined in both;
             # SECRET_KEY is defined ONLY here.
             ENV_PATH=/root/IELTS-Assist/backend/.env
-            umask 077
-            printf '%s\n' \
-              "SECRET_KEY=${SECRET_KEY}" \
-              "DATABASE_URL=${DATABASE_URL}" \
-              "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-              "AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}" \
-              "AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION}" \
-              > "$ENV_PATH.tmp"
+            # umask is scoped to this subshell — letting it leak previously made the
+            # frontend files world-unreadable when they were copied into /var/www.
+            (
+              umask 077
+              printf '%s\n' \
+                "SECRET_KEY=${SECRET_KEY}" \
+                "DATABASE_URL=${DATABASE_URL}" \
+                "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+                "AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}" \
+                "AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION}" \
+                > "$ENV_PATH.tmp"
+            )
 
             # Refuse to install a file with an empty SECRET_KEY — that would silently
             # leave the app on the insecure default.
