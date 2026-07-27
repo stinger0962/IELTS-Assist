@@ -314,37 +314,186 @@ Then confirm `gh run list --workflow=deploy.yml -L 2` is `success` and the site 
 
 ---
 
-## Phase 2 (blocked — do not start yet)
+---
 
-**Blocked on:** Youdao retirement shipping first.
+# Phase 2 Spec — every runtime variable from GitHub Secrets, via CI
 
-Once `translate_definition` no longer calls Youdao, the systemd unit can become a thin shell and
-`.env` becomes the single source of truth. The one-time unit rewrite (an ops action, not a deploy):
+**Status:** ready. Youdao retired in `293c84c`, which was the only blocker.
+
+**Goal:** `.env` — written by the deploy workflow from GitHub Secrets — becomes the **sole** source of
+every runtime variable the backend reads. Nothing configured by hand on the server.
+
+## Why this is required, not cosmetic
+
+Environment variables set by systemd **take precedence over `.env`**. The unit currently defines
+`DATABASE_URL`, `OPENAI_API_KEY`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`,
+`GOOGLE_APPLICATION_CREDENTIALS` and `PYTHONUNBUFFERED`, so those inline values win and the ones the
+deploy writes are **silently ignored**.
+
+Concretely: **rotating `OPENAI_API_KEY` in GitHub Secrets today does nothing.** The deploy writes the
+new value into `.env`, the unit keeps supplying the old one, and there is no error. GitHub Secrets are
+currently authoritative for exactly one variable — `SECRET_KEY` — because it is the only one the unit
+does not already define.
+
+## Approach: a drop-in, not a unit rewrite
+
+Earlier drafts of this plan called for editing the unit by hand. That was wrong on two counts: it is
+not a read-only/diagnostic action (the project's SSH rule permits only those), and a hand-edited unit
+is neither reviewable nor repeatable. The deploy workflow already SSHes in as root, so it manages
+this itself, idempotently, on every deploy.
+
+`/etc/systemd/system/ielts-backend.service.d/override.conf`:
 
 ```ini
 [Service]
-Type=simple
-User=root
-WorkingDirectory=/root/IELTS-Assist/backend
+# Empty assignment resets the list systemd inherited from the base unit, so the
+# inline secrets there stop applying without the unit file being touched.
+Environment=
 EnvironmentFile=/root/IELTS-Assist/backend/.env
-Environment="PYTHONUNBUFFERED=1"
-Environment="GOOGLE_APPLICATION_CREDENTIALS=/root/ielts-tts-key.json"
-ExecStart=/root/IELTS-Assist/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=5
 ```
 
-Changes folded in, each deliberate:
-1. All inline secret `Environment=` lines removed → `.env` becomes authoritative.
-2. `OPENROUTER_API_KEY` dropped entirely — referenced nowhere in the codebase (see the
-   [production-readiness backlog](../specs/2026-07-26-production-readiness-backlog.md) item 3).
-   **Revoke it at the provider as well; removing it here does not invalidate the key.**
-3. `--reload` removed from `ExecStart` (backlog item 5). Optional but recommended — it is a
-   development flag costing memory on a 2 GB box.
-4. `GOOGLE_APPLICATION_CREDENTIALS` stays inline as a *path*, since the JSON file itself is not yet
-   managed by CI. Automating that (writing `/root/ielts-tts-key.json` from `GCP_SA_KEY_JSON` at
-   deploy time) is a follow-up; the existing file is already mode 600 and working.
+Properties this buys:
+- The **base unit is never modified** — nothing to corrupt, nothing to restore.
+- **Rollback is deleting one file** plus `daemon-reload`.
+- It is ordinary repo code (`deploy.yml`), reviewed in a commit and applied by CI.
 
-Rollback for the unit rewrite: keep a copy first —
-`cp /etc/systemd/system/ielts-backend.service /root/ielts-backend.service.bak` — then
-`systemctl daemon-reload && systemctl restart ielts-backend` and verify with the same health check.
+⚠️ **Assumption to verify on first run:** systemd documents that an empty `Environment=` resets the
+inherited list. Task 6 verifies the inline values genuinely stopped applying rather than assuming it.
+
+## Variable inventory after Phase 2
+
+| Variable | Source | Notes |
+|---|---|---|
+| `SECRET_KEY` | GitHub Secret → `.env` | already working |
+| `DATABASE_URL` | GitHub Secret → `.env` | pre-flight: hash matches unit, connects OK |
+| `OPENAI_API_KEY` | GitHub Secret → `.env` | pre-flight: hash matches unit, 125 models visible |
+| `AZURE_SPEECH_KEY` | GitHub Secret → `.env` | pre-flight: hash matches unit |
+| `AZURE_SPEECH_REGION` | GitHub Secret → `.env` | pre-flight: hash matches unit |
+| `PYTHONUNBUFFERED` | `.env` (literal `1`) | not a secret; moved for single-source-of-truth |
+| `GOOGLE_APPLICATION_CREDENTIALS` | `.env` (literal path) | points at the file below |
+| *(the GCP key file)* | GitHub Secret `GCP_SA_KEY_JSON` → `/root/ielts-tts-key.json` | shipped by scp, see Task 2 |
+| `YOUDAO_APP_KEY` / `_SECRET` | **removed** | vendor retired in `293c84c` |
+| `OPENROUTER_API_KEY` | **removed** | already deleted from the unit; still needs revoking at the provider |
+
+## Task 1: Write the full variable set into .env
+
+**Files:** Modify `.github/workflows/deploy.yml`
+
+- [ ] **Step 1: Extend the printf block** in the "Runtime secrets" section with the two
+      non-secret variables, so `.env` is complete rather than partial:
+
+```bash
+                "PYTHONUNBUFFERED=1" \
+                "GOOGLE_APPLICATION_CREDENTIALS=/root/ielts-tts-key.json" \
+```
+
+⚠️ systemd's `EnvironmentFile` parser is stricter than python-dotenv: it does not expand variables and
+treats a leading `#` as a comment. All current values are plain tokens and paths, so this is safe —
+but a future secret containing `#` or a newline would need quoting.
+
+## Task 2: Ship the GCP service-account key from its secret
+
+The JSON is multi-line, so it cannot travel through the ssh-action's `envs`. Write it to a file in
+the runner and scp it — the value never appears in a command line or log.
+
+- [ ] **Step 1: Materialise the secret in the runner**, before the scp step:
+
+```yaml
+      - name: Materialise GCP service-account key
+        env:
+          GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+        run: |
+          printf '%s' "$GCP_SA_KEY_JSON" > gcp-key.json
+          python -c "import json;json.load(open('gcp-key.json'));print('valid JSON')"
+```
+
+Failing here is the desired behaviour: a malformed secret must stop the deploy, not reach the server.
+
+- [ ] **Step 2: Ship it to a staging path** (never straight over the live key):
+
+```yaml
+      - name: Ship GCP key to VPS
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "gcp-key.json"
+          target: "/root/staging"
+          overwrite: true
+```
+
+- [ ] **Step 3: Validate then install it**, inside the deploy script before the backend restart:
+
+```bash
+            # GCP key — validate the shipped copy before it replaces the working one
+            if python3 -c "import json,sys;json.load(open('/root/staging/gcp-key.json'))" 2>/dev/null; then
+              install -m 600 /root/staging/gcp-key.json /root/ielts-tts-key.json
+              echo "Installed GCP service-account key"
+            else
+              echo "FATAL: shipped GCP key is not valid JSON" >&2
+              exit 1
+            fi
+```
+
+## Task 3: Install the systemd drop-in
+
+- [ ] **Step 1: Write it idempotently** in the deploy script, before the backend restart:
+
+```bash
+            # Make .env authoritative: reset the inline Environment list from the base unit.
+            DROPIN=/etc/systemd/system/ielts-backend.service.d
+            mkdir -p "$DROPIN"
+            cat > "$DROPIN/override.conf" <<'CONF'
+[Service]
+Environment=
+EnvironmentFile=/root/IELTS-Assist/backend/.env
+CONF
+            systemctl daemon-reload
+```
+
+`daemon-reload` must precede the `systemctl restart` already in the script.
+
+## Task 4: Roll back automatically if the backend does not come up
+
+- [ ] **Step 1: Wrap the existing health check** so a failed boot removes the drop-in and restarts on
+      the old configuration, rather than leaving the API down:
+
+```bash
+            if [ "${OK:-0}" != "1" ]; then
+              echo "Backend unhealthy after cutover — removing drop-in and reverting" >&2
+              rm -f /etc/systemd/system/ielts-backend.service.d/override.conf
+              systemctl daemon-reload
+              systemctl restart ielts-backend
+              sleep 5
+              curl -s -o /dev/null -w "after revert: HTTP %{http_code}\n" -m 5 http://127.0.0.1:8000/
+              exit 1
+            fi
+```
+
+## Task 5: Deploy
+
+- [ ] Push to `main`; confirm CI then Deploy are both `success`.
+- [ ] Confirm the deploy log shows `Installed GCP service-account key` and `Backend healthy`.
+
+## Task 6: Verify the cutover actually took effect
+
+Do not infer success from a green deploy — the drop-in reset is the assumption under test.
+
+- [ ] **Step 1: Confirm the base unit is untouched** — it should still contain its inline
+      `Environment=` lines, proving nothing was rewritten.
+- [ ] **Step 2: Confirm the retired variables are gone from the service environment.**
+      `systemctl show ielts-backend -p Environment` must show **no** `YOUDAO_*`. If they are still
+      present, the empty-`Environment=` reset did not work and the approach needs revisiting.
+- [ ] **Step 3: Prove the app still reads every secret** — a Speaking transcription exercises
+      `OPENAI_API_KEY`, listening audio exercises the GCP key, any page load exercises `DATABASE_URL`,
+      and being logged in exercises `SECRET_KEY`.
+- [ ] **Step 4: Prove rotation now works** — the point of the whole exercise. Change a
+      non-critical secret (`AZURE_SPEECH_REGION`) in GitHub, redeploy, and confirm the new value
+      reaches the app. Before Phase 2 this silently would not have.
+
+## Follow-ups deliberately excluded
+
+- Removing `--reload` from `ExecStart` (backlog item 5) requires touching the base unit and is a
+  production-readiness concern, not a secrets one. Keep this change focused.
+- Revoking `OPENROUTER_API_KEY` at the provider — only the account owner can do it.

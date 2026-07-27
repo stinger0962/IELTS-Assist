@@ -57,6 +57,27 @@ jobs:
           overwrite: true
           rm: true
 
+      # The GCP service-account key is multi-line, so it cannot travel through the
+      # ssh-action's `envs`. Materialise it as a file here and ship it — the value
+      # never appears in a command line. A malformed secret fails the deploy now,
+      # rather than reaching the server and breaking TTS silently.
+      - name: Materialise GCP service-account key
+        env:
+          GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+        run: |
+          printf '%s' "$GCP_SA_KEY_JSON" > gcp-key.json
+          python3 -c "import json; json.load(open('gcp-key.json')); print('GCP key: valid JSON')"
+
+      - name: Ship GCP key to VPS
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "gcp-key.json"
+          target: "/root/staging"
+          overwrite: true
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         env:
@@ -76,10 +97,11 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # --- Runtime secrets (source of truth: GitHub Secrets) ---
-            # Written before the restart so the app picks them up on boot.
-            # systemd Environment= vars still win for anything defined in both;
-            # SECRET_KEY is defined ONLY here.
+            # --- Runtime configuration (single source of truth: GitHub Secrets) ---
+            # This file holds EVERY variable the backend reads. The systemd drop-in
+            # installed below resets the unit's inline Environment= list, so these
+            # values are the ones that actually apply — without which rotating a
+            # secret in GitHub would be silently ignored.
             ENV_PATH=/root/IELTS-Assist/backend/.env
             # umask is scoped to this subshell — letting it leak previously made the
             # frontend files world-unreadable when they were copied into /var/www.
@@ -91,6 +113,8 @@ jobs:
                 "OPENAI_API_KEY=${OPENAI_API_KEY}" \
                 "AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}" \
                 "AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION}" \
+                "PYTHONUNBUFFERED=1" \
+                "GOOGLE_APPLICATION_CREDENTIALS=/root/ielts-tts-key.json" \
                 > "$ENV_PATH.tmp"
             )
 
@@ -106,12 +130,68 @@ jobs:
             mv "$ENV_PATH.tmp" "$ENV_PATH"
             echo "Wrote $ENV_PATH ($(wc -l < "$ENV_PATH") entries)"
 
+            # --- GCP service-account key, from its GitHub Secret ---
+            # Validate the shipped copy before it replaces the working one.
+            if python3 -c "import json; json.load(open('/root/staging/gcp-key.json'))" 2>/dev/null; then
+              install -m 600 /root/staging/gcp-key.json /root/ielts-tts-key.json
+              echo "Installed GCP service-account key"
+            else
+              echo "FATAL: shipped GCP key is not valid JSON" >&2
+              exit 1
+            fi
+
+            # --- Make .env authoritative ---
+            # An empty Environment= resets the list inherited from the base unit, so
+            # its inline secrets stop applying. The base unit is never modified, so
+            # rollback is simply deleting this file.
+            DROPIN=/etc/systemd/system/ielts-backend.service.d
+            mkdir -p "$DROPIN"
+            printf '%s\n' \
+              '[Service]' \
+              'Environment=' \
+              'EnvironmentFile=/root/IELTS-Assist/backend/.env' \
+              > "$DROPIN/override.conf"
+            systemctl daemon-reload
+            echo "Installed systemd drop-in; .env is now authoritative"
+
             # Backend
             cd backend
             source venv/bin/activate
             pip install -r requirements.txt -q
             python -m pytest tests/ --tb=short -q
-            systemctl restart ielts-backend
+            # `|| true` matters: with `set -e`, a unit that fails to start would abort
+            # the script here and skip the health check below — leaving the API down
+            # with a bad drop-in installed and no revert.
+            systemctl restart ielts-backend || echo "restart returned non-zero; health check will decide" >&2
+
+            # --- Health check + automatic revert of the cutover ---
+            # Runs immediately after the restart, before the frontend, so a failed
+            # boot is caught and undone as fast as possible.
+            sleep 3
+            HEALTHY=0
+            for i in 1 2 3 4 5; do
+              CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8000/ || echo 000)
+              if [ "$CODE" = "200" ]; then
+                echo "Backend healthy (HTTP $CODE)"
+                HEALTHY=1
+                break
+              fi
+              sleep 3
+            done
+
+            if [ "$HEALTHY" != "1" ]; then
+              echo "FATAL: backend unhealthy after restart" >&2
+              journalctl -u ielts-backend -n 30 --no-pager >&2
+              # Revert rather than leave the API down: dropping the override restores
+              # the base unit's inline Environment= values.
+              echo "Reverting systemd drop-in..." >&2
+              rm -f "$DROPIN/override.conf"
+              systemctl daemon-reload
+              systemctl restart ielts-backend || true
+              sleep 5
+              curl -s -o /dev/null -w "after revert: HTTP %{http_code}\n" -m 5 http://127.0.0.1:8000/ >&2
+              exit 1
+            fi
 
             # Frontend — built in CI and shipped by the scp step above.
             # Never compiled here: this box cannot finish a vite build.
@@ -127,21 +207,5 @@ jobs:
             chown -R www-data:www-data /var/www/ielts-assist
             # Explicit modes so a stray umask can never make the site unreadable
             chmod -R u=rwX,go=rX /var/www/ielts-assist
-
-            # --- Health check: fail the deploy if the backend did not come back ---
-            sleep 3
-            for i in 1 2 3 4 5; do
-              CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8000/ || echo 000)
-              if [ "$CODE" = "200" ]; then
-                echo "Backend healthy (HTTP $CODE)"
-                break
-              fi
-              if [ "$i" = "5" ]; then
-                echo "FATAL: backend unhealthy after restart (last code $CODE)" >&2
-                journalctl -u ielts-backend -n 30 --no-pager >&2
-                exit 1
-              fi
-              sleep 3
-            done
 
             echo "Deploy complete!"
