@@ -1,16 +1,31 @@
+import { api } from '../api';
+
 export const POS_ABBR: Record<string, string> = {
   verb: 'v.', noun: 'n.', adjective: 'adj.', adverb: 'adv.',
   preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'interj.',
 };
 
-export function parseDictionaryEntry(data: any[]): string {
-  if (!data?.length) return '';
-  const lines: string[] = [];
-  for (const meaning of (data[0].meanings ?? []).slice(0, 3)) {
-    const abbr = POS_ABBR[meaning.partOfSpeech] ?? `${meaning.partOfSpeech}.`;
-    for (const def of (meaning.definitions ?? []).slice(0, 2)) {
-      lines.push(`${abbr} ${def.definition}${def.example ? ` e.g. "${def.example}"` : ''}`);
-    }
-  }
-  return lines.join('\n');
+export interface WordEntry {
+  word: string;
+  definition_en: string;
+  definition_zh: string | null;
+  example: string | null;
+  phonetic: string | null;
+  audio_url: string | null;
+  cached: boolean;
+}
+
+/**
+ * Look up a word via our backend.
+ *
+ * Replaces direct calls to api.dictionaryapi.dev — a free service with no SLA
+ * whose audio URLs we were persisting, so an outage there would have broken
+ * already-saved vocabulary. Definition, Chinese, IPA and self-hosted audio all
+ * arrive in one response, and results are cached server-side across all users.
+ *
+ * `context` is the sentence the word appeared in, used to pick the right sense.
+ */
+export async function lookupWord(word: string, context?: string): Promise<WordEntry> {
+  const { data } = await api.post<WordEntry>('/generate/define-word', { word, context });
+  return data;
 }

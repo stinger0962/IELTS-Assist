@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import { practiceAPI, progressAPI, topicsAPI } from '../../api';
 import { useAppStore } from '../../store';
-import { parseDictionaryEntry } from '../../utils/dictionary';
+import { lookupWord } from '../../utils/dictionary';
 import type { AIGrammarPractice } from '../../types';
 
 function AIGrammarExerciseView({
@@ -37,8 +37,8 @@ function AIGrammarExerciseView({
   // Translate grammar tip for Chinese users
   useEffect(() => {
     if (language === 'zh' && exercise.grammar_tip) {
-      topicsAPI.translateDefinition('grammar_tip', exercise.grammar_tip)
-        .then(r => { if (r.data?.content_zh) setGrammarTipZh(r.data.content_zh); })
+      topicsAPI.translate(exercise.grammar_tip)
+        .then(r => { if (r.data?.text_zh) setGrammarTipZh(r.data.text_zh); })
         .catch(() => {});
     }
   }, [language, exercise.grammar_tip]);
@@ -77,32 +77,12 @@ function AIGrammarExerciseView({
     setVocabDuplicate(false);
     setVocabSaved(false);
     try {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`);
-      if (res.ok) {
-        const data = await res.json();
-        setVocabDef(parseDictionaryEntry(data));
-        const phonetics = data[0]?.phonetics ?? [];
-        const ipa = phonetics.find((p: any) => p.text)?.text ?? '';
-        const audio = phonetics.find((p: any) => p.audio)?.audio ?? '';
-        setVocabPhonetic(ipa);
-        setVocabAudioUrl(audio);
-        if (language === 'zh') {
-          const formatted = parseDictionaryEntry(data);
-          const quotes: string[] = [];
-          const tokenized = formatted.replace(/"([^"]*)"/g, (_: string, q: string) => {
-            quotes.push(`"${q}"`);
-            return `__Q${quotes.length - 1}__`;
-          });
-          topicsAPI.translateDefinition(word, tokenized)
-            .then(r => {
-              if (r.data?.content_zh) {
-                const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
-                setVocabDefZh(restored);
-              }
-            })
-            .catch(() => {});
-        }
-      }
+      // One call returns definition, Chinese, IPA and self-hosted audio.
+      const entry = await lookupWord(word);
+      setVocabDef(entry.definition_en);
+      setVocabPhonetic(entry.phonetic || '');
+      setVocabAudioUrl(entry.audio_url || '');
+      if (language === 'zh') setVocabDefZh(entry.definition_zh || '');
     } catch { /* ignore */ }
     setVocabDefLoading(false);
   };

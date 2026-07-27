@@ -111,8 +111,29 @@ class Topic(Base):
     example_zh = Column(Text, nullable=True)
     difficulty = Column(Integer, default=1)  # 1-5
     phonetic = Column(String(100), nullable=True)   # IPA string, e.g. /ˈæmplɪfaɪ/
-    audio_url = Column(String(500), nullable=True)  # MP3 from dictionaryapi.dev
+    audio_url = Column(String(500), nullable=True)  # self-hosted MP3 under TTS_AUDIO_URL_PREFIX
     created_at = Column(DateTime, server_default=func.now())
+
+
+class VocabCache(Base):
+    """One row per English word, shared by all users.
+
+    Definitions are not user-specific, so caching globally means a word is
+    generated once for the entire user base. IELTS vocabulary repeats heavily,
+    so the hit rate is high and the marginal cost of a lookup trends to zero.
+    """
+
+    __tablename__ = "vocab_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    word = Column(String(100), nullable=False, unique=True, index=True)  # lowercased
+    definition_en = Column(Text, nullable=False)
+    definition_zh = Column(Text, nullable=True)
+    example = Column(Text, nullable=True)
+    phonetic = Column(String(100), nullable=True)   # IPA, e.g. /ˈæmplɪfaɪ/
+    audio_url = Column(String(500), nullable=True)  # self-hosted, under TTS_AUDIO_URL_PREFIX
+    created_at = Column(DateTime, server_default=func.now())
+
 
 class TopicReview(Base):
     __tablename__ = "topic_reviews"

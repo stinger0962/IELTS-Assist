@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { topicsAPI } from '../api';
-import { parseDictionaryEntry } from '../utils/dictionary';
+import { lookupWord } from '../utils/dictionary';
 import { useAppStore } from '../store';
 
 interface UseVocabSelectionOptions {
@@ -27,21 +27,12 @@ export function useVocabSelection({ enabled, skill = 'reading' }: UseVocabSelect
     setDef(''); setDefZh(''); setPhonetic(''); setAudioUrl('');
     setDefLoading(true); setShowModal(true); setPopupPos(null);
     try {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(selectedWord)}`);
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = parseDictionaryEntry(data);
-        setPhonetic(data[0]?.phonetic || data[0]?.phonetics?.find((p: any) => p.text)?.text || '');
-        setAudioUrl(data[0]?.phonetics?.find((p: any) => p.audio?.endsWith('.mp3'))?.audio || '');
-        if (formatted) {
-          setDef(formatted);
-          if (language === 'zh') {
-            topicsAPI.translateDefinition(selectedWord, formatted)
-              .then(r => { if (r.data.content_zh) setDefZh(r.data.content_zh); })
-              .catch(() => {});
-          }
-        }
-      }
+      // One call returns definition, Chinese, IPA and self-hosted audio.
+      const entry = await lookupWord(selectedWord);
+      setDef(entry.definition_en);
+      setPhonetic(entry.phonetic || '');
+      setAudioUrl(entry.audio_url || '');
+      if (language === 'zh') setDefZh(entry.definition_zh || '');
     } catch {} finally { setDefLoading(false); }
   }, [language]);
 

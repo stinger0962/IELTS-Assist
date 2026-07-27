@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.services.ai.llm import chat_json
 from app.database import SessionLocal, get_db
-from app.models.models import GeneratedPractice, Topic, User, UserPractice
+from app.models.models import GeneratedPractice, Topic, User, UserPractice, VocabCache
+from app.services import vocab
 from app.services.auth import get_current_user
 
 # Skill-specific generators (used by daily_generate)
@@ -270,48 +271,93 @@ def explain_mistakes(
         return {"explanations": []}
 
 
-TRANSLATE_DEFINITION_PROMPT = (
-    "You help Chinese-speaking IELTS students understand English vocabulary.\n"
-    "Translate the given English definition into natural Simplified Chinese.\n"
-    "Use the word itself to pick the correct sense when the definition is ambiguous.\n"
-    "Keep it to one concise line. No pinyin, no commentary, no restating the English.\n"
-    'Return JSON of the form {"content_zh": "<translation>"}.'
+TRANSLATE_PROMPT = (
+    "You help Chinese-speaking IELTS students.\n"
+    "Translate the given English text into natural Simplified Chinese.\n"
+    "Keep it concise and faithful. No pinyin, no commentary, no English restated.\n"
+    'Return JSON of the form {"text_zh": "<translation>"}.'
 )
 
 
-class TranslateDefinitionBody(BaseModel):
-    word: str
-    content_en: str
+class TranslateBody(BaseModel):
+    text: str
 
 
-@router.post("/translate-definition")
-def translate_definition(
-    body: TranslateDefinitionBody,
+@router.post("/translate")
+def translate(
+    body: TranslateBody,
     current_user: User = Depends(get_current_user),
 ):
-    """Translate an English vocabulary definition to Chinese via the utility tier.
+    """General English→Chinese translation for UI copy such as grammar tips.
 
-    Replaces Youdao Smart Cloud. Besides dropping a vendor and two credentials,
-    the model receives the word alongside its definition, so it can disambiguate
-    homographs — Youdao translated the definition text blind.
+    Vocabulary definitions do NOT use this — /define-word returns Chinese in the
+    same response, saving a second round trip.
     """
     try:
         raw = chat_json(
             tier="utility",
             messages=[
-                {"role": "system", "content": TRANSLATE_DEFINITION_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Word: {body.word}\nEnglish definition: {body.content_en}",
-                },
+                {"role": "system", "content": TRANSLATE_PROMPT},
+                {"role": "user", "content": body.text},
             ],
-            max_output_tokens=300,
+            max_output_tokens=600,
             reasoning_effort="low",
         )
-        return {"content_zh": (json.loads(raw).get("content_zh") or "").strip()}
+        return {"text_zh": (json.loads(raw).get("text_zh") or "").strip()}
     except Exception as e:
-        logger.error(f"translate_definition error: {e}")
-        return {"content_zh": ""}
+        logger.error(f"translate error: {e}")
+        return {"text_zh": ""}
+
+
+class DefineWordBody(BaseModel):
+    word: str
+    context: str | None = None
+
+
+@router.post("/define-word")
+def define_word(
+    body: DefineWordBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Definition + Chinese + IPA + self-hosted audio, cached globally by word.
+
+    Supersedes both the browser's direct dictionaryapi.dev calls and the separate
+    translate-definition endpoint: one round trip now returns everything, the
+    audio is hosted by us, and the cache is shared across all users.
+    """
+    key = vocab.normalise(body.word)
+    if not key:
+        raise HTTPException(status_code=400, detail="word is required")
+
+    cached = db.query(VocabCache).filter(VocabCache.word == key).first()
+    if cached:
+        return {
+            "word": cached.word,
+            "definition_en": cached.definition_en,
+            "definition_zh": cached.definition_zh,
+            "example": cached.example,
+            "phonetic": cached.phonetic,
+            "audio_url": cached.audio_url,
+            "cached": True,
+        }
+
+    try:
+        entry = vocab.generate_entry(body.word, body.context)
+    except Exception as e:
+        logger.error("define_word failed for %r: %s", key, e)
+        raise HTTPException(status_code=502, detail="lookup unavailable")
+
+    entry["audio_url"] = vocab.synthesize_pronunciation(key)
+
+    db.add(VocabCache(word=key, **entry))
+    try:
+        db.commit()
+    except Exception:
+        # Another request cached the same word first — harmless.
+        db.rollback()
+
+    return {"word": key, **entry, "cached": False}
 
 
 class ExtractVocabularyBody(BaseModel):

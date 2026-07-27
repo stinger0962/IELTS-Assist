@@ -2,27 +2,9 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GraduationCap, Plus, BookmarkPlus, Check, Volume2, Trash2 } from 'lucide-react';
 import { topicsAPI } from '../api';
+import { lookupWord } from '../utils/dictionary';
 import type { Topic, SkillType } from '../types';
 import { useAppStore } from '../store';
-
-const POS_ABBR: Record<string, string> = {
-  verb: 'v.', noun: 'n.', adjective: 'adj.', adverb: 'adv.',
-  preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'interj.',
-};
-
-function parseDictionaryEntry(data: any[]): { content: string; example: string } {
-  if (!data?.length) return { content: '', example: '' };
-  const lines: string[] = [];
-  let firstExample = '';
-  for (const meaning of (data[0].meanings ?? []).slice(0, 3)) {
-    const abbr = POS_ABBR[meaning.partOfSpeech] ?? `${meaning.partOfSpeech}.`;
-    for (const def of (meaning.definitions ?? []).slice(0, 2)) {
-      lines.push(`${abbr} ${def.definition}${def.example ? ` e.g. "${def.example}"` : ''}`);
-      if (!firstExample && def.example) firstExample = def.example;
-    }
-  }
-  return { content: lines.join('\n'), example: firstExample };
-}
 
 const skillColors: Record<string, string> = {
   reading: '#4F46E5',
@@ -51,13 +33,11 @@ export default function Topics() {
   const [newWord, setNewWord] = useState({ title: '', content: '', content_zh: '', example: '', phonetic: '', audio_url: '' });
   const [saving, setSaving] = useState(false);
   const [dictLoading, setDictLoading] = useState(false);
-  const [translating, setTranslating] = useState(false);
   const [duplicateError, setDuplicateError] = useState(false);
 
   const resetForm = () => {
     setNewWord({ title: '', content: '', content_zh: '', example: '', phonetic: '', audio_url: '' });
     setDictLoading(false);
-    setTranslating(false);
     setDuplicateError(false);
     setShowAddForm(false);
   };
@@ -76,38 +56,22 @@ export default function Topics() {
     }
   };
 
-  const lookupWord = async (word: string) => {
+  const autofillFromDictionary = async (word: string) => {
     if (!word.trim() || newWord.content.trim()) return; // don't overwrite user's own text
     setDictLoading(true);
     try {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`);
-      if (res.ok) {
-        const data = await res.json();
-        const { content, example } = parseDictionaryEntry(data);
-        const phonetic = data[0]?.phonetic || data[0]?.phonetics?.find((p: any) => p.text)?.text || '';
-        const audio_url = data[0]?.phonetics?.find((p: any) => p.audio?.endsWith('.mp3'))?.audio || '';
-        if (content) {
-          setNewWord(p => ({ ...p, content: p.content || content, example: p.example || example, phonetic, audio_url }));
-          if (language === 'zh') {
-            setTranslating(true);
-            // Replace "quoted strings" with tokens so Youdao preserves them in English
-            const quotes: string[] = [];
-            const tokenized = content.replace(/"([^"]*)"/g, (_, q) => {
-              quotes.push(`"${q}"`);
-              return `__Q${quotes.length - 1}__`;
-            });
-            topicsAPI.translateDefinition(word.trim(), tokenized)
-              .then(r => {
-                if (r.data.content_zh) {
-                  const restored = r.data.content_zh.replace(/__Q(\d+)__/g, (_: string, i: string) => quotes[+i] ?? '');
-                  setNewWord(p => ({ ...p, content_zh: restored }));
-                }
-              })
-              .catch(() => {})
-              .finally(() => setTranslating(false));
-          }
-        }
-      }
+      // One backend call returns definition, Chinese, IPA and self-hosted audio.
+      // The old quote-tokenisation dance is gone: Chinese is generated alongside
+      // the definition rather than translated back from it.
+      const entry = await lookupWord(word.trim());
+      setNewWord(p => ({
+        ...p,
+        content: p.content || entry.definition_en,
+        example: p.example || (entry.example ?? ''),
+        phonetic: entry.phonetic ?? '',
+        audio_url: entry.audio_url ?? '',
+        content_zh: language === 'zh' ? (entry.definition_zh ?? '') : p.content_zh,
+      }));
     } catch { /* ignore */ } finally {
       setDictLoading(false);
     }
@@ -355,7 +319,7 @@ export default function Topics() {
                     setDuplicateError(false);
                     setNewWord(p => ({ ...p, title: e.target.value, content: '', content_zh: '', example: '', phonetic: '', audio_url: '' }));
                   }}
-                  onBlur={e => lookupWord(e.target.value)}
+                  onBlur={e => autofillFromDictionary(e.target.value)}
                   required
                   autoFocus
                 />
@@ -365,12 +329,11 @@ export default function Topics() {
                 <label className="form-label">
                   Definition *
                   {dictLoading && <span className="dict-loading"> · Looking up…</span>}
-                  {!dictLoading && translating && <span className="dict-loading"> · Translating…</span>}
                 </label>
                 <textarea
                   className="form-textarea"
-                  placeholder={dictLoading ? 'Looking up…' : translating ? 'Translating to Chinese…' : 'Auto-filled: v. meaning… n. meaning…'}
-                  value={language === 'zh' && (newWord.content_zh || translating) ? newWord.content_zh : newWord.content}
+                  placeholder={dictLoading ? 'Looking up…' : 'Auto-filled: v. meaning… n. meaning…'}
+                  value={language === 'zh' && newWord.content_zh ? newWord.content_zh : newWord.content}
                   onChange={e => language === 'zh'
                     ? setNewWord(p => ({ ...p, content_zh: e.target.value }))
                     : setNewWord(p => ({ ...p, content: e.target.value }))}
@@ -390,8 +353,8 @@ export default function Topics() {
             </div>
             <div className="form-actions-right">
               <button type="button" className="btn btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={saving || translating}>
-                {saving ? 'Saving…' : translating ? 'Translating…' : 'Save & Add to Deck'}
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : 'Save & Add to Deck'}
               </button>
             </div>
           </form>

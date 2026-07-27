@@ -221,8 +221,9 @@ export const topicsAPI = {
   addToDeck: (topicId: number) => api.post(`/topics/${topicId}/add-to-deck`),
   removeFromDeck: (topicId: number) => api.delete(`/topics/${topicId}/remove-from-deck`),
   delete: (topicId: number) => api.delete(`/topics/${topicId}`),
-  translateDefinition: (word: string, content_en: string) =>
-    api.post('/generate/translate-definition', { word, content_en }),
+  /** General English→Chinese translation (grammar tips and similar UI copy).
+   *  Vocabulary does NOT use this — lookupWord() returns Chinese inline. */
+  translate: (text: string) => api.post('/generate/translate', { text }),
   review: (topicId: number, quality: number) =>
     api.post('/topics/review', { topic_id: topicId, quality }),
 };
