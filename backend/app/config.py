@@ -49,10 +49,6 @@ class Settings(BaseSettings):
     # needs a listening test before switching.
     OPENAI_MODEL_TRANSCRIBE: str = "whisper-1"
 
-    # Youdao Smart Cloud (有道智云) — text translation
-    YOUDAO_APP_KEY: str = ""
-    YOUDAO_APP_SECRET: str = ""
-
     # Azure Speech — pronunciation assessment
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = ""

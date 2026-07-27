@@ -3,21 +3,16 @@
 Skill-specific pool helpers and endpoints live in their own routers:
   reading.py, listening.py, grammar.py, writing.py
 """
-import hashlib
 import json
 import logging
 import random
-import time
-import uuid
 from datetime import datetime
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from app.services.ai.llm import chat_json
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.services.ai.llm import chat_json
 from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.auth import get_current_user
@@ -275,6 +270,15 @@ def explain_mistakes(
         return {"explanations": []}
 
 
+TRANSLATE_DEFINITION_PROMPT = (
+    "You help Chinese-speaking IELTS students understand English vocabulary.\n"
+    "Translate the given English definition into natural Simplified Chinese.\n"
+    "Use the word itself to pick the correct sense when the definition is ambiguous.\n"
+    "Keep it to one concise line. No pinyin, no commentary, no restating the English.\n"
+    'Return JSON of the form {"content_zh": "<translation>"}.'
+)
+
+
 class TranslateDefinitionBody(BaseModel):
     word: str
     content_en: str
@@ -285,35 +289,26 @@ def translate_definition(
     body: TranslateDefinitionBody,
     current_user: User = Depends(get_current_user),
 ):
-    """Translate an English vocabulary definition to Chinese via Youdao API."""
+    """Translate an English vocabulary definition to Chinese via the utility tier.
+
+    Replaces Youdao Smart Cloud. Besides dropping a vendor and two credentials,
+    the model receives the word alongside its definition, so it can disambiguate
+    homographs — Youdao translated the definition text blind.
+    """
     try:
-        salt = str(uuid.uuid4())
-        curtime = str(int(time.time()))
-        q = body.content_en
-        # Youdao v3 sign: truncate input if longer than 20 chars
-        input_str = q if len(q) <= 20 else q[:10] + str(len(q)) + q[-10:]
-        sign = hashlib.sha256(
-            (settings.YOUDAO_APP_KEY + input_str + salt + curtime + settings.YOUDAO_APP_SECRET).encode("utf-8")
-        ).hexdigest()
-        resp = httpx.post(
-            "https://openapi.youdao.com/api",
-            data={
-                "q": q,
-                "from": "en",
-                "to": "zh-CHS",
-                "appKey": settings.YOUDAO_APP_KEY,
-                "salt": salt,
-                "sign": sign,
-                "signType": "v3",
-                "curtime": curtime,
-            },
-            timeout=8.0,
+        raw = chat_json(
+            tier="utility",
+            messages=[
+                {"role": "system", "content": TRANSLATE_DEFINITION_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Word: {body.word}\nEnglish definition: {body.content_en}",
+                },
+            ],
+            max_output_tokens=300,
+            reasoning_effort="low",
         )
-        result = resp.json()
-        if result.get("errorCode") == "0" and result.get("translation"):
-            return {"content_zh": result["translation"][0]}
-        logger.error("Youdao translate-definition errorCode=%s", result.get("errorCode"))
-        return {"content_zh": ""}
+        return {"content_zh": (json.loads(raw).get("content_zh") or "").strip()}
     except Exception as e:
         logger.error(f"translate_definition error: {e}")
         return {"content_zh": ""}
