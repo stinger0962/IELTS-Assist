@@ -31,8 +31,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
-    # CORS
-    BACKEND_CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000"]
+    # CORS — production is same-origin behind nginx, so these matter only for
+    # local dev today. Listed explicitly so an API subdomain later doesn't get
+    # debugged from a stale localhost-only default.
+    BACKEND_CORS_ORIGINS: list = [
+        "https://annababy.cc",
+        "https://www.annababy.cc",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
     
     # OpenAI
     OPENAI_API_KEY: str = ""

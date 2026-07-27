@@ -24,10 +24,10 @@ jobs:
       github.event.workflow_run.event == 'push'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -144,15 +144,21 @@ jobs:
             # An empty Environment= resets the list inherited from the base unit, so
             # its inline secrets stop applying. The base unit is never modified, so
             # rollback is simply deleting this file.
+            # The empty ExecStart= clears the base unit's command so it can be
+            # replaced without editing that file: production must not run uvicorn
+            # with --reload, which keeps a file-watcher and a second process alive
+            # on a 2 GB box for no benefit — the deploy restarts explicitly.
             DROPIN=/etc/systemd/system/ielts-backend.service.d
             mkdir -p "$DROPIN"
             printf '%s\n' \
               '[Service]' \
               'Environment=' \
               'EnvironmentFile=/root/IELTS-Assist/backend/.env' \
+              'ExecStart=' \
+              'ExecStart=/root/IELTS-Assist/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000' \
               > "$DROPIN/override.conf"
             systemctl daemon-reload
-            echo "Installed systemd drop-in; .env is now authoritative"
+            echo "Installed systemd drop-in; .env is authoritative, --reload dropped"
 
             # Backend
             cd backend
@@ -199,13 +205,33 @@ jobs:
               echo "FATAL: staged frontend missing — did the scp step run?" >&2
               exit 1
             fi
-            # Preserve audio/ directory (TTS-generated MP3s) during frontend deploy
-            mv /var/www/ielts-assist/audio /tmp/ielts-audio-backup 2>/dev/null || true
-            rm -rf /var/www/ielts-assist/*
-            cp -r /root/frontend-dist-staging/* /var/www/ielts-assist/
-            mv /tmp/ielts-audio-backup /var/www/ielts-assist/audio 2>/dev/null || true
-            chown -R www-data:www-data /var/www/ielts-assist
+            # Keep the previous build so a half-finished swap can be undone. The
+            # window between `rm -rf` and the copy completing is the only moment
+            # the site can be broken, and previously nothing could restore it.
+            WWW=/var/www/ielts-assist
+            PREV=/root/www-previous
+            rm -rf "$PREV" && mkdir -p "$PREV"
+            cp -r "$WWW"/index.html "$WWW"/assets "$PREV"/ 2>/dev/null || true
+
+            # Preserve audio/ (TTS-generated MP3s, incl. vocabulary pronunciations)
+            mv "$WWW"/audio /tmp/ielts-audio-backup 2>/dev/null || true
+            rm -rf "$WWW"/*
+            cp -r /root/frontend-dist-staging/* "$WWW"/
+            mv /tmp/ielts-audio-backup "$WWW"/audio 2>/dev/null || true
+            chown -R www-data:www-data "$WWW"
             # Explicit modes so a stray umask can never make the site unreadable
-            chmod -R u=rwX,go=rX /var/www/ielts-assist
+            chmod -R u=rwX,go=rX "$WWW"
+
+            # Verify the swap actually produced a servable site; restore if not.
+            FE=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "Host: annababy.cc" http://127.0.0.1/index.html || echo 000)
+            if [ ! -f "$WWW/index.html" ] || [ "$FE" != "200" ]; then
+              echo "FATAL: frontend broken after swap (index.html present? / HTTP $FE) — restoring" >&2
+              rm -rf "$WWW"/index.html "$WWW"/assets
+              cp -r "$PREV"/* "$WWW"/ 2>/dev/null || true
+              chown -R www-data:www-data "$WWW"
+              chmod -R u=rwX,go=rX "$WWW"
+              exit 1
+            fi
+            echo "Frontend swap verified (HTTP $FE)"
 
             echo "Deploy complete!"

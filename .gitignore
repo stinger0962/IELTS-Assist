@@ -6,3 +6,4 @@ __pycache__/
 .env
 
 gcp-key.json
+backend/tests/fixtures/calibration_essays.json

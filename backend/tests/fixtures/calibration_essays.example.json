@@ -1,0 +1,24 @@
+[
+  {
+    "name": "band6-opinion-community-service",
+    "expected_band": 6.0,
+    "source": "Cambridge IELTS 17, Test 2 — sample answer with examiner comment",
+    "prompt": {
+      "essay_type": "opinion",
+      "statement": "Some people believe that unpaid community service should be a compulsory part of high school programmes.",
+      "instruction": "To what extent do you agree or disagree?"
+    },
+    "essay": "PASTE THE FULL ESSAY TEXT HERE"
+  },
+  {
+    "name": "band7-discussion-example",
+    "expected_band": 7.0,
+    "source": "ielts.org published sample response",
+    "prompt": {
+      "essay_type": "discussion",
+      "statement": "Some people think that a sense of competition in children should be encouraged. Others believe that children who are taught to co-operate become more useful adults.",
+      "instruction": "Discuss both views and give your own opinion."
+    },
+    "essay": "PASTE THE FULL ESSAY TEXT HERE"
+  }
+]
