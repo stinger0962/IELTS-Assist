@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # needs a listening test before switching.
     OPENAI_MODEL_TRANSCRIBE: str = "whisper-1"
 
+    # --- AI usage quotas (per user, per UTC day) ---
+    # Sized to bound catastrophe, not to ration study: normal use never reaches
+    # these, but a runaway loop is capped.
+    QUOTA_GRADE_PER_DAY: int = 30        # ~$1.50/day worst case per user
+    QUOTA_GENERATE_PER_DAY: int = 60
+    QUOTA_LOOKUP_PER_DAY: int = 300      # cache hits are refunded, so this is generous
+    # Global circuit breaker: estimated spend across ALL users in a UTC day.
+    DAILY_SPEND_CAP_USD: float = 20.0
+    QUOTAS_ENABLED: bool = True          # kill switch: env change, no redeploy
+
     # Azure Speech — pronunciation assessment
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = ""

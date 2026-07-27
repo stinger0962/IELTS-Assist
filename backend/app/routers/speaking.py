@@ -22,6 +22,7 @@ from app.services.ai.speaking_config import PART2_CUE_CARDS, generate_metadata a
 from app.services.ai.speaking_grader import SpeakingGrader
 from app.services.azure_speech import assess_pronunciation
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 from app.services.ai.llm import get_client
 
@@ -248,7 +249,7 @@ def generate_more_speaking(
     return {"practices": practices, "pool_empty": False, "at_capacity": False}
 
 
-@router.post("/submit-ai-speaking")
+@router.post("/submit-ai-speaking", dependencies=[Depends(quota("grade"))])
 async def submit_ai_speaking(
     audio: UploadFile = File(...),
     practice_id: int = Form(...),
@@ -332,7 +333,7 @@ async def submit_ai_speaking(
     return grading_result
 
 
-@router.post("/analyze-pronunciation")
+@router.post("/analyze-pronunciation", dependencies=[Depends(quota("grade"))])
 def analyze_pronunciation(
     practice_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -444,7 +445,7 @@ def analyze_pronunciation(
     }
 
 
-@router.post("/submit-ai-speaking-full")
+@router.post("/submit-ai-speaking-full", dependencies=[Depends(quota("grade"))])
 async def submit_ai_speaking_full(
     audio_part1: UploadFile = File(...),
     audio_part2: UploadFile = File(...),

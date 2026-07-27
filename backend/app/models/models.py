@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, ForeignKey, Text, Enum, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -133,6 +133,25 @@ class VocabCache(Base):
     phonetic = Column(String(100), nullable=True)   # IPA, e.g. /ˈæmplɪfaɪ/
     audio_url = Column(String(500), nullable=True)  # self-hosted, under TTS_AUDIO_URL_PREFIX
     created_at = Column(DateTime, server_default=func.now())
+
+
+class UsageCounter(Base):
+    """Paid-AI usage per user, per UTC day, per category.
+
+    Database-backed rather than in-process: deploys restart the app several
+    times a day and would otherwise reset everyone's quota.
+    """
+
+    __tablename__ = "usage_counters"
+    __table_args__ = (
+        UniqueConstraint("user_id", "day", "category", name="uq_usage_user_day_category"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)   # UTC
+    category = Column(String(20), nullable=False)    # grade | generate | lookup
+    count = Column(Integer, nullable=False, default=0)
 
 
 class TopicReview(Base):

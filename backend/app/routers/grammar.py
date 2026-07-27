@@ -12,6 +12,7 @@ from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.services.ai.grammar_generator import grammar_generator
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ def get_daily_grammar(
     return {"practices": practices}
 
 
-@router.post("/generate-more-grammar")
+@router.post("/generate-more-grammar", dependencies=[Depends(quota("generate"))])
 def generate_more_grammar(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -197,7 +198,7 @@ def submit_ai_grammar(
     return {"ok": True}
 
 
-@router.post("/generate-grammar")
+@router.post("/generate-grammar", dependencies=[Depends(quota("generate"))])
 def generate_grammar_practice(
     count: int = 2,
     db: Session = Depends(get_db),

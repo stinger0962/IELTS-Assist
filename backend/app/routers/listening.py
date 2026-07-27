@@ -11,6 +11,7 @@ from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.services.ai.listening_generator import listening_generator
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -168,7 +169,7 @@ def get_daily_listening(
     return {"practices": practices}
 
 
-@router.post("/generate-more-listening")
+@router.post("/generate-more-listening", dependencies=[Depends(quota("generate"))])
 def generate_more_listening(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -237,7 +238,7 @@ class TTSRequest(BaseModel):
     voice: str = "british_female"
 
 
-@router.post("/tts-preview")
+@router.post("/tts-preview", dependencies=[Depends(quota("generate"))])
 def tts_preview(
     body: TTSRequest,
     current_user: User = Depends(get_current_user),
@@ -259,7 +260,7 @@ def tts_preview(
         raise HTTPException(status_code=500, detail=f"TTS failed: {str(e)}")
 
 
-@router.post("/generate-listening")
+@router.post("/generate-listening", dependencies=[Depends(quota("generate"))])
 def generate_listening_practice(
     count: int = 1,
     topic_hint: str = "",

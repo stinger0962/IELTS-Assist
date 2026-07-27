@@ -12,6 +12,7 @@ from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.services.ai.practice_generator import practice_generator
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -168,7 +169,7 @@ def get_daily_reading(
     return {"practices": practices}
 
 
-@router.post("/generate-more")
+@router.post("/generate-more", dependencies=[Depends(quota("generate"))])
 def generate_more(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -232,7 +233,7 @@ def submit_ai_reading(
     return {"ok": True}
 
 
-@router.post("/trigger-replenish")
+@router.post("/trigger-replenish", dependencies=[Depends(quota("generate"))])
 def trigger_replenish(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -253,7 +254,7 @@ def pool_status(
     return {"active": active, "available": available}
 
 
-@router.post("/generate-reading")
+@router.post("/generate-reading", dependencies=[Depends(quota("generate"))])
 def generate_reading_practice(
     count: int = 3,
     topic_hint: str = "",

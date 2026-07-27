@@ -11,6 +11,7 @@ from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.ai.writing_config import generate_metadata as writing_generate_metadata
 from app.services.ai.writing_grader import WritingGrader
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -280,7 +281,7 @@ class SubmitAIWritingBody(BaseModel):
     submission_mode: str = "study"  # "study" or "exam"
 
 
-@router.post("/submit-ai-writing")
+@router.post("/submit-ai-writing", dependencies=[Depends(quota("grade"))])
 def submit_ai_writing(
     body: SubmitAIWritingBody,
     background_tasks: BackgroundTasks,

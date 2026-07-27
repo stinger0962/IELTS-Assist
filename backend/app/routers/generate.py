@@ -16,7 +16,9 @@ from app.services.ai.llm import chat_json
 from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, Topic, User, UserPractice, VocabCache
 from app.services import vocab
+from app.services import quota as quota_service
 from app.services.auth import get_current_user
+from app.services.quota import quota
 
 # Skill-specific generators (used by daily_generate)
 from app.services.ai.practice_generator import practice_generator
@@ -227,7 +229,7 @@ class ExplainMistakesBody(BaseModel):
     wrong_answers: list[WrongAnswerItem]
 
 
-@router.post("/explain-mistakes")
+@router.post("/explain-mistakes", dependencies=[Depends(quota("lookup"))])
 def explain_mistakes(
     body: ExplainMistakesBody,
     current_user: User = Depends(get_current_user),
@@ -283,7 +285,7 @@ class TranslateBody(BaseModel):
     text: str
 
 
-@router.post("/translate")
+@router.post("/translate", dependencies=[Depends(quota("lookup"))])
 def translate(
     body: TranslateBody,
     current_user: User = Depends(get_current_user),
@@ -314,7 +316,7 @@ class DefineWordBody(BaseModel):
     context: str | None = None
 
 
-@router.post("/define-word")
+@router.post("/define-word", dependencies=[Depends(quota("lookup"))])
 def define_word(
     body: DefineWordBody,
     db: Session = Depends(get_db),
@@ -332,6 +334,9 @@ def define_word(
 
     cached = db.query(VocabCache).filter(VocabCache.word == key).first()
     if cached:
+        # Served from cache — cost nothing, so give the quota back. Charging for
+        # a free response would penalise exactly the behaviour we want.
+        quota_service.refund(db, current_user.id, "lookup")
         return {
             "word": cached.word,
             "definition_en": cached.definition_en,
@@ -365,7 +370,7 @@ class ExtractVocabularyBody(BaseModel):
     topic: str
 
 
-@router.post("/extract-vocabulary")
+@router.post("/extract-vocabulary", dependencies=[Depends(quota("lookup"))])
 def extract_vocabulary(
     body: ExtractVocabularyBody,
     db: Session = Depends(get_db),
