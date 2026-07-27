@@ -31,11 +31,17 @@ token for any `user_id` and access any account.
 **Side effect:** rotating the key invalidates all existing sessions; every user must log in again.
 **Hardening:** make the app refuse to boot in production if `SECRET_KEY` is still the default.
 
-### 2. No rate limiting or per-user quotas on AI endpoints
+### 2. ~~No rate limiting or per-user quotas on AI endpoints~~ — **DONE 2026-07-27**
 
-Any authenticated user can trigger unbounded generation and grading calls. At launch this is the
-largest financial exposure: cost scales linearly with abuse and nothing caps it. Needs per-user
-daily caps and a global circuit breaker.
+Shipped in `50a2fb7`. Per-user daily quotas by cost category (30 grade / 60 generate / 300 lookup)
+plus a global $20/day estimated-spend circuit breaker, counted in `usage_counters` and verified
+against Postgres. See [the plan](../plans/2026-07-27-rate-limiting.md).
+
+Two follow-ups this opens up:
+- **`usage_counters` is the first real usage visibility this app has.** Watch it for a week before
+  tightening the defaults — real data beats the guesses baked in now.
+- **No alerting yet.** The breaker returns 503 silently; nobody is told the budget was hit. Worth
+  wiring up once there is somewhere to send an alert.
 
 ### 3. `OPENROUTER_API_KEY` is set on the server but referenced nowhere in the codebase
 
