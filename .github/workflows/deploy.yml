@@ -223,7 +223,10 @@ jobs:
             chmod -R u=rwX,go=rX "$WWW"
 
             # Verify the swap actually produced a servable site; restore if not.
-            FE=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "Host: annababy.cc" http://127.0.0.1/index.html || echo 000)
+            # HTTPS, not HTTP: nginx 301-redirects port 80, so an http:// probe
+            # never returns 200 and would trigger a spurious rollback. -k because
+            # we connect to 127.0.0.1 while sending the real Host header.
+            FE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 -H "Host: annababy.cc" https://127.0.0.1/index.html || echo 000)
             if [ ! -f "$WWW/index.html" ] || [ "$FE" != "200" ]; then
               echo "FATAL: frontend broken after swap (index.html present? / HTTP $FE) — restoring" >&2
               rm -rf "$WWW"/index.html "$WWW"/assets
