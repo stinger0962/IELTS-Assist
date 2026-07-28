@@ -99,3 +99,35 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+@app.get(f"{settings.API_PREFIX}/health")
+def api_health_check():
+    """Reachable through nginx, unlike /health which the SPA catch-all serves.
+
+    Also pings the database: the API answering while Postgres is unreachable is
+    a real failure mode that a static 200 would hide.
+    """
+    from sqlalchemy import text
+
+    from app.database import SessionLocal
+
+    db_ok = True
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+    except Exception as e:
+        db_ok = False
+        logger.error("health check: database unreachable: %s", e)
+
+    return JSONResponse(
+        status_code=200 if db_ok else 503,
+        content={
+            "status": "healthy" if db_ok else "degraded",
+            "database": "ok" if db_ok else "unreachable",
+            "version": settings.VERSION,
+        },
+    )

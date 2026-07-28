@@ -24,15 +24,17 @@ jobs:
           echo "frontend: HTTP $CODE"
           [ "$CODE" = "200" ] || { echo "::error::Frontend returned $CODE (expected 200)"; exit 1; }
 
-      - name: API responds
+      - name: API and database respond
         run: |
-          # The backend root returns its name and version. A 5xx here means the
-          # API is down even when nginx still serves the static frontend, which
-          # is exactly the case a frontend-only check would miss.
-          BODY=$(curl -sS -m 20 --retry 2 --retry-delay 5 https://annababy.cc/api/ || true)
-          echo "api body: ${BODY:0:120}"
-          echo "$BODY" | grep -q "IELTS Assist API" \
-            || { echo "::error::API did not return its identity payload"; exit 1; }
+          # /api/health pings Postgres and 503s if it is unreachable. nginx can
+          # keep serving the static frontend while the backend or database is
+          # dead — exactly the case a frontend-only check would miss.
+          BODY=$(curl -sS -m 20 --retry 2 --retry-delay 5 https://annababy.cc/api/health || true)
+          echo "api health: ${BODY:0:160}"
+          echo "$BODY" | grep -q '"status":"healthy"' \
+            || { echo "::error::API health check did not report healthy"; exit 1; }
+          echo "$BODY" | grep -q '"database":"ok"' \
+            || { echo "::error::API reports the database is unreachable"; exit 1; }
 
       - name: TLS certificate has runway
         run: |
