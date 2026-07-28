@@ -1,0 +1,57 @@
+name: Backup Check
+
+# A backup job that silently stops is indistinguishable from one that works —
+# which is precisely how the certificate renewal failed for weeks. This asserts
+# that a fresh, plausible dump actually exists on the box every day.
+on:
+  schedule:
+    - cron: '30 4 * * *'   # 2.5h after the 02:00 UTC backup run
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    name: Verify last night's backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Newest dump is fresh and plausible
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            DEST=/root/backups
+            LATEST=$(ls -1t "$DEST"/ielts-*.sql.gz 2>/dev/null | head -1 || true)
+            if [ -z "$LATEST" ]; then
+              echo "FATAL: no backups exist in $DEST" >&2
+              exit 1
+            fi
+
+            AGE_H=$(( ( $(date -u +%s) - $(stat -c%Y "$LATEST") ) / 3600 ))
+            SIZE=$(stat -c%s "$LATEST")
+            COUNT=$(ls -1 "$DEST"/ielts-*.sql.gz | wc -l)
+            echo "newest: $LATEST"
+            echo "age: ${AGE_H}h | size: ${SIZE} bytes | kept: ${COUNT}"
+
+            # The nightly job runs at 02:00 UTC; anything older than 26h means
+            # it did not run or failed.
+            if [ "$AGE_H" -gt 26 ]; then
+              echo "FATAL: newest backup is ${AGE_H}h old — the nightly job is not running" >&2
+              tail -20 /var/log/ielts-backup.log 2>/dev/null >&2 || true
+              exit 1
+            fi
+            if [ "$SIZE" -lt 100000 ]; then
+              echo "FATAL: newest backup is only ${SIZE} bytes — suspiciously small" >&2
+              exit 1
+            fi
+
+            # Integrity, not just presence: a file that will not decompress is
+            # not a backup.
+            gzip -t "$LATEST"
+            TABLES=$(zcat "$LATEST" | grep -c 'CREATE TABLE' || true)
+            if [ "${TABLES:-0}" -lt 1 ]; then
+              echo "FATAL: newest backup contains no tables" >&2
+              exit 1
+            fi
+            echo "backup healthy: ${TABLES} tables, ${AGE_H}h old"

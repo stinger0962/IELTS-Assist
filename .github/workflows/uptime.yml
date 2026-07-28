@@ -1,0 +1,47 @@
+name: Uptime
+
+# Today's outage was found by a human loading the site. This is the cheapest
+# possible fix: a scheduled job that fails when the site is unhealthy, so
+# GitHub emails on failure. No third-party service, no signup, no credentials.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+# Never queue a backlog of checks if one run is slow.
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe annababy.cc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Frontend responds
+        run: |
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' -m 20 --retry 2 --retry-delay 5 https://annababy.cc/ || echo 000)
+          echo "frontend: HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "::error::Frontend returned $CODE (expected 200)"; exit 1; }
+
+      - name: API responds
+        run: |
+          # The backend root returns its name and version. A 5xx here means the
+          # API is down even when nginx still serves the static frontend, which
+          # is exactly the case a frontend-only check would miss.
+          BODY=$(curl -sS -m 20 --retry 2 --retry-delay 5 https://annababy.cc/api/ || true)
+          echo "api body: ${BODY:0:120}"
+          echo "$BODY" | grep -q "IELTS Assist API" \
+            || { echo "::error::API did not return its identity payload"; exit 1; }
+
+      - name: TLS certificate has runway
+        run: |
+          # The certificate silently stopped auto-renewing for weeks because the
+          # firewall blocked the HTTP-01 challenge, and was 5 days from expiry
+          # when found by hand. Fail early enough to fix it calmly.
+          END=$(echo | openssl s_client -servername annababy.cc -connect annababy.cc:443 2>/dev/null \
+                | openssl x509 -noout -enddate | cut -d= -f2)
+          END_TS=$(date -d "$END" +%s)
+          DAYS=$(( (END_TS - $(date -u +%s)) / 86400 ))
+          echo "certificate expires in $DAYS days ($END)"
+          [ "$DAYS" -ge 14 ] || { echo "::error::TLS certificate expires in $DAYS days"; exit 1; }
