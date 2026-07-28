@@ -36,14 +36,29 @@ jobs:
           echo "$BODY" | grep -q '"database":"ok"' \
             || { echo "::error::API reports the database is unreachable"; exit 1; }
 
-      - name: TLS certificate has runway
+      - name: TLS certificates have runway
+        env:
+          ORIGIN: ${{ secrets.VPS_HOST }}
         run: |
-          # The certificate silently stopped auto-renewing for weeks because the
-          # firewall blocked the HTTP-01 challenge, and was 5 days from expiry
-          # when found by hand. Fail early enough to fix it calmly.
-          END=$(echo | openssl s_client -servername annababy.cc -connect annababy.cc:443 2>/dev/null \
-                | openssl x509 -noout -enddate | cut -d= -f2)
-          END_TS=$(date -d "$END" +%s)
-          DAYS=$(( (END_TS - $(date -u +%s)) / 86400 ))
-          echo "certificate expires in $DAYS days ($END)"
-          [ "$DAYS" -ge 14 ] || { echo "::error::TLS certificate expires in $DAYS days"; exit 1; }
+          days_left() {  # $1 = host to connect to, $2 = SNI name
+            local end
+            end=$(echo | openssl s_client -servername "$2" -connect "$1:443" 2>/dev/null \
+                  | openssl x509 -noout -enddate | cut -d= -f2)
+            [ -n "$end" ] || { echo "could not read certificate from $1" >&2; return 1; }
+            echo $(( ( $(date -d "$end" +%s) - $(date -u +%s) ) / 86400 ))
+          }
+
+          # The domain is proxied by Cloudflare, so connecting to the name gets
+          # CLOUDFLARE's edge cert — which Cloudflare renews itself and was never
+          # at risk. Checking only that would have missed the real incident.
+          EDGE=$(days_left annababy.cc annababy.cc)
+          echo "edge (Cloudflare) certificate: $EDGE days"
+          [ "$EDGE" -ge 7 ] || { echo "::error::Cloudflare edge certificate expires in $EDGE days"; exit 1; }
+
+          # The origin's own Let's Encrypt cert is the one that silently stopped
+          # renewing for weeks (the firewall was blocking the HTTP-01 challenge)
+          # and was 5 days from expiry when found by hand. Reached by connecting
+          # to the origin IP directly with the right SNI.
+          ORIGIN_DAYS=$(days_left "$ORIGIN" annababy.cc)
+          echo "origin (Let's Encrypt) certificate: $ORIGIN_DAYS days"
+          [ "$ORIGIN_DAYS" -ge 14 ] || { echo "::error::Origin certificate expires in $ORIGIN_DAYS days — check certbot and the DO firewall"; exit 1; }
