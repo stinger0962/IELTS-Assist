@@ -113,3 +113,70 @@ def test_empty_content_raises_a_diagnostic_error(monkeypatch):
     monkeypatch.setattr(llm, "get_client", lambda: _Client())
     with pytest.raises(llm.EmptyCompletionError, match="finish_reason='length'"):
         llm.chat_json(tier="grader", messages=[], max_output_tokens=100)
+
+
+def test_empty_completion_is_retried_once(monkeypatch):
+    """~9% of gradings died because the model spent its whole budget reasoning.
+    One retry with a bigger budget and less reasoning should recover it."""
+    import app.services.ai.llm as llm
+
+    calls = []
+
+    def _resp(content, finish):
+        class _M: pass
+        m = _M(); m.content = content
+        class _C: pass
+        c = _C(); c.message = m; c.finish_reason = finish
+        class _R: pass
+        r = _R(); r.choices = [c]
+        return r
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    calls.append(kwargs)
+                    # first attempt burns its budget, second succeeds
+                    return _resp("", "length") if len(calls) == 1 else _resp('{"ok":1}', "stop")
+
+    monkeypatch.setattr(llm, "get_client", lambda: _Client())
+    out = llm.chat_json(tier="grader", messages=[], max_output_tokens=2000,
+                        reasoning_effort="medium")
+
+    assert out == '{"ok":1}'
+    assert len(calls) == 2, "should have retried exactly once"
+    # The retry must not repeat the conditions that failed. It lowers reasoning
+    # effort (the thing that ate the budget) and doubles the visible-output
+    # budget. Note the TOTAL cap legitimately shrinks: dropping medium->low
+    # removes far more headroom than doubling the output budget adds, and that
+    # is the point — `low` reasons in the low thousands, leaving more room for
+    # actual output than the 16k+ that failed.
+    assert calls[1].get("reasoning_effort") == "low"
+    visible = lambda k: k["max_completion_tokens"] - llm._REASONING_HEADROOM[k["reasoning_effort"]]
+    assert visible(calls[1]) > visible(calls[0])
+
+
+def test_gives_up_after_the_retry(monkeypatch):
+    import app.services.ai.llm as llm
+
+    calls = []
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    calls.append(kwargs)
+                    class _M: pass
+                    m = _M(); m.content = ""
+                    class _C: pass
+                    c = _C(); c.message = m; c.finish_reason = "length"
+                    class _R: pass
+                    r = _R(); r.choices = [c]
+                    return r
+
+    monkeypatch.setattr(llm, "get_client", lambda: _Client())
+    with pytest.raises(llm.EmptyCompletionError):
+        llm.chat_json(tier="grader", messages=[], max_output_tokens=100)
+    assert len(calls) == 2

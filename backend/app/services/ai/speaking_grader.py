@@ -7,6 +7,7 @@ Layer 3: the grader tier grades FC, LR, GRA from transcript + Azure scores infor
 import json
 import logging
 
+from app.services.ai.bands import clamp_band
 from app.services.ai.llm import chat_json, resolve_model
 
 logger = logging.getLogger(__name__)
@@ -130,13 +131,17 @@ class SpeakingGrader:
             if mapped is not None:
                 er["pronunciation"]["band"] = mapped
 
+        # Keep every band inside the range the descriptors define, before the
+        # mean — an off-scale value would otherwise drag the overall down.
+        criteria = ("fluency_coherence", "lexical_resource",
+                    "grammatical_range_accuracy", "pronunciation")
+        for criterion in criteria:
+            crit = er.get(criterion)
+            if isinstance(crit, dict):
+                crit["band"] = clamp_band(crit.get("band"), criterion=criterion)
+
         # Recalculate overall
-        bands = [
-            er.get("fluency_coherence", {}).get("band", 0),
-            er.get("lexical_resource", {}).get("band", 0),
-            er.get("grammatical_range_accuracy", {}).get("band", 0),
-            er.get("pronunciation", {}).get("band", 0),
-        ]
+        bands = [er.get(c, {}).get("band", 0) for c in criteria]
         er["overall_band"] = round(sum(bands) / 4 * 2) / 2
 
         # Attach Azure raw scores for frontend display

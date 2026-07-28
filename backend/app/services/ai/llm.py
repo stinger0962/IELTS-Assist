@@ -12,11 +12,14 @@ Verified against the production account on 2026-07-26 (gpt-5.6-luna):
   max_completion_tokens=16  -> accepted
 """
 
+import logging
 import random
 
 from openai import OpenAI
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _TIERS = {
     "grader": "OPENAI_MODEL_GRADER",
@@ -77,6 +80,11 @@ class EmptyCompletionError(RuntimeError):
     """The model spent its whole budget reasoning and returned no content."""
 
 
+# Retry ladder: an empty completion means reasoning ate the budget, so the
+# retry asks for less of it.
+_LOWER_EFFORT = {"high": "medium", "medium": "low", "low": "minimal", "minimal": "minimal"}
+
+
 def _is_next_gen(model: str) -> bool:
     """True for GPT-5-generation models, which use the newer parameter set."""
     return model.startswith("gpt-5")
@@ -130,25 +138,44 @@ def chat_json(
     response_format=json_object requires a top-level object and would break
     callers that parse a list.
     """
-    kwargs = build_request(
-        model=resolve_model(tier),
-        messages=messages,
-        max_output_tokens=max_output_tokens,
-        temperature=temperature,
-        reasoning_effort=reasoning_effort,
-        json_mode=json_mode,
+    model = resolve_model(tier)
+
+    # Measured ~9% of gradings came back empty: the model spent its entire
+    # budget reasoning and emitted nothing. Retry once, and change the two
+    # things that caused it — more room, less reasoning — rather than repeating
+    # the same request and hoping.
+    attempts = (
+        (max_output_tokens, reasoning_effort),
+        (max_output_tokens * 2, _LOWER_EFFORT.get(reasoning_effort, "low")),
     )
-    response = get_client().chat.completions.create(**kwargs)
-    choice = response.choices[0]
-    content = choice.message.content
+
+    last = None
+    for attempt, (budget, effort) in enumerate(attempts, start=1):
+        kwargs = build_request(
+            model=model,
+            messages=messages,
+            max_output_tokens=budget,
+            temperature=temperature,
+            reasoning_effort=effort,
+            json_mode=json_mode,
+        )
+        choice = get_client().chat.completions.create(**kwargs).choices[0]
+        content = choice.message.content
+        if content:
+            if attempt > 1:
+                logger.warning("%s recovered on retry (budget %s, effort %s)", model, budget, effort)
+            return content
+
+        last = (choice.finish_reason, kwargs.get("max_completion_tokens") or kwargs.get("max_tokens"))
+        logger.warning(
+            "%s returned empty content (finish_reason=%r, cap=%s) on attempt %d",
+            model, last[0], last[1], attempt,
+        )
 
     # Fail loudly. Otherwise this surfaces downstream as an opaque
     # "Expecting value: line 1 column 1 (char 0)" from json.loads.
-    if not content:
-        raise EmptyCompletionError(
-            f"{kwargs['model']} returned empty content "
-            f"(finish_reason={choice.finish_reason!r}, "
-            f"cap={kwargs.get('max_completion_tokens') or kwargs.get('max_tokens')}). "
-            "Raise max_output_tokens or lower reasoning_effort."
-        )
-    return content
+    raise EmptyCompletionError(
+        f"{model} returned empty content twice "
+        f"(finish_reason={last[0]!r}, cap={last[1]}). "
+        "Raise max_output_tokens or lower reasoning_effort."
+    )

@@ -22,6 +22,7 @@ Hard caps ONLY for: <150 words, completely off-topic.
 import json
 import logging
 
+from app.services.ai.bands import clamp_band
 from app.services.ai.llm import chat_json, resolve_model
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,17 @@ class WritingGrader:
         scoring = json.loads(raw)
 
         er = scoring.get("examiner_result", {})
+
+        # ── Keep every band inside the range the descriptors define ──
+        # Runs BEFORE the caps and the mean, so an off-scale value cannot drag
+        # the overall down. Production was seen returning 2.5 and 3.0, which no
+        # part of the supplied rubric can justify.
+        for criterion in ("task_response", "coherence_cohesion",
+                          "lexical_resource", "grammatical_range_accuracy"):
+            crit = er.get(criterion)
+            if isinstance(crit, dict):
+                crit["band"] = clamp_band(crit.get("band"), criterion=criterion,
+                                          context=f"({word_count} words)")
 
         # ── Programmatic word count safety net ──
         # Hard caps ONLY for severe under-length (the prompt instructs GPT to
