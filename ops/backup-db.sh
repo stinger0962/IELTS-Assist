@@ -38,7 +38,13 @@ if [ "$SIZE" -lt 1024 ]; then
   exit 1
 fi
 # Confirm it actually contains schema, not just a valid-but-empty gzip.
-if ! zcat "$TMP" | head -200 | grep -q "CREATE TABLE"; then
+#
+# Counted, not short-circuited: `zcat | head | grep -q` exits early, which sends
+# SIGPIPE to zcat (141) and — under `set -o pipefail` — makes the whole pipeline
+# look failed even when the match was found. That rejected a perfectly good
+# 3 MB dump on 2026-07-28. `grep -c` consumes all input, so no SIGPIPE.
+TABLES=$(zcat "$TMP" | grep -c 'CREATE TABLE' || true)
+if [ "${TABLES:-0}" -lt 1 ]; then
   echo "FATAL: dump contains no CREATE TABLE — refusing to keep it" >&2
   rm -f "$TMP"
   exit 1
@@ -49,4 +55,4 @@ mv "$TMP" "$OUT"
 # Rotate: keep the newest $KEEP, delete the rest.
 ls -1t "$DEST"/ielts-*.sql.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm --
 
-echo "backup ok: $OUT (${SIZE} bytes), $(ls -1 "$DEST"/ielts-*.sql.gz | wc -l) kept"
+echo "backup ok: $OUT (${SIZE} bytes, ${TABLES} tables), $(ls -1 "$DEST"/ielts-*.sql.gz | wc -l) kept"
