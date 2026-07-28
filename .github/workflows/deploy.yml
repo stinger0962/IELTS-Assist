@@ -160,6 +160,16 @@ jobs:
             systemctl daemon-reload
             echo "Installed systemd drop-in; .env is authoritative, --reload dropped"
 
+            # --- Nightly database backup ---
+            # The droplet had NO backups of any kind until 2026-07-27: a disk
+            # failure would have permanently destroyed every account, essay,
+            # grade and saved word. Both files live in the repo so they are
+            # reviewed and version-controlled, not hand-written on the server.
+            install -m 700 /root/IELTS-Assist/ops/backup-db.sh /usr/local/bin/ielts-backup.sh
+            install -m 644 /root/IELTS-Assist/ops/ielts-backup.cron /etc/cron.d/ielts-backup
+            # Take one now, so a backup exists before the first scheduled run.
+            /usr/local/bin/ielts-backup.sh
+
             # Backend
             cd backend
             source venv/bin/activate

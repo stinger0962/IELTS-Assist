@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Nightly Postgres backup with 7-day rotation. Installed by deploy.yml.
+0 2 * * * root /usr/local/bin/ielts-backup.sh >> /var/log/ielts-backup.log 2>&1
+
