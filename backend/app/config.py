@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
+    # Public site. Single source of truth for the domain — used for CORS, email
+    # links and anything else user-facing. Changing domain should be one value.
+    SITE_URL: str = "https://annababy.cc"
+
     # CORS — production is same-origin behind nginx, so these matter only for
     # local dev today. Listed explicitly so an API subdomain later doesn't get
     # debugged from a stale localhost-only default.
@@ -40,6 +44,14 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:3000",
     ]
+
+    # --- Transactional email (Resend) ---
+    # Unset key => reset links are logged rather than sent, so the feature can
+    # ship and be tested before the credential exists.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "IELTS Assist <noreply@annababy.cc>"
+    PASSWORD_RESET_TTL_MINUTES: int = 60
+    PASSWORD_RESET_MAX_PER_HOUR: int = 3
     
     # OpenAI
     OPENAI_API_KEY: str = ""

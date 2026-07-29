@@ -43,6 +43,10 @@ export const authAPI = {
     ),
   register: (data: { email: string; username: string; password: string; full_name?: string }) =>
     api.post('/auth/register', data),
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }),
+  resetPassword: (token: string, new_password: string) =>
+    api.post('/auth/reset-password', { token, new_password }),
   // token param bypasses the interceptor — used right after login before store is updated
   me: (token?: string) => token
     ? api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } })

@@ -15,9 +15,65 @@ from app.schemas.schemas import (
     SettingsUpdate
 )
 from app.services.auth import get_password_hash, authenticate_user, create_access_token, get_current_user
+from app.services import email as email_service
+from app.services import password_reset
 from app.config import settings
+from pydantic import BaseModel, EmailStr, Field
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+class ForgotPasswordBody(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
+
+
+# Identical for every outcome — see the endpoint docstring.
+_FORGOT_PASSWORD_RESPONSE = {
+    "message": "If that email is registered, a reset link has been sent."
+}
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordBody, db: Session = Depends(get_db)):
+    """Email a reset link.
+
+    Always returns the same response, whether the address is registered,
+    unknown, or throttled. Anything else turns this into an oracle for who has
+    an account — which on a study app reveals who is preparing for IELTS.
+    """
+    user = db.query(User).filter(User.email == body.email).first()
+    if user is not None:
+        raw = password_reset.issue(db, user)
+        if raw is not None:
+            sent = email_service.send_email(
+                to=user.email,
+                subject="Reset your IELTS Assist password",
+                html=password_reset.build_email_html(raw),
+            )
+            if not sent:
+                # Email is unconfigured or the provider refused. The token is
+                # still valid; log the link so the flow is usable meanwhile.
+                logger.warning("reset link for %s could not be emailed: %s",
+                               user.email, password_reset.reset_url(raw))
+    return _FORGOT_PASSWORD_RESPONSE
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordBody, db: Session = Depends(get_db)):
+    """Consume a reset token and set the new password."""
+    if not password_reset.consume(db, body.token, body.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired. Please request a new one.",
+        )
+    return {"message": "Password updated. Please sign in with your new password."}
 
 # Auth Endpoints
 @router.post("/register", response_model=UserResponse)

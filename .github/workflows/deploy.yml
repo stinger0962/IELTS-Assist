@@ -86,11 +86,14 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
+          # Unset until the Resend key is added. An empty value keeps password
+          # reset in its dormant mode: the link is logged, not emailed.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: SECRET_KEY,DATABASE_URL,OPENAI_API_KEY,AZURE_SPEECH_KEY,AZURE_SPEECH_REGION
+          envs: SECRET_KEY,DATABASE_URL,OPENAI_API_KEY,AZURE_SPEECH_KEY,AZURE_SPEECH_REGION,RESEND_API_KEY
           script: |
             set -e
             cd /root/IELTS-Assist
@@ -115,6 +118,7 @@ jobs:
                 "AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION}" \
                 "PYTHONUNBUFFERED=1" \
                 "GOOGLE_APPLICATION_CREDENTIALS=/root/ielts-tts-key.json" \
+                "RESEND_API_KEY=${RESEND_API_KEY}" \
                 > "$ENV_PATH.tmp"
             )
 

@@ -24,7 +24,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    # iat lets us reject tokens issued before a password change. Without it a
+    # reset cannot end sessions, since these JWTs are stateless and long-lived.
+    to_encode.update({"exp": expire, "iat": datetime.utcnow()})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
@@ -48,6 +50,23 @@ def get_current_user(
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
+
+    # Reject tokens minted before the password last changed, so resetting a
+    # password actually logs out whoever else was holding a session.
+    #
+    # Both sides are floored to whole seconds: `iat` has no sub-second part, so
+    # comparing it against a microsecond-precision timestamp would reject a
+    # token issued moments AFTER a reset — breaking the very next login. The
+    # cost is that a token issued in the same second as the reset survives,
+    # which cannot happen in practice.
+    if user.password_changed_at is not None:
+        issued_at = payload.get("iat")
+        if issued_at is None:
+            raise credentials_exception  # pre-dates iat; treat as stale
+        issued = datetime.utcfromtimestamp(issued_at)
+        if issued < user.password_changed_at.replace(microsecond=0):
+            raise credentials_exception
+
     return user
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:

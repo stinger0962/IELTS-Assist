@@ -25,6 +25,9 @@ class User(Base):
     test_date = Column(DateTime, nullable=True)
     preferred_language = Column(String(10), default="en")
     role = Column(String(20), default="free")  # "free" or "vip"
+    # Stamped on every password change. Access tokens issued before this moment
+    # are rejected, so a reset ends sessions an attacker may already hold.
+    password_changed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
@@ -132,6 +135,24 @@ class VocabCache(Base):
     example = Column(Text, nullable=True)
     phonetic = Column(String(100), nullable=True)   # IPA, e.g. /ˈæmplɪfaɪ/
     audio_url = Column(String(500), nullable=True)  # self-hosted, under TTS_AUDIO_URL_PREFIX
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PasswordResetToken(Base):
+    """Single-use, time-limited password reset token.
+
+    Only the SHA-256 hash is stored: the value that can actually reset an
+    account exists solely in the email that was sent, so a database leak
+    yields nothing an attacker can use.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

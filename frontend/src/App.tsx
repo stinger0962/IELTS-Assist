@@ -16,6 +16,7 @@ import Goals from './pages/Goals';
 import Settings from './pages/Settings';
 import SkillProgress from './pages/SkillProgress';
 import { Login, Register } from './pages/Auth';
+import { ForgotPassword, ResetPassword } from './pages/PasswordReset';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAppStore((state) => state.token);
@@ -71,6 +72,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         
         <Route path="/" element={
           <ProtectedRoute>
