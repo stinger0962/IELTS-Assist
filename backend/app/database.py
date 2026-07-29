@@ -1,7 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Use SQLite for development if DATABASE_URL is not set properly or PostgreSQL unavailable
 # For production, set DATABASE_URL to your PostgreSQL connection string
@@ -45,11 +48,20 @@ def init_db():
         # Note: existing enum values are uppercase (READING, LISTENING, WRITING, SPEAKING)
         "ALTER TYPE skilltype ADD VALUE IF NOT EXISTS 'GRAMMAR'",
         "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'free'",
+        # Password reset: stamped on every password change so tokens issued
+        # earlier can be rejected. create_all() adds new TABLES but never new
+        # COLUMNS to existing ones, so this must be listed here — omitting it
+        # 500'd /auth/forgot-password in production while every test passed,
+        # because tests build the schema fresh from the models.
+        "ALTER TABLE users ADD COLUMN password_changed_at TIMESTAMP",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
             try:
                 conn.execute(text(stmt))
                 conn.commit()
-            except Exception:
+            except Exception as e:
+                # Expected for already-applied migrations. Logged at debug so a
+                # genuinely broken one is discoverable rather than silent.
+                logger.debug("inline migration skipped (%s): %s", stmt.split(" ADD ")[0], e)
                 conn.rollback()  # PostgreSQL aborts the whole txn on error; must rollback before next stmt
