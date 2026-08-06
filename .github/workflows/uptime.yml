@@ -8,10 +8,14 @@ on:
     - cron: '*/15 * * * *'
   workflow_dispatch: {}
 
-# Never queue a backlog of checks if one run is slow.
+# Queue overlapping runs; never cancel them. GitHub delays scheduled workflows
+# under load, so with cancel-in-progress the newer run kills the older one — and
+# a cancelled run reports as `failure`, which emailed a false alarm about a
+# perfectly healthy site. A monitor that cries wolf gets ignored, which is worse
+# than no monitor. Probes take well under a minute, so queuing costs nothing.
 concurrency:
   group: uptime
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   probe:
