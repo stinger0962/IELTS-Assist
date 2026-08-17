@@ -23,10 +23,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Frontend responds
+        env:
+          ORIGIN: ${{ secrets.VPS_HOST }}
         run: |
-          CODE=$(curl -sS -o /dev/null -w '%{http_code}' -m 20 --retry 2 --retry-delay 5 https://annababy.cc/ || echo 000)
-          echo "frontend: HTTP $CODE"
-          [ "$CODE" = "200" ] || { echo "::error::Frontend returned $CODE (expected 200)"; exit 1; }
+          probe_cf()     { curl -sS  -o /dev/null -w '%{http_code}' -m 20 https://annababy.cc/ || echo 000; }
+          # Same request, but straight at the droplet with correct SNI, so a
+          # Cloudflare-side problem can be told apart from a dead origin.
+          probe_origin() { curl -sSk -o /dev/null -w '%{http_code}' -m 20 \
+                             --resolve "annababy.cc:443:$ORIGIN" https://annababy.cc/ || echo 000; }
+
+          CODE=$(probe_cf)
+          echo "frontend via Cloudflare: HTTP $CODE"
+          if [ "$CODE" = "200" ]; then exit 0; fi
+
+          # Transient Cloudflare->origin blips are common and self-heal within
+          # seconds. Alerting on a single sample made this monitor page about a
+          # site that was serving fine, and an alert people learn to ignore is
+          # worse than none. Confirm before escalating.
+          echo "first probe failed ($CODE) — re-checking in 20s before alerting"
+          sleep 20
+          CODE2=$(probe_cf)
+          echo "frontend via Cloudflare (retry): HTTP $CODE2"
+          if [ "$CODE2" = "200" ]; then
+            echo "::notice::Transient blip: first probe returned $CODE, retry returned 200. Not alerting."
+            exit 0
+          fi
+
+          # Sustained failure. Work out which side is broken so the alert says
+          # something actionable rather than just "it's down".
+          ORIGIN_CODE=$(probe_origin)
+          echo "origin direct: HTTP $ORIGIN_CODE"
+          if [ "$ORIGIN_CODE" = "200" ]; then
+            echo "::error::Cloudflare cannot reach the origin ($CODE/$CODE2) but the origin serves 200 directly. Check Cloudflare status and the DigitalOcean firewall — the app itself is healthy."
+          else
+            echo "::error::ORIGIN DOWN: Cloudflare $CODE/$CODE2, origin direct $ORIGIN_CODE. The droplet is not serving."
+          fi
+          exit 1
 
       - name: API and database respond
         run: |
