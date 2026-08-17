@@ -51,15 +51,21 @@ jobs:
             exit 0
           fi
 
-          # Sustained failure. Work out which side is broken so the alert says
-          # something actionable rather than just "it's down".
+          # Sustained failure. Which side is actually broken decides whether this
+          # is worth waking someone for.
           ORIGIN_CODE=$(probe_origin)
           echo "origin direct: HTTP $ORIGIN_CODE"
+
           if [ "$ORIGIN_CODE" = "200" ]; then
-            echo "::error::Cloudflare cannot reach the origin ($CODE/$CODE2) but the origin serves 200 directly. Check Cloudflare status and the DigitalOcean firewall — the app itself is healthy."
-          else
-            echo "::error::ORIGIN DOWN: Cloudflare $CODE/$CODE2, origin direct $ORIGIN_CODE. The droplet is not serving."
+            # Cloudflare is failing but the app is healthy. Nobody here can fix
+            # Cloudflare's network, so emailing about it is pure noise — and a
+            # monitor that cries wolf gets muted, taking the real alerts with it.
+            # Surface it as a warning, visible in the Actions UI, without failing.
+            echo "::warning::Cloudflare cannot reach the origin (got $CODE then $CODE2), but the origin serves 200 directly — the app is healthy. Usually a Cloudflare regional incident: check https://www.cloudflarestatus.com. Not alerting."
+            exit 0
           fi
+
+          echo "::error::ORIGIN DOWN: Cloudflare returned $CODE then $CODE2, and the origin itself returned $ORIGIN_CODE. The droplet is not serving — this one is actionable."
           exit 1
 
       - name: API and database respond
