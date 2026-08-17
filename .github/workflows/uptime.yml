@@ -26,11 +26,13 @@ jobs:
         env:
           ORIGIN: ${{ secrets.VPS_HOST }}
         run: |
-          probe_cf()     { curl -sS  -o /dev/null -w '%{http_code}' -m 20 https://annababy.cc/ || echo 000; }
+          # curl already prints 000 via -w on a connection failure, so a `|| echo 000`
+          # fallback concatenates into "000000". Swallow the exit code instead.
+          probe_cf()     { curl -sS  -o /dev/null -w '%{http_code}' -m 20 https://annababy.cc/ 2>/dev/null || true; }
           # Same request, but straight at the droplet with correct SNI, so a
           # Cloudflare-side problem can be told apart from a dead origin.
           probe_origin() { curl -sSk -o /dev/null -w '%{http_code}' -m 20 \
-                             --resolve "annababy.cc:443:$ORIGIN" https://annababy.cc/ || echo 000; }
+                             --resolve "annababy.cc:443:$ORIGIN" https://annababy.cc/ 2>/dev/null || true; }
 
           CODE=$(probe_cf)
           echo "frontend via Cloudflare: HTTP $CODE"
