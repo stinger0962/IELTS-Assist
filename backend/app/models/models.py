@@ -262,3 +262,52 @@ class WritingReviewReservation(Base):
     state = Column(String(20), nullable=False)  # pending | completed | released
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
+
+
+class CheckoutOrder(Base):
+    """Offline/test-provider foundation only; offers are immutable server snapshots."""
+    __tablename__ = "checkout_orders"
+
+    id = Column(String(36), primary_key=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Nullable unique slot prevents concurrent unresolved or active purchases.
+    active_owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True)
+    idempotency_key = Column(String(100), nullable=False)
+    provider = Column(String(50), nullable=False)
+    provider_account_id = Column(String(100), nullable=False)
+    mode = Column(String(10), nullable=False)
+    sku = Column(String(100), nullable=False)
+    amount_minor = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False)
+    reviews = Column(Integer, nullable=False)
+    duration_days = Column(Integer, nullable=False)
+    state = Column(String(20), nullable=False)  # pending | fulfilled | refunded | review
+    session_id = Column(String(200), nullable=True)
+    payment_id = Column(String(200), nullable=True)
+    checkout_url = Column(Text, nullable=True)
+    grant_id = Column(Integer, ForeignKey("study_pass_grants.id"), nullable=True, unique=True)
+    created_at = Column(DateTime, nullable=False)
+    fulfilled_at = Column(DateTime, nullable=True)
+    refunded_at = Column(DateTime, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("owner_id", "idempotency_key"),
+        UniqueConstraint("provider", "provider_account_id", "mode", "session_id"),
+        UniqueConstraint("provider", "provider_account_id", "mode", "payment_id"),
+    )
+
+
+class CheckoutEvent(Base):
+    __tablename__ = "checkout_events"
+
+    id = Column(Integer, primary_key=True)
+    provider = Column(String(50), nullable=False)
+    provider_account_id = Column(String(100), nullable=False)
+    mode = Column(String(10), nullable=False)
+    event_id = Column(String(200), nullable=False)
+    order_id = Column(String(36), ForeignKey("checkout_orders.id"), nullable=False)
+    fingerprint = Column(String(64), nullable=False)
+    outcome = Column(String(20), nullable=False)
+    processed_at = Column(DateTime, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_account_id", "mode", "event_id"),
+    )
