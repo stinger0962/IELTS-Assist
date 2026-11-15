@@ -112,6 +112,8 @@ metadata is not an end-to-end fulfillment test and may correctly be rejected.
    response. Verify a successful delivery plus the app's authenticated owned
    order status `fulfilled`, exactly one grant, expected expiry/allowance, and
    full-mock access. No need to display customer data or secret values.
+   Entitlement does not populate an empty mock pool. Verify actual card delivery
+   and listening media separately using the [full-mock acceptance checklist](full-mock-delivery.md).
 4. Use Dashboard **Resend** on that event. Verify no extra grant, reset expiry
    or restored consumed reviews. Dashboard permits resending recent events;
    use its current UI rather than shell tooling.
