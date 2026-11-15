@@ -28,7 +28,7 @@ from app.config import assert_secret_key_is_safe, settings
 assert_secret_key_is_safe(settings.SECRET_KEY)
 
 from app.database import init_db
-from app.routers import auth, generate, goals, grammar, listening, listening_exam, mistakes, practice, progress, reading, reading_exam, speaking, topics, writing
+from app.routers import study_pass, auth, generate, goals, grammar, listening, listening_exam, mistakes, practice, progress, reading, reading_exam, speaking, topics, writing
 from app.routers.generate import daily_generate
 
 
@@ -61,6 +61,7 @@ app.add_middleware(
 init_db()
 
 # Include routers
+app.include_router(study_pass.router, prefix=f"{settings.API_PREFIX}/study-pass", tags=["Study pass"])
 app.include_router(auth.router, prefix=f"{settings.API_PREFIX}/auth", tags=["Auth"])
 app.include_router(progress.router, prefix=f"{settings.API_PREFIX}", tags=["Progress"])
 app.include_router(practice.router, prefix=f"{settings.API_PREFIX}/practice", tags=["Practice"])

@@ -17,6 +17,9 @@ try:
     with engine.connect() as conn:
         pass
 except Exception:
+    if settings.STUDY_PASS_ENABLED:
+        # Paid entitlements must never split silently across databases.
+        raise
     # Use SQLite as fallback
     sqlite_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ielts_assist.db")
     db_url = f"sqlite:///{sqlite_path}"

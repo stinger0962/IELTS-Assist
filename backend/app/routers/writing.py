@@ -1,17 +1,22 @@
 import json
 import logging
+import math
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.ai.writing_config import generate_metadata as writing_generate_metadata
 from app.services.ai.writing_grader import WritingGrader
 from app.services.auth import get_current_user
 from app.services.quota import quota
+from app.services.study_pass import (
+    finalize_writing_review, release_writing_review, reserve_writing_review,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -281,66 +286,140 @@ class SubmitAIWritingBody(BaseModel):
     submission_mode: str = "study"  # "study" or "exam"
 
 
-@router.post("/submit-ai-writing", dependencies=[Depends(quota("grade"))])
+def _legacy_writing_quota(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Flag-off preserves the old dependency timing. Enabled requests are metered
+    # only once an actual provider attempt is about to start.
+    if not settings.STUDY_PASS_ENABLED:
+        quota("grade")(db, current_user)
+
+
+def _validate_writing_review(result: dict, essay: str) -> None:
+    """Reject incomplete/malformed provider output before a paid result is saved."""
+    def invalid():
+        raise HTTPException(status_code=502, detail={
+            "code": "writing_review_invalid",
+            "message": "AI feedback was incomplete. Your review allowance was restored. Please retry.",
+        })
+
+    def band(value):
+        return (type(value) in (int, float) and math.isfinite(value)
+                and 0 <= value <= 9)
+
+    if not isinstance(result, dict):
+        invalid()
+    er = result.get("examiner_result")
+    cf = result.get("coaching_feedback")
+    if not isinstance(er, dict) or not band(er.get("overall_band")):
+        invalid()
+    for name in ("task_response", "coherence_cohesion", "lexical_resource",
+                 "grammatical_range_accuracy"):
+        criterion = er.get(name)
+        if (not isinstance(criterion, dict) or not band(criterion.get("band"))
+                or not isinstance(criterion.get("evidence"), str)):
+            invalid()
+        flags = criterion.get("task_completion")
+        if flags is not None and (not isinstance(flags, dict)
+                or not all(isinstance(k, str) and isinstance(v, bool) for k, v in flags.items())):
+            invalid()
+    if not isinstance(cf, dict) or not isinstance(cf.get("summary"), str):
+        invalid()
+    for field in ("strengths", "improvements"):
+        values = cf.get(field)
+        if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+            invalid()
+    annotations = result.get("annotations")
+    if not isinstance(annotations, list):
+        invalid()
+    for ann in annotations:
+        if (not isinstance(ann, dict)
+                or not all(isinstance(ann.get(k), str) for k in
+                           ("category", "severity", "suggestion"))
+                or type(ann.get("start_char")) is not int
+                or type(ann.get("end_char")) is not int
+                or not 0 <= ann["start_char"] < ann["end_char"] <= len(essay)):
+            invalid()
+
+
+@router.post("/submit-ai-writing", dependencies=[Depends(_legacy_writing_quota)])
 def submit_ai_writing(
     body: SubmitAIWritingBody,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Grade and submit an AI writing exercise. Sync GPT-4o grading (5-15s)."""
-    # 1. Find active card
-    up = db.query(UserPractice).filter(
+    """Grade a writing exercise; enabled pass reservations cover successful work only."""
+    query = db.query(UserPractice).filter(
         UserPractice.user_id == current_user.id,
         UserPractice.practice_id == body.practice_id,
-        UserPractice.submitted_at.is_(None),
-    ).first()
+    )
+    # Preserve the existing active-card-only behavior unless monetization is enabled.
+    if not settings.STUDY_PASS_ENABLED:
+        query = query.filter(UserPractice.submitted_at.is_(None))
+    up = query.first()
     if not up:
         raise HTTPException(status_code=404, detail="Active practice not found")
 
-    # 2. Validate essay
     essay = body.essay.strip()
     if len(essay) < 50:
         raise HTTPException(status_code=400, detail="Essay is too short to grade")
 
-    # 3. Load prompt data
+    if up.submitted_at is not None:
+        # Retrying a lost successful response must never run or debit a second review.
+        # Match grading inputs, not elapsed time: the timer keeps running after network errors.
+        saved = json.loads(up.user_answers or "{}")
+        if (saved.get("essay") != essay
+                or saved.get("submission_mode") != body.submission_mode
+                or not isinstance(saved.get("grading"), dict)):
+            raise HTTPException(status_code=409, detail={
+                "code": "writing_already_submitted",
+                "message": "This exercise already has a different submitted answer.",
+            })
+        return {
+            "ok": True, "grading": saved["grading"],
+            "word_count": saved["word_count"], "overall_band": up.score,
+        }
+
     gp = db.get(GeneratedPractice, body.practice_id)
-    if not gp:
+    if not gp or (settings.STUDY_PASS_ENABLED and gp.skill != "writing"):
         raise HTTPException(status_code=404, detail="Practice not found")
     practice_content = json.loads(gp.content)
     prompt_data = practice_content.get("prompt_metadata", practice_content.get("prompt", {}))
 
-    # 4. Grade via GPT-4o (sync — takes 5-15s)
-    grader = WritingGrader()
-    grading_result = grader.grade(essay, prompt_data)
+    # This durable reservation blocks duplicate in-flight calls. The service commits
+    # it before expensive work; finalization below shares the result transaction.
+    reservation = reserve_writing_review(db, current_user, body.practice_id)
+    try:
+        if settings.STUDY_PASS_ENABLED:
+            quota("grade")(db, current_user)
+        grading_result = WritingGrader().grade(essay, prompt_data)
+        if settings.STUDY_PASS_ENABLED:
+            _validate_writing_review(grading_result, essay)
+        word_count = len(essay.split())
+        overall_band = grading_result.get("examiner_result", {}).get("overall_band", 0)
+        up.submitted_at = datetime.utcnow()
+        up.user_answers = json.dumps({
+            "essay": essay, "word_count": word_count,
+            "time_seconds": body.time_seconds,
+            "submission_mode": body.submission_mode, "grading": grading_result,
+        })
+        up.score = overall_band
+        up.correct_count = 0
+        up.total_questions = 4
+        finalize_writing_review(db, reservation)
+        db.commit()
+    except Exception:
+        # Roll back any result write before releasing the matching pending token.
+        # Release is idempotent and cannot refund a successfully finalized review.
+        db.rollback()
+        release_writing_review(db, reservation)
+        raise
 
-    # 5. Store results
-    word_count = len(essay.split())
-    overall_band = grading_result.get("examiner_result", {}).get("overall_band", 0)
-    user_answers = json.dumps({
-        "essay": essay,
-        "word_count": word_count,
-        "time_seconds": body.time_seconds,
-        "submission_mode": body.submission_mode,
-        "grading": grading_result,
-    })
-
-    up.submitted_at = datetime.utcnow()
-    up.user_answers = user_answers
-    up.score = overall_band
-    up.correct_count = 0  # not applicable for writing
-    up.total_questions = 4  # 4 criteria
-    db.commit()
-
-    # 6. Selective Topics extraction from recurring annotation patterns
     _extract_writing_topics(grading_result, current_user.id, db)
-
-    # 7. Background replenish
     background_tasks.add_task(_replenish_writing, current_user.id)
-
     return {
-        "ok": True,
-        "grading": grading_result,
-        "word_count": word_count,
-        "overall_band": overall_band,
+        "ok": True, "grading": grading_result,
+        "word_count": word_count, "overall_band": overall_band,
     }

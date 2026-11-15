@@ -4,6 +4,26 @@ import { initReactI18next } from 'react-i18next';
 const resources = {
   en: {
     translation: {
+      studyPass: {
+        title: '30-day study pass',
+        legacy: 'Your existing VIP access is unchanged.',
+        usedTrial: 'Your free writing review has been used.',
+        description: 'One-time access, no automatic renewal.',
+        active: 'Pass active',
+        expires: 'Expires {{date}}',
+        remaining: '{{count}} writing reviews remaining',
+        expired: 'Your pass has expired. Basic practice remains free.',
+        trial: 'Try one free AI writing review before choosing a pass.',
+        details: 'What is included?',
+        mocks: 'Full reading and listening mock tests.',
+        reviews: 'A capped allowance of AI writing feedback, not unlimited reviews.',
+        basic: 'Basic practice stays free.',
+        unavailable: 'Purchasing is not available yet. No payment will be taken.',
+        disclaimer: 'AI feedback is for practice, not an official IELTS score or score guarantee.',
+        required: 'A study pass or available writing review is required. Your essay is still here; you can continue editing or copy it.',
+        failed: 'Grading failed. Please try again.',
+        feedback: 'Your essay will receive AI feedback.',
+      },
       app: {
         name: 'IELTS Assist',
         tagline: 'Your Personal IELTS Preparation Assistant'
@@ -131,6 +151,26 @@ const resources = {
   },
   zh: {
     translation: {
+      studyPass: {
+        title: '30天学习通行证',
+        legacy: '你现有的 VIP 权益保持不变。',
+        usedTrial: '免费写作批改次数已用完。',
+        description: '一次购买，不自动续费。',
+        active: '通行证有效',
+        expires: '到期日期：{{date}}',
+        remaining: '剩余 {{count}} 次写作批改',
+        expired: '通行证已到期，基础练习仍然免费。',
+        trial: '选择通行证前，可免费体验一次 AI 写作批改。',
+        details: '包含哪些功能？',
+        mocks: '完整阅读和听力模拟考试。',
+        reviews: '限额 AI 写作反馈，并非无限次批改。',
+        basic: '基础练习保持免费。',
+        unavailable: '暂未开放购买，不会收取任何费用。',
+        disclaimer: 'AI 反馈仅供练习参考，不是雅思官方评分，也不保证考试成绩。',
+        required: '需要有效通行证或可用写作次数。作文仍保留在此处，可继续编辑或复制。',
+        failed: '批改失败，请重试。',
+        feedback: '你的作文将获得 AI 反馈。',
+      },
       app: {
         name: 'IELTS助手',
         tagline: '您的个人雅思备考助手'

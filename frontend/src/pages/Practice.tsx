@@ -18,6 +18,8 @@ import AISpeakingFullTestView from '../components/practice/AISpeakingFullTestVie
 import AIReadingFullTestView from '../components/practice/AIReadingFullTestView';
 import AIListeningFullTestView from '../components/practice/AIListeningFullTestView';
 import VipGate from '../components/VipGate';
+import StudyPassPanel from '../components/StudyPassPanel';
+import { useStudyPass } from '../hooks/useStudyPass';
 import { useAppStore } from '../store';
 
 // Error boundary to prevent white screens from component crashes
@@ -64,7 +66,8 @@ export default function Practice() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const { user } = useAppStore();
-  const isVip = user?.role === 'vip';
+  const { status: studyPass, refresh: refreshStudyPass } = useStudyPass();
+  const isVip = user?.role === 'vip' || (studyPass?.enabled === true && studyPass.full_mock_access);
 
   const [aiReadingExercises, setAIReadingExercises] = useState<AIReadingPractice[]>([]);
   const [currentAIExercise, setCurrentAIExercise] = useState<AIReadingPractice | null>(null);
@@ -485,7 +488,7 @@ export default function Practice() {
     return (
       <div className="practice">
         <button className="back-btn" onClick={handleBack}><ChevronLeft size={16} /> Back</button>
-        <AIWritingExerciseView exercise={currentAIWriting} onBack={handleBack} />
+        <AIWritingExerciseView exercise={currentAIWriting} onBack={handleBack} studyPass={studyPass} onReviewed={refreshStudyPass} />
         <style>{sharedExerciseStyles}</style>
       </div>
     );
@@ -620,6 +623,7 @@ export default function Practice() {
   // Main list
   return (
     <div className="practice">
+      <StudyPassPanel status={studyPass} />
       {/* Skill icon grid — always fully visible */}
       <div className="skill-icon-grid">
         {skillTabs.map((tab) => {

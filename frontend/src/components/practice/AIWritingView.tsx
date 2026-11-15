@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import StudyPassPanel from '../StudyPassPanel';
+import type { StudyPassStatus } from '../../hooks/useStudyPass';
 import { Check, X } from 'lucide-react';
 import { practiceAPI, progressAPI } from '../../api';
 import type {
@@ -16,10 +19,17 @@ const ESSAY_TYPE_LABELS: Record<string, string> = {
 function AIWritingExerciseView({
   exercise,
   onBack,
+  studyPass = null,
+  onReviewed,
 }: {
   exercise: AIWritingPractice;
   onBack: () => void;
+  studyPass?: StudyPassStatus | null;
+  onReviewed?: () => void;
 }) {
+  const { t } = useTranslation();
+  const submitting = useRef(false);
+  const [passRequired, setPassRequired] = useState(false);
   const [essay, setEssay] = useState('');
   const [mode, setMode] = useState<'study' | 'exam'>('study');
   const [submitted, setSubmitted] = useState(false);
@@ -50,16 +60,19 @@ function AIWritingExerciseView({
   };
 
   const handleSubmit = async () => {
-    if (wordCount < 20 || !exercise.practice_db_id) return;
+    if (submitting.current || wordCount < 20 || !exercise.practice_db_id) return;
+    submitting.current = true;
+    setPassRequired(false);
     setGradingLoading(true);
     setGradingError('');
-    if (timerRef.current) clearInterval(timerRef.current);
     try {
       const timeSeconds = Math.floor((Date.now() - startTime) / 1000);
       const res = await practiceAPI.submitAIWriting(exercise.practice_db_id, essay, timeSeconds, mode);
       const result = res.data?.grading as WritingGradingResult;
       setGrading(result);
       setSubmitted(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+      onReviewed?.();
 
       // Update progress
       const overallBand = result?.examiner_result?.overall_band ?? 0;
@@ -77,8 +90,13 @@ function AIWritingExerciseView({
         notes: `Writing Task 2 (${exercise.meta.essay_type}) — Band ${overallBand}`,
       });
     } catch (err: any) {
-      setGradingError(err?.response?.data?.detail || 'Grading failed. Please try again.');
+      const detail = err?.response?.data?.detail;
+      const required = err?.response?.status === 402 && detail?.code === 'study_pass_required';
+      setPassRequired(required);
+      setGradingError(required ? t('studyPass.required') : typeof detail === 'string' ? detail : t('studyPass.failed'));
+      if (required) onReviewed?.();
     } finally {
+      submitting.current = false;
       setGradingLoading(false);
     }
   };
@@ -213,6 +231,7 @@ function AIWritingExerciseView({
   // Writing state (before submit)
   return (
     <div className="writing-exercise">
+      <StudyPassPanel status={studyPass} />
       {/* Mode toggle */}
       <div className="writing-mode-toggle">
         <button className={`mode-btn ${mode === 'study' ? 'active' : ''}`} onClick={() => setMode('study')}>Study</button>
@@ -251,7 +270,9 @@ function AIWritingExerciseView({
         </span>
       </div>
 
-      {gradingError && <p className="grading-error">{gradingError}</p>}
+      {gradingError && <p className="grading-error" role="alert">{gradingError}</p>}
+
+      {passRequired && <p role="status">{t('studyPass.unavailable')}</p>}
 
       <div className="writing-actions">
         <button
@@ -261,7 +282,7 @@ function AIWritingExerciseView({
         >
           Submit for Grading
         </button>
-        <p className="grading-disclaimer">Your essay will be graded by AI (GPT-4o)</p>
+        <p className="grading-disclaimer">{t('studyPass.feedback')}</p>
       </div>
 
       <style>{writingStyles}</style>

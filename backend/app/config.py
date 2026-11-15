@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # needs a listening test before switching.
     OPENAI_MODEL_TRANSCRIBE: str = "whisper-1"
 
+    # Opt-in foundation only; never enabled by deployment defaults.
+    STUDY_PASS_ENABLED: bool = False
+
     # --- AI usage quotas (per user, per UTC day) ---
     # Sized to bound catastrophe, not to ration study: normal use never reaches
     # these, but a runaway loop is capped.

@@ -234,3 +234,31 @@ class UserPractice(Base):
 
     user = relationship("User", back_populates="user_practices")
     practice = relationship("GeneratedPractice", back_populates="user_practices")
+
+
+class StudyPassGrant(Base):
+    """Internal grants only. No endpoint can mint one; payment integration is separate."""
+    __tablename__ = "study_pass_grants"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    source_key = Column(String(200), nullable=False, unique=True)
+    kind = Column(String(20), nullable=False)  # pass | trial
+    starts_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    reviews_granted = Column(Integer, nullable=False)
+    reviews_remaining = Column(Integer, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+
+class WritingReviewReservation(Base):
+    __tablename__ = "writing_review_reservations"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_practice_id = Column(Integer, ForeignKey("user_practices.id"), nullable=False, unique=True)
+    grant_id = Column(Integer, ForeignKey("study_pass_grants.id"), nullable=True)
+    token = Column(String(36), nullable=False)
+    state = Column(String(20), nullable=False)  # pending | completed | released
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)

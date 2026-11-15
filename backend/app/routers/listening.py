@@ -1,3 +1,4 @@
+from app.services.study_pass import has_full_mock_access
 """Listening skill — pool helpers + endpoints."""
 import json
 import logging
@@ -128,7 +129,7 @@ def get_daily_listening(
             db.commit()
 
     # For VIP users, also deal full test cards (separate from practice cards)
-    if current_user.role == 'vip':
+    if has_full_mock_access(db, current_user):
         # Check if user already has an active full test
         active_full = (
             db.query(UserPractice)
