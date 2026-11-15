@@ -143,3 +143,12 @@ approval. Invalidate temporary credentials only within approved cleanup scope.
   webhook-backed fulfillment and duplicate-safe processing.
 - [Stripe testing](https://docs.stripe.com/testing): sandbox-only payments and test
   cards; never real card details.
+
+## Later live-launch preparation: interrupted writing reviews
+
+Before live launch, rehearse the [stale writing reservation recovery runbook](../operations/writing-reservation-recovery.md)
+in separately authorized isolated staging with a synthetic account and stub grader.
+Confirm stopped-worker evidence, exact attempt identity, no saved result, one-time
+credit restoration, and rejection of a late stale completion. This is **not a
+prerequisite for the first Stripe sandbox webhook test** above. Do not release
+reservations solely because of age or use this checklist as production approval.
