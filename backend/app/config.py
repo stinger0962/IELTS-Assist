@@ -71,6 +71,17 @@ class Settings(BaseSettings):
     # Opt-in foundation only; never enabled by deployment defaults.
     STUDY_PASS_ENABLED: bool = False
 
+    # Separate, explicitly configured sandbox milestone. Never uses SITE_URL.
+    STRIPE_TEST_CHECKOUT_ENABLED: bool = False
+    STRIPE_TEST_SECRET_KEY: str = ""
+    STRIPE_TEST_WEBHOOK_SECRET: str = ""
+    STRIPE_TEST_ACCOUNT_ID: str = ""
+    STRIPE_TEST_RETURN_ORIGIN: str = ""
+    STRIPE_TEST_OFFER_SKU: str = ""
+    STRIPE_TEST_AMOUNT_MINOR: int = 0
+    STRIPE_TEST_CURRENCY: str = "USD"
+    STRIPE_TEST_WRITING_REVIEWS: int = 0
+
     # --- AI usage quotas (per user, per UTC day) ---
     # Sized to bound catastrophe, not to ration study: normal use never reaches
     # these, but a runaway loop is capped.

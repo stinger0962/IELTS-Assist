@@ -1,7 +1,8 @@
+import StudyPassCheckout from './StudyPassCheckout';
 import { useTranslation } from 'react-i18next';
 import type { StudyPassStatus } from '../hooks/useStudyPass';
 
-export default function StudyPassPanel({ status }: { status: StudyPassStatus | null }) {
+export default function StudyPassPanel({ status, hasDraft = false }: { status: StudyPassStatus | null; hasDraft?: boolean }) {
   const { t, i18n } = useTranslation();
   if (!status?.enabled) return null;
   return (
@@ -29,7 +30,7 @@ export default function StudyPassPanel({ status }: { status: StudyPassStatus | n
           <li>{t('studyPass.reviews')}</li>
           <li>{t('studyPass.basic')}</li>
         </ul>
-        <p>{t('studyPass.unavailable')}</p>
+        <StudyPassCheckout hasDraft={hasDraft} />
         <p>{t('studyPass.disclaimer')}</p>
       </details>
       <style>{`

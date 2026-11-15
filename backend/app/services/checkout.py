@@ -6,7 +6,7 @@ client payload or checkout-completed event alone must NEVER become a settled sna
 Only normalized identifiers/statuses are persisted; no card or customer billing data.
 """
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from hashlib import sha256
 import json
 from typing import Protocol
@@ -144,6 +144,10 @@ def start_checkout(db: Session, user_id: int, idempotency_key: str,
             if order.session_id or order.state != "pending":
                 db.commit()
                 return order
+            # Stripe may prune idempotency keys after 24 hours. An unresolved
+            # attempt must not create another remote session after that window.
+            if order.created_at > now or now - order.created_at >= timedelta(hours=23):
+                raise HTTPException(409, "Checkout creation requires reconciliation")
         else:
             if user.role == "vip" or _active_pass(db, user_id, now):
                 raise HTTPException(409, "An active entitlement already exists")

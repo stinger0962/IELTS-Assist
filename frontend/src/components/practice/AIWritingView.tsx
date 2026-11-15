@@ -231,7 +231,7 @@ function AIWritingExerciseView({
   // Writing state (before submit)
   return (
     <div className="writing-exercise">
-      <StudyPassPanel status={studyPass} />
+      <StudyPassPanel status={studyPass} hasDraft={essay.trim().length > 0} />
       {/* Mode toggle */}
       <div className="writing-mode-toggle">
         <button className={`mode-btn ${mode === 'study' ? 'active' : ''}`} onClick={() => setMode('study')}>Study</button>
