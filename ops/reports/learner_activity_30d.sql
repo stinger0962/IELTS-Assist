@@ -37,6 +37,9 @@ eligible_users AS (
 ), active_days AS (
     SELECT user_id, COUNT(DISTINCT activity_date) AS days
     FROM completed GROUP BY user_id
+), writing_days AS (
+    SELECT user_id, COUNT(DISTINCT activity_date) AS days
+    FROM completed WHERE skill = 'writing' GROUP BY user_id
 )
 SELECT
     (SELECT window_start FROM params) AS window_start_utc_inclusive,
@@ -48,6 +51,9 @@ SELECT
     (SELECT COUNT(*) FROM completed) AS completed_practices,
     (SELECT COUNT(*) FROM completed WHERE skill = 'writing') AS writing_completions,
     (SELECT COUNT(DISTINCT user_id) FROM completed WHERE skill = 'writing') AS writing_learners,
+    (SELECT COUNT(*) FROM active_days a JOIN writing_days w ON w.user_id = a.user_id
+        WHERE a.days >= 2) AS returning_learners_with_writing,
+    (SELECT COUNT(*) FROM writing_days WHERE days >= 2) AS returning_writing_learners_two_utc_dates,
     (SELECT COUNT(*) FROM completed WHERE skill = 'speaking') AS speaking_completions,
     (SELECT COUNT(DISTINCT user_id) FROM completed WHERE skill = 'speaking') AS speaking_learners,
     (SELECT COUNT(*) FROM completed WHERE skill = 'reading') AS reading_completions,

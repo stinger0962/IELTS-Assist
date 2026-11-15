@@ -56,6 +56,15 @@ or execution window, not to change production. `psql -X` ignores local psqlrc.
   per-skill completion counts and writing/speaking distinct learner counts show
   where personalized feedback is actually used. Skill labels are normalized to
   lower case. Writing means the implemented Task 2 flow, not every writing task.
+- `returning_learners_with_writing`: intersection of accounts with completions on
+  at least two distinct UTC dates across **any** skill and accounts with at least
+  one writing completion in the same window. A writing completion on Monday and
+  a speaking completion on Tuesday qualifies; two writing dates are not required.
+- `returning_writing_learners_two_utc_dates`: accounts with writing completions on
+  at least two distinct UTC dates in the window. Two writing completions on one
+  date do not qualify. This is a subset of the previous column, not an additional
+  cohort to add to it. Neither metric is paid demand, D7 retention or proof of
+  human identity. Both apply the same operator/test exclusions and time window.
 - `content_pool_rows_created_not_learner_activity`: all generated-practice rows
   created in the window, shown separately. Pool generation can be scheduled,
   seeded or replenished after a request. It is **not a user count or proof of
@@ -97,20 +106,44 @@ this report intentionally does not invent one from provider usage.
 python -m unittest discover -s ops/reports/tests -v
 ```
 
-The standard-library tests run only synthetic in-memory SQLite fixtures. They
+By default, the standard-library tests run only synthetic in-memory SQLite fixtures
+and skip the opt-in Postgres smoke test. The SQLite tests
 execute the aggregate CTE/SELECT core unchanged and replace only the Postgres
 parameter/exclusion CTE with bound fixture parameters. Cases cover empty data,
 window boundaries, owner/test exclusions, uppercase skills, unsubmitted cards,
-same-day repeat submissions, distinct returning dates and untouched generated
-pool content. They also check the read-only/output contract. No app import,
-network, real provider call, production data or live database is involved.
+same-day repeat submissions, cross-skill versus writing-specific returning
+cohorts, distinct returning dates and untouched generated
+pool content. They also check the read-only/output contract. No app import, network, real provider call, production data or live database is
+involved in the default run.
 
-**Not verified by these tests:** psql variable parsing, Postgres array/timestamp
+**Not verified by the SQLite tests:** psql variable parsing, Postgres array/timestamp
 conversion, transaction commands, the deployed schema, production runtime or
-query performance. Before operational use, an authorized operator should smoke
-test the complete script against a disposable Postgres fixture with the same
-columns and expected counts. Do not represent the SQLite fixture pass as a
-Postgres execution or a production traffic measurement.
+query performance. Do not represent their pass as Postgres execution or a
+production traffic measurement.
+
+An opt-in `test_postgres_wrapper.py` runs the **complete unchanged SQL script**
+through `psql` against a disposable synthetic Postgres schema. It requires `psql`
+and the repository's `psycopg2-binary` dependency. CI already provisions a
+Postgres 16 service; an authorized integration lane can invoke:
+
+```sh
+IELTS_TEST_POSTGRES_ALLOW_DISPOSABLE=1 \
+IELTS_TEST_POSTGRES_URL='postgresql+psycopg2://test_user:test_pass@127.0.0.1:5432/test_db' \
+python -m unittest discover -s ops/reports/tests -v
+```
+
+These are existing **ephemeral CI fixture credentials**, never production
+credentials. The smoke test refuses non-loopback hosts, non-test identities or
+URL options, verifies the server-reported user/database, creates a random schema
+and removes only that schema afterward. It strips inherited PG connection
+settings before running `psql`, uses `-X`, and confines the report through
+`search_path`. The fixture creates test tables/data; the report itself remains
+read-only. This is not permission to access production. Missing URL skips; a
+configured but unavailable/unsafe target or missing `psql` fails, never silently
+falls back. No CI workflow is changed by adding the test. Initial local result:
+four SQLite tests passed; Postgres smoke skipped because no server/psql was
+available. Production schema/performance remain unverified even after a future
+synthetic Postgres pass.
 
 ## Repository basis
 
