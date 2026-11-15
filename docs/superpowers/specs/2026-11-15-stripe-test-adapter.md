@@ -74,3 +74,41 @@ sandbox smoke test. Passing these fixtures does not claim live payments work.
 - [Refund pagination](https://docs.stripe.com/api/refunds/list).
 - [Idempotency](https://docs.stripe.com/api/idempotent_requests?lang=python):
   same-key retries and API v1 key-retention limits.
+
+## Dashboard-created USD19 Price (optional, backward compatible)
+
+The owner may create the sandbox Product and Price in Stripe Dashboard without any
+CLI. The Product must be named **IELTS 30-Day Study Pass**, active and in test mode.
+Its selected Price must be active, fixed per-unit, one-time, USD1900 minor units,
+without custom amount or quantity transformation. No Product metadata entry is
+required. Configure its nonsecret ID through STRIPE_TEST_PRICE_ID only on the
+server; the browser cannot provide a Price. No actual Price ID is committed.
+
+Before creating Checkout, the adapter verifies the expected sandbox merchant and
+retrieves the exact selected Price with expanded Product. It rejects wrong account,
+live objects, other product names, inactive objects, recurring/tiered/custom pricing
+and any amount/currency mismatch. It creates a one-time session using that Price ID,
+quantity one and explicit USD currency, never inline price_data on this path.
+
+The order stores the selected Price ID before requesting a session, and binds the
+verified Product ID when attaching the session. Both IDs enter server-created
+Session/PaymentIntent metadata and the authoritative payment snapshot. Fulfillment
+compares them with the **stored order**, not current environment configuration. A
+new configured Price cannot reinterpret an existing order. Retrying an old key with
+a different offer returns conflict; reading the existing order remains possible.
+
+A Product rename or Price/Product archival after checkout does not invalidate a
+legitimate settlement/refund: the immutable IDs, amount, currency and relationships
+must still match. Creation requires active/name checks; settlement does not.
+A mismatch in Price or Product identity always fails closed.
+
+Legacy inline orders retain null bindings, their existing SKU checks and original
+event fingerprints. Two additive nullable-column migrations preserve those records;
+no data backfill or destructive migration is needed. The mocked tests include
+schema upgrade/re-run, wrong-app/mode/account, config changes, archival, immutable
+binding, and the legacy inline path. Actual sandbox acceptance still needs its
+separately authorized smoke run.
+
+References: [Price retrieval](https://docs.stripe.com/api/prices/retrieve),
+[Price object](https://docs.stripe.com/api/prices/object),
+[Checkout creation](https://docs.stripe.com/api/checkout/sessions/create).

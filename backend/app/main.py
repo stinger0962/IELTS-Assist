@@ -34,11 +34,16 @@ from app.routers.generate import daily_generate
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.DAILY_GENERATION_ENABLED:
+        yield
+        return
     scheduler = AsyncIOScheduler()
     scheduler.add_job(daily_generate, CronTrigger(hour=0, minute=0), id="daily_generate")
     scheduler.start()
-    yield
-    scheduler.shutdown(wait=False)
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

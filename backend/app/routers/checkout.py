@@ -1,5 +1,6 @@
 """Disabled-by-default sandbox checkout HTTP boundary; never a grant endpoint."""
 from urllib.parse import urlsplit
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,6 +45,11 @@ def _sandbox():
             or not settings.STRIPE_TEST_WEBHOOK_SECRET.startswith('whsec_')
             or not settings.STRIPE_TEST_ACCOUNT_ID.startswith('acct_')):
         raise ValueError('Explicit sandbox credentials required')
+    price_id = settings.STRIPE_TEST_PRICE_ID or None
+    if price_id is not None and (
+        not re.fullmatch(r"price_[A-Za-z0-9_]+", price_id) or amount != 1900 or currency != "USD"
+    ):
+        raise ValueError("Dashboard Price must be the selected USD19 test offer")
     adapter = _adapter_factory(
         api_key=settings.STRIPE_TEST_SECRET_KEY,
         webhook_secret=settings.STRIPE_TEST_WEBHOOK_SECRET,
@@ -51,7 +57,7 @@ def _sandbox():
         success_url=origin.rstrip('/') + '/checkout/return?order_id={ORDER_ID}',
         cancel_url=origin.rstrip('/') + '/checkout/cancel?order_id={ORDER_ID}',
     )
-    return Offer(sku, amount, currency, reviews), adapter
+    return Offer(sku, amount, currency, reviews, provider_price_id=price_id), adapter
 
 
 def _required_sandbox():

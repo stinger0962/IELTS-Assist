@@ -74,7 +74,11 @@ def _metadata(obj):
             or not data["reviews"].isdigit() or int(data["reviews"]) < 1
             or data["duration_days"] != "30"):
         raise ValueError("Invalid order metadata")
-    return {k: data[k] for k in _METADATA_KEYS}
+    result = {k: data[k] for k in _METADATA_KEYS}
+    if "stripe_price_id" in data or "stripe_product_id" in data:
+        result["stripe_price_id"] = _identifier(data.get("stripe_price_id"), "price_")
+        result["stripe_product_id"] = _identifier(data.get("stripe_product_id"), "prod_")
+    return result
 
 
 class StripeTestAdapter:
@@ -121,6 +125,25 @@ class StripeTestAdapter:
         if result.get("object") != "account" or result.get("id") != self.scope.account_id:
             raise ValueError("Stripe test key belongs to another account")
 
+    def _selected_price(self, order):
+        price_id = _identifier(order.provider_price_id, "price_")
+        if order.amount_minor != 1900 or order.currency != "USD":
+            raise ValueError("The selected Dashboard Price must be USD19")
+        price = _test_object(self._request(
+            "GET", f"/v1/prices/{price_id}", params={"expand[]": "product"}), "price")
+        product = _test_object(price.get("product"), "product")
+        product_id = _identifier(product.get("id"), "prod_")
+        if (price.get("id") != price_id or price.get("active") is not True
+                or price.get("type") != "one_time" or price.get("recurring") is not None
+                or price.get("billing_scheme") != "per_unit"
+                or price.get("custom_unit_amount") is not None
+                or price.get("transform_quantity") is not None
+                or price.get("unit_amount") != 1900 or price.get("currency") != "usd"
+                or product.get("active") is not True
+                or product.get("name") != "IELTS 30-Day Study Pass"):
+            raise ValueError("Selected Price is not the active IELTS USD19 one-time offer")
+        return price_id, product_id
+
     def create_checkout(self, order: CheckoutRequest):
         self._check_account()
         metadata = dict(order_id=order.order_id, user_id=str(order.user_id), sku=order.sku,
@@ -138,6 +161,15 @@ class StripeTestAdapter:
             "line_items[0][price_data][product_data][name]": "IELTS 30-day study pass",
             "line_items[0][price_data][product_data][metadata][sku]": order.sku,
         }
+        selected_price_id, selected_product_id = None, None
+        if order.provider_price_id is not None:
+            selected_price_id, selected_product_id = self._selected_price(order)
+            data = {key: value for key, value in data.items()
+                    if not key.startswith("line_items[0][price_data]")}
+            data["line_items[0][price]"] = selected_price_id
+            data["currency"] = order.currency.lower()
+            metadata["stripe_price_id"] = selected_price_id
+            metadata["stripe_product_id"] = selected_product_id
         for key, value in metadata.items():
             data[f"metadata[{key}]"] = value
             data[f"payment_intent_data[metadata][{key}]"] = value
@@ -153,7 +185,8 @@ class StripeTestAdapter:
                 or result.get("amount_total") != order.amount_minor
                 or result.get("currency") != order.currency.lower()):
             raise ValueError("Stripe checkout does not match the server order")
-        return CheckoutSession(session_id, _https_url(result.get("url"), checkout=True))
+        return CheckoutSession(session_id, _https_url(result.get("url"), checkout=True),
+                               selected_price_id, selected_product_id)
 
     def _signed_event(self, payload, headers):
         if not isinstance(payload, bytes) or not payload or len(payload) > 1_000_000:
@@ -300,9 +333,23 @@ class StripeTestAdapter:
         product = _test_object(price.get("product"), "product")
         if (line.get("quantity") != 1 or line.get("amount_total") != amount
                 or line.get("currency") != currency or price.get("unit_amount") != amount
-                or price.get("currency") != currency or price.get("recurring") is not None
-                or not isinstance(product, dict) or product.get("metadata", {}).get("sku") != metadata["sku"]):
-            raise ValueError("Checkout line item does not match study-pass SKU")
+                or price.get("currency") != currency or price.get("recurring") is not None):
+            raise ValueError("Checkout line item does not match study-pass amount")
+        selected_price_id, selected_product_id = None, None
+        if "stripe_price_id" in metadata:
+            selected_price_id = _identifier(price.get("id"), "price_")
+            selected_product_id = _identifier(product.get("id"), "prod_")
+            if (selected_price_id != metadata["stripe_price_id"]
+                    or selected_product_id != metadata["stripe_product_id"]
+                    or price.get("type") != "one_time"
+                    or price.get("billing_scheme") != "per_unit"
+                    or price.get("custom_unit_amount") is not None
+                    or price.get("transform_quantity") is not None):
+                raise ValueError("Checkout line item does not match its recorded Price/Product")
+            # Product names and active flags may change after purchase. Never use
+            # current configuration/labels to reinterpret an existing paid order.
+        elif product.get("metadata", {}).get("sku") != metadata["sku"]:
+            raise ValueError("Legacy inline checkout SKU mismatch")
         payment_id = _identifier(session.get("payment_intent"), "pi_")
         if event_payment_id is not None and event_payment_id != payment_id:
             raise ValueError("Event payment does not own Checkout Session")
@@ -333,4 +380,5 @@ class StripeTestAdapter:
         elif payment.get("status") in {"canceled", "requires_payment_method"}:
             state = "failed"
         return PaymentSnapshot(event["id"], metadata["order_id"], session_id, payment_id,
-                               metadata["sku"], amount, currency.upper(), state, refunded)
+                               metadata["sku"], amount, currency.upper(), state, refunded,
+                               selected_price_id, selected_product_id)

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # needs a listening test before switching.
     OPENAI_MODEL_TRANSCRIBE: str = "whisper-1"
 
+    # Leave existing environments unchanged; isolated checkout staging can opt out.
+    DAILY_GENERATION_ENABLED: bool = True
+
     # Opt-in foundation only; never enabled by deployment defaults.
     STUDY_PASS_ENABLED: bool = False
 
@@ -78,6 +81,7 @@ class Settings(BaseSettings):
     STRIPE_TEST_ACCOUNT_ID: str = ""
     STRIPE_TEST_RETURN_ORIGIN: str = ""
     STRIPE_TEST_OFFER_SKU: str = ""
+    STRIPE_TEST_PRICE_ID: str = ""  # optional Dashboard-created test Price
     STRIPE_TEST_AMOUNT_MINOR: int = 0
     STRIPE_TEST_CURRENCY: str = "USD"
     STRIPE_TEST_WRITING_REVIEWS: int = 0

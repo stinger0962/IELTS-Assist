@@ -28,6 +28,7 @@ class Offer:
     currency: str
     reviews: int
     duration_days: int = 30
+    provider_price_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,8 @@ class GatewayScope:
 class CheckoutSession:
     session_id: str
     url: str
+    provider_price_id: str | None = None
+    provider_product_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,7 @@ class CheckoutRequest:
     reviews: int
     duration_days: int
     idempotency_key: str
+    provider_price_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,8 @@ class PaymentSnapshot:
     currency: str
     state: str  # pending | settled | refunded | failed | disputed
     refunded_minor: int = 0
+    provider_price_id: str | None = None
+    provider_product_id: str | None = None
 
 
 class Gateway(Protocol):
@@ -88,6 +94,11 @@ def _scope(scope):
 
 
 def _validate_offer(offer):
+    if offer.provider_price_id is not None and (
+        not isinstance(offer.provider_price_id, str) or not offer.provider_price_id
+        or len(offer.provider_price_id) > 200
+    ):
+        raise ValueError("Invalid provider Price binding")
     if (not offer.sku or len(offer.sku) > 100
             or type(offer.amount_minor) is not int or offer.amount_minor < 1
             or type(offer.reviews) is not int or offer.reviews < 1
@@ -103,8 +114,10 @@ def _matches_scope(order, scope):
 
 
 def _matches_offer(order, offer):
-    return (order.sku, order.amount_minor, order.currency, order.reviews, order.duration_days) == (
-        offer.sku, offer.amount_minor, offer.currency, offer.reviews, offer.duration_days)
+    return (order.sku, order.amount_minor, order.currency, order.reviews, order.duration_days,
+            order.provider_price_id) == (
+        offer.sku, offer.amount_minor, offer.currency, offer.reviews, offer.duration_days,
+        offer.provider_price_id)
 
 
 def checkout_status(db: Session, user_id: int, order_id: str):
@@ -168,13 +181,15 @@ def start_checkout(db: Session, user_id: int, idempotency_key: str,
                 provider_account_id=gateway.scope.account_id, mode=gateway.scope.mode,
                 sku=offer.sku, amount_minor=offer.amount_minor, currency=offer.currency,
                 reviews=offer.reviews, duration_days=offer.duration_days,
+                provider_price_id=offer.provider_price_id,
                 state="pending", created_at=now,
             )
             db.add(order)
         db.commit()
         order_id = order.id
         request = CheckoutRequest(order_id, user_id, order.sku, order.amount_minor,
-                                  order.currency, order.reviews, order.duration_days, order_id)
+                                  order.currency, order.reviews, order.duration_days, order_id,
+                                  order.provider_price_id)
         # Attribute refresh after commit can start a read transaction. Close it too.
         db.commit()
     except IntegrityError as exc:
@@ -198,6 +213,16 @@ def start_checkout(db: Session, user_id: int, idempotency_key: str,
             raise ValueError("Gateway scope changed")
         if order.session_id and order.session_id != session.session_id:
             raise ValueError("Gateway changed session for an idempotent checkout")
+        if session.provider_price_id != order.provider_price_id:
+            raise ValueError("Gateway changed the immutable Price binding")
+        if order.provider_price_id is not None:
+            if (not session.provider_product_id or len(session.provider_product_id) > 200
+                    or (order.provider_product_id is not None
+                        and order.provider_product_id != session.provider_product_id)):
+                raise ValueError("Gateway changed the Product binding")
+            order.provider_product_id = session.provider_product_id
+        elif session.provider_product_id is not None:
+            raise ValueError("Unexpected Product binding on legacy inline checkout")
         order.session_id, order.checkout_url = session.session_id, session.url
         db.commit()
         return order
@@ -237,6 +262,11 @@ def process_notification(db: Session, payload: bytes, headers: dict,
     identity = asdict(snapshot)
     identity.pop("state")
     identity.pop("refunded_minor")
+    # Preserve fingerprints already stored for legacy inline orders before these
+    # optional fields existed.
+    for field in ("provider_price_id", "provider_product_id"):
+        if identity[field] is None:
+            identity.pop(field)
     fingerprint = sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     try:
         # Match the owner lock ordering used during checkout creation.
@@ -249,7 +279,9 @@ def process_notification(db: Session, payload: bytes, headers: dict,
                 or order.session_id != snapshot.session_id
                 or (order.sku, order.amount_minor, order.currency) != (
                     snapshot.sku, snapshot.amount_minor, snapshot.currency)
-                or (order.payment_id is not None and order.payment_id != snapshot.payment_id)):
+                or (order.payment_id is not None and order.payment_id != snapshot.payment_id)
+                or order.provider_price_id != snapshot.provider_price_id
+                or order.provider_product_id != snapshot.provider_product_id):
             raise ValueError("Verified payment does not match the immutable order")
         existing = db.query(CheckoutEvent).filter_by(
             provider=verifier.scope.provider, provider_account_id=verifier.scope.account_id,

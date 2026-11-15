@@ -281,6 +281,8 @@ class CheckoutOrder(Base):
     currency = Column(String(3), nullable=False)
     reviews = Column(Integer, nullable=False)
     duration_days = Column(Integer, nullable=False)
+    provider_price_id = Column(String(200), nullable=True)
+    provider_product_id = Column(String(200), nullable=True)
     state = Column(String(20), nullable=False)  # pending | fulfilled | refunded | review
     session_id = Column(String(200), nullable=True)
     payment_id = Column(String(200), nullable=True)
