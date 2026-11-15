@@ -6,7 +6,7 @@ const resources = {
     translation: {
       checkout: {
         testOnly: 'Stripe test mode only. No actual charge. Do not use real card details.',
-        offer: '{{amount}} {{currency}} test amount · 30 days · {{count}} writing reviews',
+        offer: '{{amount}} {{currency}} test amount · 30 days · {{count}} AI writing reviews',
         keepDraft: 'Your essay is still in this editor. Keep or copy your work before leaving. Start test checkout from the Practice list, not while you have an unfinished draft.',
         failed: 'Test checkout could not be opened. You have not been granted a pass. You can retry safely.',
         previous: 'A previous test checkout may still be open. Check it before continuing.',
@@ -41,13 +41,18 @@ const resources = {
         trial: 'Try one free AI writing review before choosing a pass.',
         details: 'What is included?',
         mocks: 'Full reading and listening mock tests.',
-        reviews: 'A capped allowance of AI writing feedback, not unlimited reviews.',
+        reviews: 'A capped allowance of AI writing reviews with rubric scores and coaching. Inline notes when available.',
         basic: 'Basic practice stays free.',
         unavailable: 'Purchasing is not available yet. No payment will be taken.',
         disclaimer: 'AI feedback is for practice, not an official IELTS score or score guarantee.',
         required: 'A study pass or available writing review is required. Your essay is still here; you can continue editing or copy it.',
         failed: 'Grading failed. Please try again.',
-        feedback: 'Your essay will receive AI feedback.',
+        feedback: 'Each AI writing review provides rubric scores and coaching. Inline notes are included when available.',
+      },
+      writingFeedback: {
+        unavailable: 'Partial feedback: rubric scores and coaching are provided, but inline notes are unavailable.',
+        partial: 'Partial feedback: rubric scores and coaching are provided, but some inline notes could not be displayed.',
+        empty: 'No inline notes were returned.',
       },
       app: {
         name: 'IELTS Assist',
@@ -178,7 +183,7 @@ const resources = {
     translation: {
       checkout: {
         testOnly: '仅限 Stripe 测试模式，不会实际扣款。请勿使用真实银行卡信息。',
-        offer: '测试金额 {{amount}} {{currency}} · 30天 · {{count}} 次写作批改',
+        offer: '测试金额 {{amount}} {{currency}} · 30天 · {{count}} 次 AI 写作批改',
         keepDraft: '作文仍在编辑器中。离开前请保留或复制内容。有未完成草稿时，请勿离开；准备好后从练习列表开始测试结账。',
         failed: '无法打开测试结账，尚未授予通行证。可安全重试。',
         previous: '之前的测试结账可能仍未结束，请先查询再继续。',
@@ -213,13 +218,18 @@ const resources = {
         trial: '选择通行证前，可免费体验一次 AI 写作批改。',
         details: '包含哪些功能？',
         mocks: '完整阅读和听力模拟考试。',
-        reviews: '限额 AI 写作反馈，并非无限次批改。',
+        reviews: '限额 AI 写作批改，包含分项评分和学习建议；行内批注视可用情况提供。',
         basic: '基础练习保持免费。',
         unavailable: '暂未开放购买，不会收取任何费用。',
         disclaimer: 'AI 反馈仅供练习参考，不是雅思官方评分，也不保证考试成绩。',
         required: '需要有效通行证或可用写作次数。作文仍保留在此处，可继续编辑或复制。',
         failed: '批改失败，请重试。',
-        feedback: '你的作文将获得 AI 反馈。',
+        feedback: '每次 AI 写作批改提供分项评分和学习建议；行内批注视可用情况提供。',
+      },
+      writingFeedback: {
+        unavailable: '反馈未完整提供：分项评分和学习建议已生成，但行内批注暂不可用。',
+        partial: '反馈未完整提供：分项评分和学习建议已生成，但部分行内批注无法显示。',
+        empty: '本次未返回行内批注。',
       },
       app: {
         name: 'IELTS助手',

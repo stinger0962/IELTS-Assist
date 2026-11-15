@@ -12,9 +12,9 @@ Layer A+B: Holistic scoring with soft penalties (1 grader-tier call, reasoning_e
   - Must quote evidence from the essay for each criterion
 
 Layer C: Learner annotations (1 grader-tier call, reasoning_effort=low)
-  - 6–8 annotations, ≥70% must be band-affecting
+  - Up to 8 justified annotations, prioritizing band-affecting issues
   - Added idea_development category
-  - Fallback: if this call fails, scoring result still returned
+  - Explicit complete/partial/unavailable annotation outcome; scoring survives failure
 
 Hard caps ONLY for: <150 words, completely off-topic.
 """
@@ -278,7 +278,7 @@ Think holistically like a real examiner — apply judgment, not mechanical rules
 ANNOTATION_SYSTEM_PROMPT = """You are an IELTS Writing feedback specialist. Your task is to annotate specific errors and weaknesses in the essay below.
 
 ## Rules
-1. Return EXACTLY 6–8 annotations. At least 70% (5+) MUST be band-affecting ("major" severity). Minimize cosmetic corrections.
+1. Return up to 8 justified annotations, prioritizing band-affecting issues. Return fewer or an empty annotations array when appropriate. Never invent errors to meet a quota.
 2. Each annotation must include character offsets (start_char, end_char) measured from the START of the essay text.
 3. Categories: grammar, vocabulary, spelling, punctuation, coherence, style, idea_development
 4. Severity: "major" (affects band score) or "minor" (worth noting but doesn't change band)
@@ -327,13 +327,14 @@ class WritingGrader:
         scoring = self._score_essay(essay, prompt_data)
 
         # Layer C: learner annotations (fallback-safe)
-        annotations = []
+        annotations, annotation_status = [], "unavailable"
         try:
-            annotations = self._annotate_errors(essay, prompt_data, scoring)
-        except Exception as e:
-            logger.warning(f"Annotation layer failed (scoring still valid): {e}")
+            annotations, annotation_status = self._annotate_errors(essay, prompt_data, scoring)
+        except Exception:
+            # Do not log provider payloads or essay contents. Core scoring survives.
+            logger.warning("Annotation layer unavailable; rubric feedback retained")
 
-        result = {**scoring, "annotations": annotations}
+        result = {**scoring, "annotations": annotations, "annotation_status": annotation_status}
         result["grader_version"] = self.GRADER_VERSION
         result["model"] = self.model
         return result
@@ -442,10 +443,10 @@ class WritingGrader:
             # A lone annotation object, returned without the wrapper.
             if "original_text" in parsed:
                 return [parsed]
-        return []
+        raise ValueError("Unrecognized annotation response shape")
 
-    def _annotate_errors(self, essay: str, prompt_data: dict, scoring: dict) -> list:
-        """Layer C: 6–8 annotations (≥70% band-affecting), including idea_development."""
+    def _annotate_errors(self, essay: str, prompt_data: dict, scoring: dict) -> tuple[list, str]:
+        """Optional inline notes, with an explicit completeness outcome."""
         er = scoring.get("examiner_result", {})
 
         system_prompt = ANNOTATION_SYSTEM_PROMPT.format(
@@ -475,31 +476,45 @@ class WritingGrader:
         )
         annotations = self._coerce_annotations(json.loads(raw))
 
-        # Validate and fix character offsets where possible
+        # Keep usable feedback even if individual model-produced entries are bad.
         validated = []
-        for ann in annotations:
-            original = ann.get("original_text", "")
-            start = ann.get("start_char")
-            end = ann.get("end_char")
-
-            # If offsets don't match, try to find the text in the essay
-            if start is not None and end is not None:
-                actual = essay[start:end]
-                if actual != original and original:
-                    idx = essay.find(original)
-                    if idx >= 0:
-                        ann["start_char"] = idx
-                        ann["end_char"] = idx + len(original)
-                    else:
-                        continue
-            elif original:
-                idx = essay.find(original)
-                if idx >= 0:
-                    ann["start_char"] = idx
-                    ann["end_char"] = idx + len(original)
-                else:
+        rejected = False
+        categories = {"grammar", "vocabulary", "spelling", "punctuation",
+                      "coherence", "style", "idea_development"}
+        for candidate in annotations:
+            if not isinstance(candidate, dict):
+                rejected = True
+                continue
+            ann = dict(candidate)
+            original = ann.get("original_text")
+            if (not isinstance(original, str) or not original.strip()
+                    or not isinstance(ann.get("suggestion"), str)
+                    or not ann["suggestion"].strip()
+                    or not isinstance(ann.get("category"), str)
+                    or ann["category"] not in categories
+                    or not isinstance(ann.get("severity"), str)
+                    or ann["severity"] not in {"major", "minor"}):
+                rejected = True
+                continue
+            start, end = ann.get("start_char"), ann.get("end_char")
+            if (type(start) is not int or type(end) is not int
+                    or not 0 <= start < end <= len(essay)
+                    or essay[start:end] != original):
+                start = essay.find(original)
+                if start < 0:
+                    rejected = True
                     continue
-
+                end = start + len(original)
+            ann["start_char"], ann["end_char"] = start, end
             validated.append(ann)
 
-        return validated[:8]  # Cap at 8
+        # The renderer cannot safely show overlapping ranges. Keep the first.
+        nonoverlapping = []
+        for ann in sorted(validated, key=lambda item: item["start_char"]):
+            if nonoverlapping and ann["start_char"] < nonoverlapping[-1]["end_char"]:
+                rejected = True
+                continue
+            nonoverlapping.append(ann)
+        rejected = rejected or len(nonoverlapping) > 8
+        status = ("partial" if nonoverlapping else "unavailable") if rejected else "complete"
+        return nonoverlapping[:8], status

@@ -232,3 +232,21 @@ def test_enabled_quota_denial_releases_allowance(test_db, test_user, grading, mo
     assert up.submitted_at is None
     monkeypatch.setattr(settings, "QUOTA_GRADE_PER_DAY", 30)
     assert submit(test_db, test_user, up)["ok"]
+
+@pytest.mark.parametrize("status", ["complete", "partial", "unavailable"])
+def test_annotation_outcome_persisted_and_replayed_once(test_db, test_user, grading, status):
+    from app.services.study_pass import grant_study_pass
+    grant = grant_study_pass(test_db, test_user.id, "synthetic-pass", reviews=1)
+    test_db.commit()
+    grading.grade.return_value = {**GRADE, "annotation_status": status}
+    up = card(test_db, test_user)
+    result = submit(test_db, test_user, up)
+    assert result["grading"]["annotation_status"] == status
+    assert json.loads(up.user_answers)["grading"]["annotation_status"] == status
+    test_db.refresh(grant)
+    assert grant.reviews_remaining == 0
+    assert submit(test_db, test_user, up, time=135) == result
+    assert grading.grade.call_count == 1
+    with pytest.raises(HTTPException) as error:
+        submit(test_db, test_user, card(test_db, test_user))
+    assert error.value.status_code == 402

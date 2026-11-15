@@ -7,7 +7,7 @@ import AIWritingView from '../components/practice/AIWritingView';
 import { isStudyPassStatus, useStudyPass } from '../hooks/useStudyPass';
 import type { StudyPassStatus } from '../hooks/useStudyPass';
 import type { AIWritingPractice } from '../types';
-import { api, practiceAPI } from '../api';
+import { api, practiceAPI, progressAPI } from '../api';
 import { useAppStore } from '../store';
 
 const pass: StudyPassStatus = {
@@ -97,4 +97,52 @@ describe('Writing review interruption', () => {
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
     expect(screen.getByRole('textbox')).toHaveValue(essay);
   });
+});
+
+describe('Writing annotation completeness', () => {
+  it.each([
+    ['unavailable', 'inline notes are unavailable'],
+    ['partial', 'some inline notes could not be displayed'],
+    ['complete', 'No inline notes were returned.'],
+    [undefined, null],
+  ])('renders %s without losing rubric feedback', async (status, message) => {
+    const criterion = { band: 6.5, evidence: 'Synthetic rubric evidence.' };
+    vi.spyOn(practiceAPI, 'submitAIWriting').mockResolvedValue({ data: { grading: {
+      annotation_status: status,
+      annotations: [],
+      examiner_result: { overall_band: 6.5, task_response: criterion,
+        coherence_cohesion: criterion, lexical_resource: criterion, grammatical_range_accuracy: criterion },
+      coaching_feedback: { summary: 'Synthetic coaching.', strengths: [], improvements: [] },
+    } } } as any);
+    vi.spyOn(progressAPI, 'updateProgress').mockResolvedValue({} as any);
+    vi.spyOn(progressAPI, 'createSession').mockResolvedValue({} as any);
+    render(<AIWritingView exercise={exercise} onBack={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText('Write your essay here...'), { target: { value: essay } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for Grading' }));
+    expect(await screen.findByText('Synthetic coaching.')).toBeInTheDocument();
+    expect(screen.getAllByText('Synthetic rubric evidence.')).toHaveLength(4);
+    if (message) expect(screen.getByText(new RegExp(message))).toBeInTheDocument();
+    else {
+      expect(screen.queryByText(/Partial feedback|No inline notes/)).not.toBeInTheDocument();
+    }
+  });
+});
+
+it('highlights the exact code-point range on the trimmed essay', async () => {
+  const criterion = { band: 6.5, evidence: 'Synthetic rubric evidence.' };
+  const prefixed = '  📝 ' + essay + '  ';
+  vi.spyOn(practiceAPI, 'submitAIWriting').mockResolvedValue({ data: { grading: {
+    annotation_status: 'complete',
+    annotations: [{ start_char: 2, end_char: 6, original_text: 'This',
+      severity: 'minor', category: 'style', suggestion: 'Synthetic annotation.' }],
+    examiner_result: { overall_band: 6.5, task_response: criterion,
+      coherence_cohesion: criterion, lexical_resource: criterion, grammatical_range_accuracy: criterion },
+    coaching_feedback: { summary: 'Synthetic coaching.', strengths: [], improvements: [] },
+  } } } as any);
+  vi.spyOn(progressAPI, 'updateProgress').mockResolvedValue({} as any);
+  vi.spyOn(progressAPI, 'createSession').mockResolvedValue({} as any);
+  render(<AIWritingView exercise={exercise} onBack={() => {}} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: prefixed } });
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for Grading' }));
+  expect(await screen.findByTitle('style: Synthetic annotation.')).toHaveTextContent(/^This$/);
 });

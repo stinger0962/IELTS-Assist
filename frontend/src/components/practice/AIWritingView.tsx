@@ -104,12 +104,18 @@ function AIWritingExerciseView({
   // Render annotated essay with highlights
   const renderAnnotatedEssay = () => {
     if (!grading?.annotations?.length) return <p className="essay-text-plain">{essay}</p>;
+    // The API computes offsets in Unicode code points on the trimmed essay.
+    const text = Array.from(essay.trim());
+    const slice = (start: number, end?: number) => text.slice(start, end).join('');
     const annotations = [...grading.annotations].sort((a, b) => a.start_char - b.start_char);
     const parts: React.ReactNode[] = [];
     let cursor = 0;
     annotations.forEach((ann, i) => {
+      if (!Number.isInteger(ann.start_char) || !Number.isInteger(ann.end_char) ||
+          ann.start_char < cursor || ann.end_char <= ann.start_char || ann.end_char > text.length ||
+          slice(ann.start_char, ann.end_char) !== ann.original_text) return;
       if (ann.start_char > cursor) {
-        parts.push(<span key={`t${i}`}>{essay.slice(cursor, ann.start_char)}</span>);
+        parts.push(<span key={`t${i}`}>{slice(cursor, ann.start_char)}</span>);
       }
       parts.push(
         <span
@@ -118,12 +124,12 @@ function AIWritingExerciseView({
           onClick={() => setActiveAnnotation(activeAnnotation === ann ? null : ann)}
           title={`${ann.category}: ${ann.suggestion}`}
         >
-          {essay.slice(ann.start_char, ann.end_char)}
+          {slice(ann.start_char, ann.end_char)}
         </span>
       );
       cursor = ann.end_char;
     });
-    if (cursor < essay.length) parts.push(<span key="end">{essay.slice(cursor)}</span>);
+    if (cursor < text.length) parts.push(<span key="end">{slice(cursor)}</span>);
     return <p className="essay-text-annotated">{parts}</p>;
   };
 
@@ -163,6 +169,12 @@ function AIWritingExerciseView({
             {mode === 'study' && <span className="essay-type-badge">{ESSAY_TYPE_LABELS[exercise.meta.essay_type] || exercise.meta.essay_type}</span>}
           </div>
         </div>
+
+        {(grading.annotation_status === 'unavailable' || grading.annotation_status === 'partial') && (
+          <p role="status" className="annotation-outcome">
+            {t(`writingFeedback.${grading.annotation_status}`)}
+          </p>
+        )}
 
         {/* 4 Criteria */}
         <div className="criteria-grid">
@@ -205,6 +217,9 @@ function AIWritingExerciseView({
         {/* Annotated Essay */}
         <div className="annotated-essay-section">
           <h4>Your Essay {grading.annotations.length > 0 && <span className="annotation-count">({grading.annotations.length} annotations)</span>}</h4>
+          {grading.annotation_status === 'complete' && grading.annotations.length === 0 && (
+            <p>{t('writingFeedback.empty')}</p>
+          )}
           <div className="annotated-essay-body">
             {renderAnnotatedEssay()}
           </div>
@@ -357,6 +372,7 @@ const writingStyles = `
 
   .annotated-essay-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
   .annotated-essay-section h4 { margin-bottom: var(--spacing-md); font-size: 0.9rem; }
+  .annotation-outcome { padding: 1rem; border: 1px solid #D97706; border-radius: var(--radius-md); line-height: 1.6; }
   .annotation-count { font-weight: 400; color: var(--color-text-secondary); font-size: 0.8rem; }
   .annotated-essay-body { line-height: 1.8; font-size: 0.95rem; color: var(--color-text-primary); white-space: pre-wrap; }
   .essay-text-plain { line-height: 1.8; white-space: pre-wrap; }
