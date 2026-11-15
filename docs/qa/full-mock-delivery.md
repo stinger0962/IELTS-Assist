@@ -31,6 +31,11 @@ inventory**. Entitlement success alone does not prove the paid feature is usable
 Do not enable real generation jobs or provision provider credentials merely to
 make this test pass.
 
+For the proposed next content/scoring acceptance contract, see
+[full-mock content and scoring](full-mock-content-scoring.md). That proposal is
+not implemented by these delivery tests and does not validate their legacy band
+expectations or 30-question Reading fixture as official-format scoring.
+
 ## Audio and staging limits
 
 The wave-generated 0.1-second tone proves only the local media contract: fixture
