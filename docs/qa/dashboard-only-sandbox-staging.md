@@ -31,6 +31,45 @@ retain raw bytes and `Stripe-Signature`, and use a valid TLS certificate. Do not
 re-use or weaken production access controls. A low-volume sandbox still needs
 bounded request size/timeouts and accessible delivery diagnostics.
 
+## Verify independent staging access before requesting a Stripe delivery
+
+Use one HTTPS origin for UI and API. If the approved access layer supports it,
+use an independent browser operator-session cookie (host-only, Secure, HttpOnly;
+SameSite=Lax for a compatible top-level GET return). Verify the actual browser
+return and cookie expiry behavior. The operator cookie grants entry to staging,
+not an app identity or paid entitlement. Preserve the app's `Authorization:
+Bearer` header; don't require HTTP Basic in it or substitute the cookie for it.
+
+An expired/missing operator cookie on an API request should produce a clearly
+distinguishable JSON denial (prefer 403), not an HTML login redirect or the
+app's 401. The frontend logs out on 401, so the edge denial should not erase an
+otherwise valid app login. Re-authenticating to the gate is a separate step.
+The public exception is **only POST to the literal
+`/api/checkout/webhook`**: no prefix matching, alternate methods, redirects,
+trailing slash or normalized/encoded aliases. Keep backend ports, alternate
+hosts, API docs, health, media and all other app routes gated or denied. Any
+separate gate login route is not a blanket application exemption.
+
+| Probe | Expected outcome |
+| --- | --- |
+| No operator cookie on staging UI/API | Gate entry or clear API denial; no app data |
+| Operator cookie only on app-authenticated API | Edge admits; app authentication still rejects |
+| Valid app bearer only | Edge denies; bearer cannot bypass operator gate |
+| Valid cookie and bearer | Normal app identity, ownership and entitlement checks |
+| Expired operator cookie with valid app bearer | Edge denial does not clear app login |
+| Top-level GET checkout return/cancel | Confirm cookie behavior and app login; only owned order status, no access or settlement from URL |
+| Canonical unsigned webhook POST with sandbox disabled | Reaches the app without a gate challenge or redirect, fails closed without state change |
+| Same unsigned POST after authorized sandbox enablement | App rejects missing signature, no state change |
+| Wrong method or neighboring/encoded path | No gate bypass or redirect into exemption |
+| Direct upstream or alternate host | No bypass of staging access policy |
+
+Pass the original body bytes and `Stripe-Signature` without replacing headers,
+parsing/reserializing or redirecting the request. The handler checks sandbox
+configuration before verifying signatures, so a disabled response is expected
+before enablement. Successful authenticated delivery is a later sandbox test,
+not implied by this preflight. Keep cookies and credentials out of logs.
+
+
 ## Runtime isolation before any exposure
 
 - Check out the exact tested PR commit, not moving `main`; do not trigger the
