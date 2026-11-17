@@ -145,3 +145,37 @@ Results contain raw correct/total and section/type breakdowns, with no band,
 overall IELTS score or calibrated estimate. Zero, one, 39 and 40 correct cases
 and reconciliation are tested on original synthetic content. No routes, UI,
 stored history, scheduler, provider jobs or production settings use this helper.
+
+## Narrow renderer-key bridge, not safe delivery
+
+`full_mock_renderer_bridge` is another explicit offline helper, pinned to
+`full_test_renderer_2026_11_17`. It translates section-scoped **current full-test
+renderer** inputs to the experimental audit-key submission. It does not translate
+the legacy backend scorer's interpretation: Reading MCQ uses question numbers;
+other ordinary Reading inputs use list indices; headings use group plus paragraph
+number. Listening creates groups in completion → each matching block → MCQ order,
+all using item indices. Empty groups consume no index. Language/label text does
+not participate in keys. Duplicate sections or identities and unknown keys fail
+closed. Return values contain only identities and submitted strings, never
+accepted answers or explanations.
+
+This is intentionally not universal. Reading `summary_completion` is refused:
+the full-test renderer ignores `group.summary_text` and may replace an absent
+prompt with part of `item.explanation`. `matching_information` is also refused:
+the renderer builds available letters from passage paragraphs, which structural
+audit does not verify against the answer options. Neither shape should be
+declared safely renderable just because an input key can be generated. Other
+legacy/grouped Listening shapes remain unsupported by the structural auditor.
+
+Existing delivery has **no answer sanitization**: both
+`backend/app/routers/reading.py::_with_db_id` and
+`backend/app/routers/listening.py::_with_db_id` return the entire decoded stored
+content plus `practice_db_id`. Current full-test components use answers in
+result/review rendering; `reading_exam.py::get_recent_exams` also returns the
+complete exercise with saved results for both skills. Therefore stripping
+answers globally would break established feedback/review behavior. A future
+sanitized delivery should target only active, explicitly versioned mocks and
+leave owner-authorized completed history intact, with separate result delivery.
+This bridge does not remove that exposure, sanitize prompts/explanations, assert
+browser correctness, or authorize production changes. No route, UI, history or
+inventory code calls it.
