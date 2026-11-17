@@ -163,7 +163,7 @@ function PracticeSession({ preview, locale = 'en', onSubmit }: Props) {
         </div>
       ) : <button className="btn btn-primary" type="button" onClick={() => setConfirm(true)}>{labels.review}</button>}
       <style>{`
-        .experimental-mock-preview { max-width: 52rem; margin: 0 auto; padding: 16px; color: var(--color-text); overflow-wrap: anywhere; }
+        .experimental-mock-preview { max-width: 52rem; margin: 0 auto; padding: 16px; color: var(--color-text-primary, #172033); overflow-wrap: anywhere; }
         .experimental-mock-preview fieldset { border: 0; padding: 0; min-width: 0; }
         .experimental-mock-passage { white-space: pre-wrap; line-height: 1.7; padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
         .experimental-mock-preview audio { width: 100%; margin-bottom: 16px; }
