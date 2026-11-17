@@ -28,6 +28,7 @@ practice test books, and the sample responses on ielts.org.
 """
 
 import json
+import os
 import statistics
 from pathlib import Path
 
@@ -70,7 +71,16 @@ def test_band_is_accurate_and_stable(sample):
     grader = WritingGrader()
     bands = []
     for _ in range(RUNS_PER_ESSAY):
-        result = grader.grade(sample["essay"], sample["prompt"])
+        if os.environ.get("CALIBRATION_OBSERVE") == "1":
+            from tests.calibration_observer import observe_calibration
+            with observe_calibration(grader) as events:
+                try:
+                    result = grader.grade(sample["essay"], sample["prompt"])
+                finally:
+                    # No sample name/input/output in telemetry; run index is local.
+                    print(json.dumps({"calibration_run": _ + 1, "events": events}))
+        else:
+            result = grader.grade(sample["essay"], sample["prompt"])
         bands.append(result["examiner_result"]["overall_band"])
 
     mean = statistics.mean(bands)

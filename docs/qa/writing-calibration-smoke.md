@@ -41,7 +41,8 @@ should cover independent prompt types, score boundaries, and formats.
    within-essay spread, whether annotations were available, latency and
    app-specific billed usage if measured. The harness currently asserts at
    most half a band of mean drift and within-essay spread and does not
-   itself collect latency or billing. Report unmeasured fields as such.
+   collect billing. Opt-in metadata collection below can measure latency and
+   reported token usage, not billed cost. Report unmeasured fields as such.
 5. Examine individual misses and fix reproducible issues before calling
    the grader ready for a paid trial. A passing small smoke test does not
    justify a claim that scores match an examiner.
@@ -49,3 +50,51 @@ should cover independent prompt types, score boundaries, and formats.
 No real calibration run or provider cost is implied by this document.
 
 [samples]: https://ielts.org/cdn/Sample-tests/ielts-academic-writing-sample-tasks-2023.pdf
+
+## Optional non-content observations
+
+After the same provider/input/budget authorization above, enable
+`CALIBRATION_OBSERVE=1` on the calibration command. Without that exact value,
+the existing grader call and harness behavior are unchanged. This flag does
+not authorize a provider call or make calibration safe to run by default.
+No real calibration was performed to test this observer.
+
+The test-only `tests/calibration_observer.py` context temporarily wraps the
+actual grader's scoring/annotation methods and SDK `create()` boundary. It emits
+one JSON object per local run containing stage and attempt events, including
+when scoring raises or annotation falls back. Production code, logs, routes,
+request parameters, retry logic and returned grading results are unchanged.
+This uses process-global patches: use only in sequential isolated calibration,
+never around application traffic, threads, or overlapping contexts.
+
+Metadata whitelist:
+- Stage: scoring or annotation; success/error; elapsed monotonic milliseconds.
+  Annotation's complete/partial/unavailable status is retained separately from
+  exceptions, so a successful call with unusable annotations isn't called good.
+- Attempt: stage-local attempt number, response/empty_response/provider_error,
+  elapsed milliseconds; prompt/completion/total tokens and optional cached
+  prompt/reasoning token counts.
+- Missing, malformed or unavailable usage is JSON null (**unknown**, not zero).
+  A known numeric zero remains zero. No estimated or actual money is calculated.
+  Cached/reasoning counts are subdivisions, not extra totals to add to usage.
+
+Confirmed against the locally installed pinned OpenAI Python **2.24.0** source:
+`openai.types.chat.ChatCompletion.usage` is optional
+`openai.types.completion_usage.CompletionUsage`; usage has prompt_tokens,
+completion_tokens, total_tokens plus optional prompt_tokens_details.cached_tokens
+and completion_tokens_details.reasoning_tokens. The production wrapper currently
+uses `chat.completions.create(...).choices[0]` and otherwise discards usage.
+Synthetic tests construct real SDK ChatCompletion objects and exercise that
+unchanged wrapper and actual WritingGrader, including the empty-response retry.
+
+Each measured attempt means one SDK create invocation. SDK-internal HTTP
+retries are opaque and may consume time or tokens not represented by the final
+response. Provider exceptions may have incurred usage: null must not be counted
+as free. Stage latency includes local parsing; attempt latency includes SDK
+handling/retries. No prompt, essay, answer, response content, exception message,
+provider ID, credential or sample name is copied into these events. Existing
+calibration band summaries still print as before. Keep any combined console
+capture local; this helper does not write telemetry files or upload anything.
+
+Offline verification, no provider calls:
+`python -m pytest tests/test_calibration_observer.py -q`.
