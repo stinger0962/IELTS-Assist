@@ -53,3 +53,34 @@ credentials out; keep scheduled generation and request-driven replenishment
 suppressed or safely stubbed. Any staging fixture import needs an explicitly
 verified disposable target. This document does not assert staging exists or
 authorize a deployment, tunnel, account, credential or external mutation.
+
+## Offline checkout-to-practice integration
+
+`backend/tests/test_checkout_mock_access.py` joins the authenticated order route,
+real signature-verifying Stripe adapter with in-memory HTTP responses, webhook
+settlement, and the Reading/Listening HTTP practice paths. It reuses the original
+fixtures above; it does not call the direct entitlement-grant helper.
+
+For both skills it verifies:
+
+- A fresh free account receives no full mock or submission access, including
+  after creating a pending order and reading a forged-success return URL.
+- Signed, authoritative mocked settlement unlocks a real fixture assignment and
+  submission; duplicate notification grants only once.
+- A pending refund leaves access intact. A confirmed full refund blocks both
+  new assignments and submission of an already opened unfinished mock.
+- Previously saved results/history remain unchanged, duplicate refund delivery
+  is safe, and a late completion notification cannot restore access.
+
+Run in the same isolated manner as above, adding this file to the pytest command:
+
+```sh
+DATABASE_URL="sqlite:///$QA_DIR/app.db" DAILY_GENERATION_ENABLED=false \
+  "$PYTEST" "$REPO/backend/tests/test_checkout_mock_access.py" \
+  "$REPO/backend/tests/test_checkout_http.py" \
+  "$REPO/backend/tests/test_full_mock_delivery.py" -q
+```
+
+These tests do not verify an actual Stripe sandbox, TLS/webhook delivery, browser
+rendering, deployed media, live pricing or calibrated exam content. All provider
+responses and signature secrets are test fixtures; no credentials are provisioned.

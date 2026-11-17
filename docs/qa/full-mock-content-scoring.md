@@ -92,3 +92,28 @@ remote writes are necessary.
   seeking, deployed mapping and pedagogic quality as separate acceptance checks.
 
 See [delivery checklist](full-mock-delivery.md) for existing test scope and limits.
+
+## Offline structural auditor
+
+`app.services.full_mock_audit.audit_full_mock(payload, skill="reading")`
+(or `skill="listening"`) now provides an explicitly invoked, pure structural
+check. It returns 40 immutable answerable-leaf records or raises
+`MockStructureError`. It checks declared totals, ordered section identities,
+unique leaf identities, supported question shapes, nonempty prompts/answers,
+Reading heading-to-paragraph alignment, Listening matching stem-to-answer
+alignment, and Listening's ten items per part. Acceptable-answer alternatives
+remain one leaf. The implementation supports current Reading grouped and
+Listening flat/nested shapes, not arbitrary future types.
+
+The returned `sN:...` identities are **audit-only**, not submission keys.
+The legacy Listening full-test renderer expands matching stems, whereas its
+scorer currently treats matching blocks as ordinary items. Consequently an
+audit pass is not evidence of legacy renderer/scorer agreement; that mismatch
+still needs a separately versioned delivery/scoring change and integration QA.
+
+Nothing calls this helper from production routes, generators, scoring or
+inventory admission. It does not change content versions, legacy results, bands
+or entitlement behavior. Passage/transcript/audio fields are checked only for
+presence, not authenticity, length, playable media or pedagogic quality.
+Synthetic tests cover 13/13/14 Reading and 10/10/10/10 Listening; no real provider
+calls, official exam text or production content are used.
