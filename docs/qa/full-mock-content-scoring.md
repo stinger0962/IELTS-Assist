@@ -117,3 +117,31 @@ or entitlement behavior. Passage/transcript/audio fields are checked only for
 presence, not authenticity, length, playable media or pedagogic quality.
 Synthetic tests cover 13/13/14 Reading and 10/10/10/10 Listening; no real provider
 calls, official exam text or production content are used.
+
+## Offline raw scoring experiment
+
+`app.services.full_mock_raw_score.score_full_mock(payload, submission, skill=...)`
+first runs the structural audit, then accepts this explicit opt-in envelope:
+
+```json
+{"schema_version": "full_mock_raw_v2", "answers": {"s1:q1": "box"}}
+```
+
+Use only identities returned by the auditor, including its heading identities.
+The version identifies this **experimental submission/result contract**, not a
+migration or a new content version. Existing content metadata is never rewritten.
+This helper must not be passed legacy frontend keys or plugged into legacy
+history/result storage without a separate reviewed integration.
+
+Each audited leaf earns zero or one mark, including individual Listening
+matching stems and Reading heading paragraphs. Missing or blank answers earn
+zero; unknown keys, non-string answers, extra envelope fields and unsupported
+versions raise `RawSubmissionError`. Acceptable alternatives are those explicitly
+listed in the answer definition. Comparison trims surrounding whitespace and
+case-folds only. Internal whitespace, punctuation, spelling, accents, numeric
+forms and units are not guessed or rewritten.
+
+Results contain raw correct/total and section/type breakdowns, with no band,
+overall IELTS score or calibrated estimate. Zero, one, 39 and 40 correct cases
+and reconciliation are tested on original synthetic content. No routes, UI,
+stored history, scheduler, provider jobs or production settings use this helper.
