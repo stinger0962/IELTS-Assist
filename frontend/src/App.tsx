@@ -10,6 +10,7 @@ import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
 import Dashboard from './pages/Dashboard';
 import Practice from './pages/Practice';
+import CheckoutReturn from './pages/CheckoutReturn';
 import Mistakes from './pages/Mistakes';
 import Topics from './pages/Topics';
 import Goals from './pages/Goals';
@@ -70,6 +71,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/checkout/return" element={<CheckoutReturn />} />
+        <Route path="/checkout/cancel" element={<CheckoutReturn />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

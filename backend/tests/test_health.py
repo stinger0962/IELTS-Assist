@@ -21,3 +21,18 @@ def test_api_health_needs_no_auth(client):
 
 def test_root_health_still_works(client):
     assert client.get("/health").status_code == 200
+
+
+def test_isolated_checkout_can_disable_daily_generation(monkeypatch):
+    from unittest.mock import Mock
+
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    scheduler = Mock(side_effect=AssertionError("isolated checkout must not start scheduler"))
+    monkeypatch.setattr(main.settings, "DAILY_GENERATION_ENABLED", False)
+    monkeypatch.setattr(main, "AsyncIOScheduler", scheduler)
+    with TestClient(main.app) as staged:
+        assert staged.get("/health").status_code == 200
+    scheduler.assert_not_called()

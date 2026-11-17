@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Mail, Lock, User } from 'lucide-react';
 import { useAppStore } from '../store';
 import { authAPI } from '../api';
+import { checkoutReturnPath } from '../api/checkout';
 
 export function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { setAuth, setLanguage } = useAppStore();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -30,7 +32,7 @@ export function Login() {
         setLanguage(userRes.data.preferred_language as 'en' | 'zh');
       }
       
-      navigate('/');
+      navigate(checkoutReturnPath(params.get('returnTo')) || '/');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Invalid credentials');
     } finally {

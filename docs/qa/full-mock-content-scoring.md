@@ -1,0 +1,208 @@
+# Proposed full-mock content and scoring acceptance
+
+Documentation-only design, not implemented behavior, a launch decision or a
+promise of official IELTS equivalence. Existing delivery tests prove plumbing,
+not content quality. Payment/webhook behavior is unaffected.
+
+## Verified reference and current gap
+
+Official IELTS guidance specifies Academic Reading as three sections, 40
+questions and 60 minutes, with 2,150–2,750 words across the texts. Listening has
+four parts with ten questions each. Each correct answer earns one mark; published
+raw-to-band examples are averages that can vary by test version. Overall IELTS
+band combines four skills, not one mock's sections.
+
+- [IELTS Academic Reading format](https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-reading)
+- [IELTS Listening format](https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-listening)
+- [IELTS scoring guidance](https://ielts.org/take-a-test/your-results/ielts-scoring-in-detail)
+
+Checked against source at local revision `1db1898`: Reading presets target ten
+questions per section, but that target is not passed to the generator. Both exam
+validators accept declared section counts of at least five. Counting differs
+between generator, scorer and renderer. Existing band functions ignore the
+provided total, floor zero correct at 4.0 and cap full marks at 8.5. The UI calls
+single-skill results “Overall Band”. These are inherited limitations, not
+validated conversion rules to reuse.
+
+## Proposed new-content contract
+
+- Explicit version identifies new Academic mock content and scoring. Reading:
+  three sections and exactly 40 scoreable items; Listening: four sections with
+  exactly ten each. Reading fixture allocation 13/13/14 is a local convention,
+  not an official requirement.
+- Normalize supported question formats to consistent scoreable leaf items. Each
+  has one unique answer key, a recognized type, a nonempty answer definition and
+  a corresponding rendered input. Count these items, not metadata, container
+  objects or the number of answer alternatives. Generator validation, renderer
+  and scorer must agree, including nested matching/headings formats.
+- Validate section identity/order, actual counts and declared totals. Reject
+  duplicate keys, missing answers, unsupported shapes and inconsistent counts
+  before admitting inventory or scoring new-format submissions.
+- Award one mark per item; unanswered is incorrect. Return raw correct/total
+  and section/type breakdowns with `0 <= correct <= total`. New results should
+  say “Practice result: X/40”, without an estimated band until a separately
+  reviewed calibration policy exists. Do not interpolate unverified band maps.
+- A missing band must stay absent/null through API, rendering, history and
+  analytics. Do not coerce it to zero, animate a band, save a fabricated
+  `band_score` or describe this result as an official or overall IELTS score.
+
+## Inventory, quality and compatibility protections
+
+Keep old exercises and stored results unchanged: no retrospective rescoring,
+rewriting or deletion. Preserve historical raw marks and stored bands; a legacy
+band may be labeled “Legacy practice estimate”. Content without a new version
+must not silently become compliant new-format inventory. Existing assigned
+legacy exercises need a compatible completion/history path, not a destructive
+migration or surprise rejection.
+
+An entitlement does not create inventory. Admission of a new full mock requires
+structural validation and separate quality review: original/licensed content,
+topic freshness and diversity, appropriate text length, progressive difficulty,
+answer support and unambiguous marking. Listening additionally needs intelligible,
+relevant audio aligned to its transcript/questions, suitable speakers and pacing,
+and verified browser playback/static mapping. Tiny texts and tones cannot pass
+that quality review just because their structures are valid.
+
+An optional future rollout flag could isolate new-format generation/delivery;
+if adopted, default off and test the disabled path. This is a design option only.
+Do not change existing production settings, study-pass/checkout defaults,
+scheduler behavior, credentials, provider jobs or webhook handling for this spec.
+Do not seed production or enable generation to hide an empty pool.
+
+## Proposed original-fixture acceptance cases
+
+Use only original synthetic fixtures, isolated disposable databases and mocked
+providers/replenishment. No official exam text, live AI/audio/payment services or
+remote writes are necessary.
+
+- Reading 13/13/14 and Listening 10/10/10/10; mixed supported question formats,
+  including nested shapes, all map to 40 unique rendered/scored leaf keys.
+- Reject 39/41 items, Listening 9/11 per part, false `total_questions`, duplicate
+  sections/keys, empty answers and unsupported structures. Check that alternative
+  acceptable answers do not inflate the question count.
+- Raw scores 0, 1, 39 and 40; unanswered/wrong answers; section sums equal total.
+  New results have no estimated band and persist/reopen without inventing one.
+- Authentic synthetic pass holder receives an eligible mock once, opens its
+  complete payload, submits and reopens results. Preserve free/expired gates,
+  owner isolation, duplicate-submit protection and empty-inventory reporting.
+- Existing legacy content/history still opens with unchanged persisted results;
+  new eligibility checks do not reinterpret it. Optional flag-off path retains
+  prior behavior.
+- Local audio fixtures prove URL/media contracts only. Keep browser playback,
+  seeking, deployed mapping and pedagogic quality as separate acceptance checks.
+
+See [delivery checklist](full-mock-delivery.md) for existing test scope and limits.
+
+## Offline structural auditor
+
+`app.services.full_mock_audit.audit_full_mock(payload, skill="reading")`
+(or `skill="listening"`) now provides an explicitly invoked, pure structural
+check. It returns 40 immutable answerable-leaf records or raises
+`MockStructureError`. It checks declared totals, ordered section identities,
+unique leaf identities, supported question shapes, nonempty prompts/answers,
+Reading heading-to-paragraph alignment, Listening matching stem-to-answer
+alignment, and Listening's ten items per part. Acceptable-answer alternatives
+remain one leaf. The implementation supports current Reading grouped and
+Listening flat/nested shapes, not arbitrary future types.
+
+The returned `sN:...` identities are **audit-only**, not submission keys.
+The legacy Listening full-test renderer expands matching stems, whereas its
+scorer currently treats matching blocks as ordinary items. Consequently an
+audit pass is not evidence of legacy renderer/scorer agreement; that mismatch
+still needs a separately versioned delivery/scoring change and integration QA.
+
+Nothing calls this helper from production routes, generators, scoring or
+inventory admission. It does not change content versions, legacy results, bands
+or entitlement behavior. Passage/transcript/audio fields are checked only for
+presence, not authenticity, length, playable media or pedagogic quality.
+Synthetic tests cover 13/13/14 Reading and 10/10/10/10 Listening; no real provider
+calls, official exam text or production content are used.
+
+## Offline raw scoring experiment
+
+`app.services.full_mock_raw_score.score_full_mock(payload, submission, skill=...)`
+first runs the structural audit, then accepts this explicit opt-in envelope:
+
+```json
+{"schema_version": "full_mock_raw_v2", "answers": {"s1:q1": "box"}}
+```
+
+Use only identities returned by the auditor, including its heading identities.
+The version identifies this **experimental submission/result contract**, not a
+migration or a new content version. Existing content metadata is never rewritten.
+This helper must not be passed legacy frontend keys or plugged into legacy
+history/result storage without a separate reviewed integration.
+
+Each audited leaf earns zero or one mark, including individual Listening
+matching stems and Reading heading paragraphs. Missing or blank answers earn
+zero; unknown keys, non-string answers, extra envelope fields and unsupported
+versions raise `RawSubmissionError`. Acceptable alternatives are those explicitly
+listed in the answer definition. Comparison trims surrounding whitespace and
+case-folds only. Internal whitespace, punctuation, spelling, accents, numeric
+forms and units are not guessed or rewritten.
+
+Results contain raw correct/total and section/type breakdowns, with no band,
+overall IELTS score or calibrated estimate. Zero, one, 39 and 40 correct cases
+and reconciliation are tested on original synthetic content. No routes, UI,
+stored history, scheduler, provider jobs or production settings use this helper.
+
+## Narrow renderer-key bridge, not safe delivery
+
+`full_mock_renderer_bridge` is another explicit offline helper, pinned to
+`full_test_renderer_2026_11_17`. It translates section-scoped **current full-test
+renderer** inputs to the experimental audit-key submission. It does not translate
+the legacy backend scorer's interpretation: Reading MCQ uses question numbers;
+other ordinary Reading inputs use list indices; headings use group plus paragraph
+number. Listening creates groups in completion → each matching block → MCQ order,
+all using item indices. Empty groups consume no index. Language/label text does
+not participate in keys. Duplicate sections or identities and unknown keys fail
+closed. Return values contain only identities and submitted strings, never
+accepted answers or explanations.
+
+This is intentionally not universal. Reading `summary_completion` is refused:
+the full-test renderer ignores `group.summary_text` and may replace an absent
+prompt with part of `item.explanation`. `matching_information` is also refused:
+the renderer builds available letters from passage paragraphs, which structural
+audit does not verify against the answer options. Neither shape should be
+declared safely renderable just because an input key can be generated. Other
+legacy/grouped Listening shapes remain unsupported by the structural auditor.
+
+Existing delivery has **no answer sanitization**: both
+`backend/app/routers/reading.py::_with_db_id` and
+`backend/app/routers/listening.py::_with_db_id` return the entire decoded stored
+content plus `practice_db_id`. Current full-test components use answers in
+result/review rendering; `reading_exam.py::get_recent_exams` also returns the
+complete exercise with saved results for both skills. Therefore stripping
+answers globally would break established feedback/review behavior. A future
+sanitized delivery should target only active, explicitly versioned mocks and
+leave owner-authorized completed history intact, with separate result delivery.
+This bridge does not remove that exposure, sanitize prompts/explanations, assert
+browser correctness, or authorize production changes. No route, UI, history or
+inventory code calls it.
+
+## Experimental active-preview field separation
+
+`full_mock_preview.active_mock_preview` produces a fresh flattened
+`full_mock_active_preview_v2` DTO only for the bridge's proven subset. It is
+explicitly invoked with the pinned renderer contract and is **not** compatible
+with the current full-test components. Only fixed schema metadata, section
+numbers, audit keys, question types, prompt strings, approved option labels and
+optional integer word limits are emitted. Reading includes the passage text;
+Listening includes only a controlled same-origin `/audio/...` path and never
+the transcript. Audio query strings, arbitrary external destinations, traversal
+and encoded aliases are rejected. Unknown option identifiers are rejected.
+
+There is no recursive passthrough of source sections, groups, items or metadata.
+Accepted answers, explanation/feedback fields, transcript, private metadata,
+original content versions and generated practice objects are omitted. Synthetic
+nested sentinel tests verify field separation and detached output objects.
+Invalid structures fail rather than falling back to the original payload.
+
+This prevents accidental **field** disclosure, not semantic answer disclosure:
+reviewed passages, prompts, options and audio intentionally convey information
+from which answers can be inferred, and an author can still write an answer into
+a prompt. Human/content QA remains necessary. This helper does not establish
+authorization, ownership, media accessibility, HTTP caching behavior, browser
+rendering or an approved deployment. No active route or legacy completed
+history/review path uses it; future delivery integration must remain explicitly
+versioned and retrieve feedback separately after authorized completion.

@@ -1,0 +1,7 @@
+:root { font-family: system-ui, sans-serif; color: #172033; background: #f6f8fc; --color-text-primary: #172033; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 56rem; margin: auto; }
+header, h2[role=status], p[role=alert] { padding: 16px; }
+button, select, input { font: inherit; min-height: 44px; max-width: 100%; }
+button { cursor: pointer; }

@@ -2,6 +2,8 @@
 import json
 import logging
 from datetime import datetime
+from app.config import settings
+from app.services.study_pass import has_full_mock_access
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -39,6 +41,8 @@ def submit_listening_exam(
     current_user: User = Depends(get_current_user),
 ):
     """Score a full listening exam submission."""
+    if settings.STUDY_PASS_ENABLED and not has_full_mock_access(db, current_user):
+        raise HTTPException(402, {"code": "study_pass_required", "message": "An active study pass is required for full mock tests"})
     up = db.query(UserPractice).filter(
         UserPractice.user_id == current_user.id,
         UserPractice.practice_id == body.practice_id,
