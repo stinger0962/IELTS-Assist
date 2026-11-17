@@ -179,3 +179,30 @@ leave owner-authorized completed history intact, with separate result delivery.
 This bridge does not remove that exposure, sanitize prompts/explanations, assert
 browser correctness, or authorize production changes. No route, UI, history or
 inventory code calls it.
+
+## Experimental active-preview field separation
+
+`full_mock_preview.active_mock_preview` produces a fresh flattened
+`full_mock_active_preview_v2` DTO only for the bridge's proven subset. It is
+explicitly invoked with the pinned renderer contract and is **not** compatible
+with the current full-test components. Only fixed schema metadata, section
+numbers, audit keys, question types, prompt strings, approved option labels and
+optional integer word limits are emitted. Reading includes the passage text;
+Listening includes only a controlled same-origin `/audio/...` path and never
+the transcript. Audio query strings, arbitrary external destinations, traversal
+and encoded aliases are rejected. Unknown option identifiers are rejected.
+
+There is no recursive passthrough of source sections, groups, items or metadata.
+Accepted answers, explanation/feedback fields, transcript, private metadata,
+original content versions and generated practice objects are omitted. Synthetic
+nested sentinel tests verify field separation and detached output objects.
+Invalid structures fail rather than falling back to the original payload.
+
+This prevents accidental **field** disclosure, not semantic answer disclosure:
+reviewed passages, prompts, options and audio intentionally convey information
+from which answers can be inferred, and an author can still write an answer into
+a prompt. Human/content QA remains necessary. This helper does not establish
+authorization, ownership, media accessibility, HTTP caching behavior, browser
+rendering or an approved deployment. No active route or legacy completed
+history/review path uses it; future delivery integration must remain explicitly
+versioned and retrieve feedback separately after authorized completion.
