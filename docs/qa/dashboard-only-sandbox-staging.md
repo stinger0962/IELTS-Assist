@@ -129,6 +129,44 @@ not implied by this preflight. Keep cookies and credentials out of logs.
   synthetic, and avoid unrelated exercise-generation endpoints. This smoke
   test needs no other provider credentials.
 
+## Optional fail-closed staging entry point
+
+After an operator has approved and independently verified the disposable runtime,
+use `uvicorn app.staging:create_app --factory` from `backend/` instead of
+`app.main:app`. Do not change the production service entry point. This factory
+validates before importing `app.main`, whose module-level `init_db()` initializes
+schema, and checks the same engine/session binding the app subsequently uses.
+Each serving process reruns the check, including after the flags-on restart.
+
+Supply the following nonsecret pins through the staging runtime environment:
+`STAGING_EXPECTED_DB_HOST`, `STAGING_EXPECTED_DB_PORT`,
+`STAGING_EXPECTED_DB_NAME`, and `STAGING_EXPECTED_DB_USER`. They must be the
+operator-confirmed disposable instance, port, database and role, not values
+blindly copied from a production connection string. The configured URL and
+active engine must both match; a read-only transaction must return the expected
+database and role. No schema or seed operation occurs before these checks pass.
+
+The factory requires matching non-production HTTPS `SITE_URL` and
+`STRIPE_TEST_RETURN_ORIGIN`, both checkout flags off or both on, disabled daily
+generation, and no OpenAI, Azure speech, Google TTS or email credentials. It
+rejects inherited nonempty `PG*` environment variables and database URL routing
+options. Only `connect_timeout` (required, 1–15 seconds) and optional `sslmode`
+are supported as URL query parameters. Keep the approved TLS policy; do not
+weaken it to satisfy the guard. A deployment needing additional certificate or
+proxy options needs a reviewed extension, not a bypass. Provision secrets through
+the runtime's approved secret mechanism, never in shell arguments or screenshots.
+
+The factory returns fixed failure messages without printing DSNs or driver
+exceptions and rejects an already-imported database/application. It adds no
+HTTP endpoint and makes no Stripe calls. This is a configuration/connected-role
+check, **not proof of infrastructure ownership, account isolation, DNS integrity,
+or absence of production data**. Pinning a production database by mistake is
+still unsafe. Operator verification of the instance and an empty disposable
+database remains mandatory. Startup-order tests use fakes in fresh processes;
+the disposable PostgreSQL CI lane also exercises the connected-identity query
+against its local fixture. Neither establishes that a staging deployment, TLS
+gate, database or checkout works.
+
 ## Stripe Dashboard setup, after authorization
 
 In the selected sandbox/test environment, open **Workbench > Webhooks > Create
