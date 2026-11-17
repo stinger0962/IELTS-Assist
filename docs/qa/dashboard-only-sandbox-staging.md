@@ -81,8 +81,31 @@ not implied by this preflight. Keep cookies and credentials out of logs.
 - Inject secrets via the approved runtime's secret store/environment at process
   start, not source control, frontend `VITE_*` variables, build args, commands,
   log output or chat. Persist test orders long enough to retry webhook delivery.
-- Keep checkout disabled during boot. Check database health and runtime isolation
-  before enabling `STUDY_PASS_ENABLED` and `STRIPE_TEST_CHECKOUT_ENABLED`.
+- Before starting FastAPI (its startup initializes schema), use the intended
+  runtime configuration and a read-only connection check to confirm that the
+  configured PostgreSQL host and credentials point only at the disposable
+  staging database. Verify its provisioned identity, not just that a server
+  answers; no production database or credential should be reachable by this
+  runtime. If identity cannot be confirmed, stop before starting the app.
+- Start with `STUDY_PASS_ENABLED=false` and
+  `STRIPE_TEST_CHECKOUT_ENABLED=false`. A healthy `/api/health` is not enough:
+  the health route runs `SELECT 1`, and a failed PostgreSQL connection can
+  fall back to SQLite when Study Pass is disabled. From an operator-only check
+  of the **serving process's SQLAlchemy engine**, require dialect
+  `postgresql` and match the connected database to the provisioned disposable
+  instance (for example, check `SELECT current_database()` against its expected
+  name and confirm the instance identity separately). Checking an independent
+  psql session or reading the intended `DATABASE_URL` is not evidence of the
+  process's active binding. If not verifiable, or if the engine fell back to
+  SQLite, stop before seeding. Repeat the check after the flags-on restart,
+  before any test checkout. Capture pass/fail privately; do not publish a debug
+  endpoint or print the DSN, credentials, or connection exceptions that might
+  include them.
+- Set `SITE_URL` to the staging HTTPS origin before auth testing. Password
+  reset uses it independently of `STRIPE_TEST_RETURN_ORIGIN` and defaults to
+  the production site. Use prepared synthetic accounts for checkout; do not
+  trigger password reset as part of the smoke test. Without an email provider,
+  the reset route can write the token-bearing link to app logs.
 - Supply `STRIPE_TEST_SECRET_KEY` (`sk_test_...`), the corresponding sandbox
   `STRIPE_TEST_ACCOUNT_ID`, and **that Dashboard endpoint's**
   `STRIPE_TEST_WEBHOOK_SECRET` (`whsec_...`). Inject these through the approved
