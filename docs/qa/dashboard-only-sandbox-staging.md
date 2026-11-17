@@ -254,3 +254,39 @@ Confirm stopped-worker evidence, exact attempt identity, no saved result, one-ti
 credit restoration, and rejection of a late stale completion. This is **not a
 prerequisite for the first Stripe sandbox webhook test** above. Do not release
 reservations solely because of age or use this checklist as production approval.
+
+## Build a local handoff bundle (no hosting or deployment)
+
+`ops/package-staging.py` makes a reviewable `.tar.gz` for a future **approved**
+staging runtime. It requires Python 3, Git, Node 20.19+ (or 22.12+) and npm. Supply
+an exact full commit SHA containing the staging factory, not a moving branch:
+
+```sh
+python3 ops/package-staging.py --revision <full-tested-commit-sha> \
+  --output /tmp/ielts-staging-review.tar.gz
+```
+
+The script exports an allowlist of regular tracked source files from that commit
+into a clean temporary directory, ignoring working-tree changes. It excludes
+`.env*`, hidden files, databases, credentials files, media, frontend tests/fixtures,
+and local-only demo harnesses. It runs locked `npm ci --ignore-scripts` against
+the public registry and then TypeScript/Vite build with `VITE_API_URL=/api`.
+An isolated build HOME and clean compiler environment prevent ambient Vite values
+or npm configuration from being copied into assets. Existing network proxy/CA
+settings may be inherited **only for dependency installation**, not compilation.
+No verification disables TLS or changes system transport settings.
+
+The bundle contains backend Python source and pinned requirements, built static
+frontend files, this runbook, staging-only instructions, and a SHA256 manifest
+with the exact source revision. It includes neither dependency environments nor
+runtime configuration. Archive file ordering, timestamps and permissions are
+stable; byte reproducibility across different Node/npm platforms is not claimed.
+Existing output files are never overwritten. The source allowlist is deliberately
+narrow; review it if future app assets or runtime data files are introduced.
+
+This packages code, not an operational environment: no host, database, credentials,
+network exposure, TLS, proxy, access gate, seed data, or provider call is created.
+A production-mode Vite build here means optimized static assets, **not deployment
+to production**. The handoff command uses only `app.staging:create_app --factory`
+on loopback. Complete the same-origin, canonical webhook exception, database,
+media and browser checks above before separately authorized end-to-end testing.
