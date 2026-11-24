@@ -4,7 +4,7 @@ import logging
 import random
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.services.ai.grammar_generator import grammar_generator
 from app.services.auth import get_current_user
+from app.services.practice_replenishment import schedule_replenishment
 from app.services.quota import quota
 
 router = APIRouter()
@@ -106,6 +107,7 @@ def _replenish_grammar(user_id: int) -> None:
 
 @router.get("/daily-grammar")
 def get_daily_grammar(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -130,12 +132,13 @@ def get_daily_grammar(
         if new_gps:
             db.commit()
 
-    background_tasks.add_task(_replenish_grammar, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_grammar, current_user.id)
     return {"practices": practices}
 
 
 @router.post("/generate-more-grammar", dependencies=[Depends(quota("generate"))])
 def generate_more_grammar(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -152,14 +155,14 @@ def generate_more_grammar(
     ]
     available = _available_grammar_for_user(current_user.id, db, limit=1, exclude_topics=active_topics)
     if not available:
-        background_tasks.add_task(_replenish_grammar, current_user.id)
+        schedule_replenishment(request, background_tasks, _replenish_grammar, current_user.id)
         return {"practices": [], "pool_empty": True}
 
     gp = available[0]
     db.add(UserPractice(user_id=current_user.id, practice_id=gp.id))
     db.commit()
 
-    background_tasks.add_task(_replenish_grammar, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_grammar, current_user.id)
     return {"practices": [_with_db_id(gp)]}
 
 
@@ -174,6 +177,7 @@ class SubmitAIGrammarBody(BaseModel):
 @router.post("/submit-ai-grammar")
 def submit_ai_grammar(
     body: SubmitAIGrammarBody,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -194,7 +198,7 @@ def submit_ai_grammar(
     up.total_questions = body.total_questions
     db.commit()
 
-    background_tasks.add_task(_replenish_grammar, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_grammar, current_user.id)
     return {"ok": True}
 
 

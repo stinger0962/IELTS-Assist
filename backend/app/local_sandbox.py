@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import sys
 
-from app.staging import StagingPreflightError, _safe_query, validate_binding
+from app.staging import StagingPreflightError, _load_fixture_app, _safe_query, validate_binding
 
 UI_ORIGIN = "http://127.0.0.1:5173"
 API_HOST = "127.0.0.1"
@@ -76,7 +76,7 @@ def _create_local_app():
         target = validate_local_configuration(config.settings, os.environ, make_url)
         database = importlib.import_module("app.database")
         validate_binding(database, target, sqlalchemy.text)
-        return importlib.import_module("app.main").app
+        return _load_fixture_app()
     except StagingPreflightError:
         raise
     except Exception:

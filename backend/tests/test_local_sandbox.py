@@ -106,9 +106,12 @@ def load(name):
     if name == "app.database": return NS(engine=e, SessionLocal=NS(kw={"bind":e}))
     if name == "app.main":
         assert e.connect.return_value.__exit__.called
-        return NS(app="guarded")
+        return NS(app=NS(state=NS()))
     if name == "uvicorn":
-        return NS(run=lambda app, **kw: print(app, kw))
+        def run(app, **kw):
+            assert app.state.practice_auto_replenishment_enabled is False
+            print("guarded", kw)
+        return NS(run=run)
     raise AssertionError(name)
 local.importlib.import_module = load
 if mode == "dotenv": open(".env", "w").write("DATABASE_URL=credential-bearing-secret")

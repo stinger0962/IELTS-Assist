@@ -11,6 +11,7 @@ from app.config import settings
 from app.main import app
 from app.models.models import GeneratedPractice, UserPractice
 from app.routers import reading, listening
+from app.staging import _load_fixture_app
 from app.services.study_pass import grant_study_pass
 
 
@@ -18,15 +19,20 @@ from app.services.study_pass import grant_study_pass
 def offline(monkeypatch):
     monkeypatch.setattr(settings, "STUDY_PASS_ENABLED", True)
     monkeypatch.setattr(settings, "DAILY_GENERATION_ENABLED", False)
-    monkeypatch.setattr(reading, "_replenish", lambda user_id: None)
-    monkeypatch.setattr(listening, "_replenish_listening", lambda user_id: None)
+    monkeypatch.setattr(app, "state", type(app.state)())
+    assert _load_fixture_app() is app
 
     def forbidden(*args, **kwargs):
         raise AssertionError("External network/provider/scheduler is forbidden")
 
     monkeypatch.setattr(socket.socket, "connect", forbidden)
     monkeypatch.setattr("app.main.AsyncIOScheduler", forbidden)
-    monkeypatch.setattr(reading.practice_generator, "generate_practice", forbidden)
+    # pytest.fail raises a BaseException, not swallowed by the worker's logging.
+    def no_refill(*args, **kwargs):
+        pytest.fail("fixture full mocks must not enqueue background replenishment")
+
+    monkeypatch.setattr(reading, "_replenish", no_refill)
+    monkeypatch.setattr(listening, "_replenish_listening", no_refill)
 
 
 def original_exam(skill):

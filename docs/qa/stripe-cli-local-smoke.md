@@ -49,7 +49,11 @@ Supply these settings to the backend process only:
 
 With the frontend dependencies installed, start the separate frontend process
 with `node frontend/scripts/local-sandbox.mjs` from the repository root.
-Neither launcher accepts alternate bind addresses.
+Neither launcher accepts alternate bind addresses. The backend launcher skips
+background practice-pool replenishment but still serves and saves seeded
+exercises. Writing's local prompt fallback still works. This is not an egress
+block; avoid explicit AI review, generation, speech and email during this
+checkout smoke test.
 
 ## Pass/fail checklist
 

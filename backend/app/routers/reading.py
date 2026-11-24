@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.database import SessionLocal, get_db
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.services.ai.practice_generator import practice_generator
 from app.services.auth import get_current_user
+from app.services.practice_replenishment import schedule_replenishment
 from app.services.quota import quota
 
 router = APIRouter()
@@ -104,6 +105,7 @@ def _replenish(user_id: int) -> None:
 
 @router.get("/daily-reading")
 def get_daily_reading(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -166,12 +168,13 @@ def get_daily_reading(
                 db.commit()
                 practices.append(_with_db_id(full_test))
 
-    background_tasks.add_task(_replenish, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish, current_user.id)
     return {"practices": practices}
 
 
 @router.post("/generate-more", dependencies=[Depends(quota("generate"))])
 def generate_more(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -188,14 +191,14 @@ def generate_more(
     ]
     available = _available_for_user(current_user.id, db, limit=1, exclude_topics=active_topics)
     if not available:
-        background_tasks.add_task(_replenish, current_user.id)
+        schedule_replenishment(request, background_tasks, _replenish, current_user.id)
         return {"practices": [], "pool_empty": True}
 
     gp = available[0]
     db.add(UserPractice(user_id=current_user.id, practice_id=gp.id))
     db.commit()
 
-    background_tasks.add_task(_replenish, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish, current_user.id)
     return {"practices": [_with_db_id(gp)]}
 
 
@@ -210,6 +213,7 @@ class SubmitAIReadingBody(BaseModel):
 @router.post("/submit-ai-reading")
 def submit_ai_reading(
     body: SubmitAIReadingBody,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -230,17 +234,18 @@ def submit_ai_reading(
     up.total_questions = body.total_questions
     db.commit()
 
-    background_tasks.add_task(_replenish, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish, current_user.id)
     return {"ok": True}
 
 
 @router.post("/trigger-replenish", dependencies=[Depends(quota("generate"))])
 def trigger_replenish(
+    request: Request,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """Fire-and-forget: start background pool replenishment."""
-    background_tasks.add_task(_replenish, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish, current_user.id)
     return {"ok": True}
 
 

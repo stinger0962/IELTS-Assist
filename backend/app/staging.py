@@ -109,6 +109,13 @@ def validate_binding(database, target, text):
         raise StagingPreflightError("Staging database verification failed") from None
 
 
+def _load_fixture_app():
+    """Shared final step of the guarded launchers, after database verification."""
+    app = importlib.import_module("app.main").app
+    app.state.practice_auto_replenishment_enabled = False
+    return app
+
+
 def create_app():
     """Uvicorn factory; checks rerun on every flags-on/off process restart."""
     if "app.main" in sys.modules or "app.database" in sys.modules:
@@ -126,6 +133,6 @@ def create_app():
         # Pydantic and driver exceptions may contain credential-bearing input.
         raise StagingPreflightError("Staging configuration or database initialization failed") from None
     try:
-        return importlib.import_module("app.main").app
+        return _load_fixture_app()
     except Exception:
         raise StagingPreflightError("Staging application initialization failed") from None

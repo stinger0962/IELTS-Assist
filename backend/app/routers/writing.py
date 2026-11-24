@@ -3,7 +3,7 @@ import logging
 import math
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.models.models import GeneratedPractice, Topic, User, UserPractice
 from app.services.ai.writing_config import generate_metadata as writing_generate_metadata
 from app.services.ai.writing_grader import WritingGrader
 from app.services.auth import get_current_user
+from app.services.practice_replenishment import schedule_replenishment
 from app.services.quota import quota
 from app.services.study_pass import (
     finalize_writing_review, release_writing_review, reserve_writing_review,
@@ -216,6 +217,7 @@ def _seed_writing_pool(db: Session, count: int = 5) -> None:
 
 @router.get("/daily-writing")
 def get_daily_writing(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -244,12 +246,13 @@ def get_daily_writing(
         if new_gps:
             db.commit()
 
-    background_tasks.add_task(_replenish_writing, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_writing, current_user.id)
     return {"practices": practices}
 
 
 @router.post("/generate-more-writing")
 def generate_more_writing(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -275,7 +278,7 @@ def generate_more_writing(
     db.add(UserPractice(user_id=current_user.id, practice_id=gp.id))
     db.commit()
 
-    background_tasks.add_task(_replenish_writing, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_writing, current_user.id)
     return {"practices": [_with_db_id(gp)]}
 
 
@@ -346,6 +349,7 @@ def _validate_writing_review(result: dict, essay: str) -> None:
 @router.post("/submit-ai-writing", dependencies=[Depends(_legacy_writing_quota)])
 def submit_ai_writing(
     body: SubmitAIWritingBody,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -418,7 +422,7 @@ def submit_ai_writing(
         raise
 
     _extract_writing_topics(grading_result, current_user.id, db)
-    background_tasks.add_task(_replenish_writing, current_user.id)
+    schedule_replenishment(request, background_tasks, _replenish_writing, current_user.id)
     return {
         "ok": True, "grading": grading_result,
         "word_count": word_count, "overall_band": overall_band,

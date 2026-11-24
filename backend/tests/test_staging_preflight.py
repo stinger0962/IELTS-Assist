@@ -124,13 +124,13 @@ def load(name):
     if name == "app.main":
         assert e.connect.return_value.__exit__.called
         if mode == "main_error": raise ValueError("secret_schema_DSN")
-        return NS(app="guarded-app")
+        return NS(app=NS(state=NS()))
     raise AssertionError(name)
 staging.importlib.import_module = load
 if mode == "preimported": sys.modules["app.main"] = NS()
 if mode == "database_preimported": sys.modules["app.database"] = NS()
 try:
-    assert staging.create_app() == "guarded-app"
+    assert staging.create_app().state.practice_auto_replenishment_enabled is False
     assert mode == "ok"
     print("passed")
 except staging.StagingPreflightError as error:

@@ -3,9 +3,10 @@ import json
 from unittest.mock import Mock
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, HTTPException, Request
 
 from app.config import settings
+from app.main import app
 from app.models.models import GeneratedPractice, User, UserPractice
 from app.routers import writing
 
@@ -48,7 +49,7 @@ def card(db, user, skill="writing"):
 
 def submit(db, user, up, essay=ESSAY, time=120):
     body = writing.SubmitAIWritingBody(practice_id=up.practice_id, essay=essay, time_seconds=time)
-    return writing.submit_ai_writing(body, BackgroundTasks(), db, user)
+    return writing.submit_ai_writing(body, Request({"type": "http", "app": app}), BackgroundTasks(), db, user)
 
 
 def test_free_review_then_paywall_and_exact_retry(test_db, test_user, grading):

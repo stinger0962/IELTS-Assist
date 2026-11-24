@@ -137,6 +137,12 @@ use `uvicorn app.staging:create_app --factory` from `backend/` instead of
 validates before importing `app.main`, whose module-level `init_db()` initializes
 schema, and checks the same engine/session binding the app subsequently uses.
 Each serving process reruns the check, including after the flags-on restart.
+The factory also disables background practice-pool replenishment in learner
+routes (Reading, Listening, Grammar and Writing), including the Reading screen's
+automatic pool refresh. Stored exercises and submissions still work. Local,
+hardcoded Writing prompt fallback stays enabled. This is not a provider or
+egress block: do not use explicit AI review, generation, speech or email in
+this checkout smoke test.
 
 Supply the following nonsecret pins through the staging runtime environment:
 `STAGING_EXPECTED_DB_HOST`, `STAGING_EXPECTED_DB_PORT`,
