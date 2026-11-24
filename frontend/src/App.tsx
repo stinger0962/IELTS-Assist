@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from './store';
+import { APP_BASE, IS_BILLING_TEST } from './deployment';
 import { authAPI } from './api';
 import './i18n';
 import './styles/global.css';
@@ -69,7 +70,12 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={APP_BASE}>
+      {IS_BILLING_TEST && (
+        <p role="status" style={{ textAlign: 'center', fontWeight: 'bold' }}>
+          Stripe sandbox only. Use a synthetic sign-in and a test card. No real charges.
+        </p>
+      )}
       <Routes>
         <Route path="/checkout/return" element={<CheckoutReturn />} />
         <Route path="/checkout/cancel" element={<CheckoutReturn />} />
@@ -78,7 +84,7 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         
-        <Route path="/" element={
+        <Route path="/" element={IS_BILLING_TEST ? <Navigate to="/practice" replace /> :
           <ProtectedRoute>
             <AppLayout>
               <Dashboard />

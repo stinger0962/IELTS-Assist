@@ -11,6 +11,7 @@ import { checkoutAPI, checkoutReturnPath, isCheckoutOffer, safeStripeCheckoutUrl
 import { api } from '../api';
 import { CHECKOUT_ATTEMPT_TTL_MS } from '../utils/checkoutAttempt';
 import { useAppStore } from '../store';
+import * as deployment from '../deployment';
 
 const response = (data: unknown): AxiosResponse => ({ data, status: 200, statusText: 'OK', headers: {}, config: { headers: new AxiosHeaders() } });
 const id = '1cc2ab9b-dd41-4c33-aaa1-f1ba2e9c8bb1';
@@ -61,6 +62,18 @@ describe('Test checkout offer', () => {
     await screen.findByRole('alert');
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][0]).toBe(create.mock.calls[0][0]);
+  });
+  it('uses the app base for the terminal receipt on an idempotent replay', async () => {
+    const qualified = vi.spyOn(deployment, 'appPath').mockImplementation(path => '/__ielts-billing-test' + path);
+    const create = vi.spyOn(checkoutAPI, 'create').mockRejectedValueOnce(new Error('lost response'))
+      .mockResolvedValue(response({ ...order, state: 'fulfilled', checkout_url: null }));
+    render(<StudyPassCheckout />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Check previous test checkout' }));
+    await waitFor(() => expect(checkoutNavigation.assign).toHaveBeenCalledWith('/__ielts-billing-test/checkout/return?order_id=' + id));
+    expect(qualified).toHaveBeenCalledWith('/checkout/return?order_id=' + id);
+    expect(create.mock.calls[0][0]).toBe(create.mock.calls[1][0]);
   });
   it('does not start checkout while an essay exists', async () => {
     const create = vi.spyOn(checkoutAPI, 'create');

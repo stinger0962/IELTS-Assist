@@ -4,6 +4,7 @@ import { checkoutAPI, isCheckoutOffer, isCheckoutOrder, safeStripeCheckoutUrl } 
 import { obtainCheckoutAttempt, readCheckoutAttempt } from '../utils/checkoutAttempt';
 import type { CheckoutOffer } from '../api/checkout';
 import { useAppStore } from '../store';
+import { appPath } from '../deployment';
 
 export const checkoutNavigation = { assign: (url: string) => window.location.assign(url) };
 
@@ -59,7 +60,7 @@ export default function StudyPassCheckout({ hasDraft = false }: { hasDraft?: boo
       if (generationId !== generation.current || draftRef.current) return;
       if (!isCheckoutOrder(data)) throw new Error('Invalid checkout response');
       if (data.state !== 'pending') {
-        checkoutNavigation.assign('/checkout/return?order_id=' + encodeURIComponent(data.id));
+        checkoutNavigation.assign(appPath(`/checkout/return?order_id=${encodeURIComponent(data.id)}`));
         return;
       }
       const url = safeStripeCheckoutUrl(data.checkout_url);

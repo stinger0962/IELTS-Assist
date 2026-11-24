@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import settings
 from app.database import get_db
 from app.models.models import User
+from app.same_origin_route import ORIGIN as REHEARSAL_ORIGIN, PREFIX as REHEARSAL_PREFIX
 from app.services.auth import get_current_user
 from app.services.checkout import Offer, checkout_status, process_notification, start_checkout
 from app.services.stripe_test import StripeTestAdapter, UnsupportedStripeEvent
@@ -21,16 +22,21 @@ def _adapter_factory(**kwargs):
     return StripeTestAdapter(**kwargs)
 
 
-def _sandbox():
+def _sandbox(request: Request | None = None):
     """Validate the entire sandbox configuration; constructors must not do I/O."""
     if not settings.STRIPE_TEST_CHECKOUT_ENABLED or not settings.STUDY_PASS_ENABLED:
         raise HTTPException(503, 'Sandbox checkout is unavailable')
     origin = settings.STRIPE_TEST_RETURN_ORIGIN
     parsed = urlsplit(origin)
     hostname = (parsed.hostname or '').rstrip('.').lower()
+    production_host = hostname == 'annababy.cc' or hostname.endswith('.annababy.cc')
+    # No env toggle, host header or user input can confer the factory marker.
+    same_host_rehearsal = (origin == REHEARSAL_ORIGIN and request is not None
+                           and request.scope.get("root_path") == REHEARSAL_PREFIX
+                           and getattr(request.app.state, "same_origin_rehearsal", False) is True)
     if (not hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
             or parsed.path not in ('', '/') or any(c.isspace() for c in origin)
-            or hostname == 'annababy.cc' or hostname.endswith('.annababy.cc')
+            or (production_host and not same_host_rehearsal)
             or (parsed.scheme != 'https' and not (
                 parsed.scheme == 'http' and hostname in ('localhost', '127.0.0.1', '::1')))):
         raise ValueError('An explicit local or isolated HTTPS sandbox return origin is required')
@@ -50,19 +56,20 @@ def _sandbox():
         not re.fullmatch(r"price_[A-Za-z0-9_]+", price_id) or amount != 1900 or currency != "USD"
     ):
         raise ValueError("Dashboard Price must be the selected USD19 test offer")
+    callback_origin = origin.rstrip('/') + (REHEARSAL_PREFIX if same_host_rehearsal else '')
     adapter = _adapter_factory(
         api_key=settings.STRIPE_TEST_SECRET_KEY,
         webhook_secret=settings.STRIPE_TEST_WEBHOOK_SECRET,
         account_id=settings.STRIPE_TEST_ACCOUNT_ID,
-        success_url=origin.rstrip('/') + '/checkout/return?order_id={ORDER_ID}',
-        cancel_url=origin.rstrip('/') + '/checkout/cancel?order_id={ORDER_ID}',
+        success_url=callback_origin + '/checkout/return?order_id={ORDER_ID}',
+        cancel_url=callback_origin + '/checkout/cancel?order_id={ORDER_ID}',
     )
     return Offer(sku, amount, currency, reviews, provider_price_id=price_id), adapter
 
 
-def _required_sandbox():
+def _required_sandbox(request: Request):
     try:
-        return _sandbox()
+        return _sandbox(request)
     except (ValueError, TypeError):
         raise HTTPException(503, 'Sandbox checkout is unavailable') from None
 
@@ -90,9 +97,9 @@ class CreateOrder(BaseModel):
 
 
 @router.get('/offer')
-def get_offer(user: User = Depends(get_current_user)):
+def get_offer(request: Request, user: User = Depends(get_current_user)):
     try:
-        offer, _ = _sandbox()
+        offer, _ = _sandbox(request)
     except (HTTPException, ValueError, TypeError):
         return {'enabled': False, 'test_mode': True}
     return {'enabled': True, 'test_mode': True, 'sku': offer.sku,
@@ -101,9 +108,9 @@ def get_offer(user: User = Depends(get_current_user)):
 
 
 @router.post('/orders')
-def create_order(body: CreateOrder, db: Session = Depends(get_db),
+def create_order(body: CreateOrder, request: Request, db: Session = Depends(get_db),
                  user: User = Depends(get_current_user)):
-    offer, adapter = _required_sandbox()
+    offer, adapter = _required_sandbox(request)
     try:
         return _public_order(start_checkout(db, user.id, body.idempotency_key, offer, adapter))
     except HTTPException:
@@ -116,14 +123,14 @@ def create_order(body: CreateOrder, db: Session = Depends(get_db),
 
 
 @router.get('/orders/{order_id}')
-def get_order(order_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _required_sandbox()
+def get_order(order_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _required_sandbox(request)
     return _public_order(checkout_status(db, user.id, order_id))
 
 
 @router.post('/webhook')
 async def webhook(request: Request, db: Session = Depends(get_db)):
-    _, adapter = _required_sandbox()
+    _, adapter = _required_sandbox(request)
     payload = bytearray()
     async for chunk in request.stream():
         payload.extend(chunk)

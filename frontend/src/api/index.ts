@@ -1,10 +1,14 @@
 import axios from 'axios';
+import { IS_BILLING_TEST, sameOriginApiBase } from '../deployment';
 import { useAppStore } from '../store';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+const API_URL = sameOriginApiBase(import.meta.env.VITE_API_URL);
+// Axios otherwise looks for an origin-wide XSRF cookie on same-origin requests.
+const SANDBOX_CONFIG = IS_BILLING_TEST ? { withXSRFToken: false } : {};
 
 export const api = axios.create({
   baseURL: API_URL,
+  ...SANDBOX_CONFIG,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -39,7 +43,7 @@ export const authAPI = {
     axios.post(
       `${API_URL}/auth/login`,
       new URLSearchParams({ username: email, password }).toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      { ...SANDBOX_CONFIG, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     ),
   register: (data: { email: string; username: string; password: string; full_name?: string }) =>
     api.post('/auth/register', data),

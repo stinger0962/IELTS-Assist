@@ -1,3 +1,4 @@
+import { browserStorageKey } from '../deployment';
 import type { CheckoutOffer } from '../api/checkout';
 import { isOrderId } from '../api/checkout';
 
@@ -7,8 +8,8 @@ interface Attempt { key: string; createdAt: number }
 export type AttemptState = { kind: 'none' } | { kind: 'ready'; attempt: Attempt } | { kind: 'blocked' };
 
 function storageKey(userId: number, offer: CheckoutOffer) {
-  return 'ielts:test-checkout:v1:' + userId + ':' + encodeURIComponent(
-    [offer.sku, offer.amount_minor, offer.currency, offer.reviews, offer.duration_days].join('|'));
+  return browserStorageKey('ielts:test-checkout:v1:' + userId + ':' + encodeURIComponent(
+    [offer.sku, offer.amount_minor, offer.currency, offer.reviews, offer.duration_days].join('|')));
 }
 export function readCheckoutAttempt(userId: number, offer: CheckoutOffer, now = Date.now()): AttemptState {
   try {

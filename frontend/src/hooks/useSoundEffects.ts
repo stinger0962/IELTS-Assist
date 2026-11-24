@@ -4,7 +4,9 @@
  * Respects user preference stored in localStorage.
  */
 
-const STORAGE_KEY = 'ielts-sound-effects';
+import { browserStorageKey } from '../deployment';
+
+const STORAGE_KEY = browserStorageKey('ielts-sound-effects');
 
 function isEnabled(): boolean {
   try {
