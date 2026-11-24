@@ -45,8 +45,12 @@ export function checkoutReturnPath(value: string | null): string | null {
   const match = /^(\/checkout\/(?:return|cancel))\?order_id=([0-9a-f-]+)$/i.exec(value);
   return match && isOrderId(match[2]) ? value : null;
 }
+// The shared client has no default deadline. Keep checkout failures bounded
+// so a lost response releases the UI without starting a new purchase.
+const READ_TIMEOUT_MS = 8_000;
+const CREATE_TIMEOUT_MS = 30_000;
 export const checkoutAPI = {
-  offer: () => api.get('/checkout/offer'),
-  create: (idempotencyKey: string) => api.post('/checkout/orders', { idempotency_key: idempotencyKey }),
-  status: (id: string) => api.get('/checkout/orders/' + encodeURIComponent(id)),
+  offer: () => api.get('/checkout/offer', { timeout: READ_TIMEOUT_MS }),
+  create: (idempotencyKey: string) => api.post('/checkout/orders', { idempotency_key: idempotencyKey }, { timeout: CREATE_TIMEOUT_MS }),
+  status: (id: string) => api.get('/checkout/orders/' + encodeURIComponent(id), { timeout: READ_TIMEOUT_MS }),
 };

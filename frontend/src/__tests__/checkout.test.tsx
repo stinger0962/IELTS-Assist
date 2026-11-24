@@ -171,6 +171,20 @@ describe('Test checkout offer', () => {
   });
 });
 
+describe('Checkout request deadlines', () => {
+  it('sets finite deadlines on the actual client and preserves the create key', async () => {
+    const read = vi.mocked(api.get);
+    const create = vi.spyOn(api, 'post').mockResolvedValue(response(order));
+    vi.mocked(checkoutAPI.offer).mockRestore();
+    await checkoutAPI.offer();
+    await checkoutAPI.status(id);
+    await checkoutAPI.create(id);
+    expect(read).toHaveBeenCalledWith('/checkout/offer', { timeout: 8_000 });
+    expect(read).toHaveBeenCalledWith('/checkout/orders/' + id, { timeout: 8_000 });
+    expect(create).toHaveBeenCalledWith('/checkout/orders', { idempotency_key: id }, { timeout: 30_000 });
+  });
+});
+
 describe('Owned checkout return', () => {
   it('shows pending, then refreshed server fulfillment without creating or granting', async () => {
     const status = vi.spyOn(checkoutAPI, 'status').mockResolvedValueOnce(response(order)).mockResolvedValue(response({ ...order, state: 'fulfilled', checkout_url: null }));
@@ -199,6 +213,21 @@ describe('Owned checkout return', () => {
     render(<MemoryRouter initialEntries={['/checkout/return?order_id=' + id]}><CheckoutReturn /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not verify');
     expect(screen.queryByText(/Test order fulfilled/)).not.toBeInTheDocument();
+  });
+  it('after a network deadline can manually check the same order without starting checkout', async () => {
+    const status = vi.spyOn(checkoutAPI, 'status')
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }))
+      .mockResolvedValue(response({ ...order, state: 'fulfilled', checkout_url: null }));
+    const create = vi.spyOn(checkoutAPI, 'create');
+    render(<MemoryRouter initialEntries={['/checkout/return?order_id=' + id]}><CheckoutReturn /></MemoryRouter>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not verify');
+    const retry = screen.getByRole('button', { name: 'Check again' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    expect(await screen.findByText(/Test order fulfilled/)).toBeInTheDocument();
+    expect(status.mock.calls).toEqual([[id], [id]]);
+    expect(create).not.toHaveBeenCalled();
+    expect(checkoutNavigation.assign).not.toHaveBeenCalled();
   });
   it('requires authentication and preserves a bounded login return link', () => {
     useAppStore.setState({ token: null });
