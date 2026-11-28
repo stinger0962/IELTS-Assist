@@ -158,6 +158,7 @@ def test_same_origin_bundle_selects_fixed_build_mode_and_launcher(tmp_path, monk
         for name, body in {
             "backend/app/same_origin_sandbox.py": "# guarded launcher",
             packaging.BILLING_RUNBOOK: "# rehearsal runbook",
+            packaging.BILLING_CHECK: "# read-only probe",
             "frontend/package.json": "{}",
         }.items():
             path = source / name
@@ -187,6 +188,7 @@ def test_same_origin_bundle_selects_fixed_build_mode_and_launcher(tmp_path, monk
         assert manifest["api_base"] == "/__ielts-billing-test/api"
         assert manifest["source_revision"] == "b" * 40
         assert "BILLING-TEST-README.md" in archive.getnames()
+        assert archive.extractfile(packaging.BILLING_CHECK).read() == b"# read-only probe"
         assert "STAGING-README.md" not in archive.getnames()
         for name, digest in manifest["files"].items():
             assert hashlib.sha256(archive.extractfile(name).read()).hexdigest() == digest

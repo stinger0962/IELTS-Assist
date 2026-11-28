@@ -57,7 +57,15 @@ gate cannot be verified, do not expose any test namespace.
 
 With flags off, verify the actual TLS site from both allowed and denied client
 contexts, including malformed methods/paths and unchanged production home/API
-health. Confirm public webhook reachability without successful execution. Then
+health. From an unapproved network run
+`python ops/check-billing-rehearsal.py /path/to/build-manifest.json --public-only`.
+This refuses redirects and identifies a misleading HTTP 200 ordinary homepage
+fallback. From the rehearsal host, use `--loopback-only` instead to check the
+exact bundle hashes for the loopback UI and assets, healthy JSON, no cookies or
+caching, and rejection of the wrong Host and root. These checks do not prove
+the authorized TLS route or Stripe works.
+
+Confirm public webhook reachability without successful execution. Then
 enable only this isolated runtime, confirm the pre-created Stripe Price, and
 exercise $19 test checkout and signed completion. Capture status only, not
 credentials, Checkout URLs or account/learner details. Use a second tab on the

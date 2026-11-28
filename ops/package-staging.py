@@ -22,6 +22,7 @@ FRONTEND_FILES = {"frontend/index.html", "frontend/package.json", "frontend/pack
                   "frontend/tsconfig.app.json", "frontend/tsconfig.node.json", "frontend/public/vite.svg"}
 BILLING_PREFIX = "/__ielts-billing-test/"
 BILLING_RUNBOOK = "docs/qa/same-origin-billing-rehearsal.md"
+BILLING_CHECK = "ops/check-billing-rehearsal.py"
 BILLING_INSTRUCTIONS = """# IELTS sandbox rehearsal bundle (not deployed)
 
 For the existing https://annababy.cc/__ielts-billing-test/ path only.
@@ -82,7 +83,7 @@ def selected(path):
     if any(p in {"..", ".", "__tests__", "fixtures"} or p.startswith(".") for p in parts):
         return False
     return (path in FRONTEND_FILES or path == "backend/requirements.txt"
-            or path in {"docs/qa/dashboard-only-sandbox-staging.md", BILLING_RUNBOOK}
+            or path in {"docs/qa/dashboard-only-sandbox-staging.md", BILLING_RUNBOOK, BILLING_CHECK}
             or (path.startswith("backend/app/") and path.endswith(".py"))
             or (path.startswith("frontend/src/") and Path(path).suffix in {
                 ".ts", ".tsx", ".css", ".svg", ".json"}))
@@ -155,6 +156,8 @@ def package(repo, revision, output, *, same_origin=False):
             raise ValueError("Revision lacks the guarded billing launcher or runbook")
         files = ({"BILLING-TEST-README.md": BILLING_INSTRUCTIONS.encode()} if same_origin
                  else {"STAGING-README.md": INSTRUCTIONS.encode()})
+        if same_origin and (source / BILLING_CHECK).is_file():
+            files[BILLING_CHECK] = (source / BILLING_CHECK).read_bytes()
         for root in (source / "backend", source / "docs"):
             for path in root.rglob("*"):
                 if path.is_file():
