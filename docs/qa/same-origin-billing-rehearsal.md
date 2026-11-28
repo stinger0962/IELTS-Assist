@@ -15,6 +15,11 @@ not by browser URL-path isolation.
   browser token, preferences and checkout attempts. Do not put it in the
   production document root. If exercising Listening, copy only a synthetic
   fixture audio file to the test artifact's `audio/` directory.
+- To produce the transport archive from a green, exact Git commit, run
+  `python ops/package-staging.py --same-origin-billing-test --revision FULL_SHA --output ielts-billing-test.tar.gz`.
+  Verify its SHA-256 before transport and check the per-file hashes in its
+  manifest. This mode builds and checks the namespaced static entry point and
+  excludes secrets, databases, and unrelated local files. It does not deploy.
 - Launch with `python -m app.same_origin_sandbox` from a clean directory without
   dotenv files. Provide the draft backend via `PYTHONPATH` and the absolute test
   artifact path via `IELTS_BILLING_TEST_DIST`. It listens at `127.0.0.1:8011`.

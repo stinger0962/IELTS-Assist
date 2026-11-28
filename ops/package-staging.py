@@ -19,7 +19,33 @@ import tempfile
 
 FRONTEND_FILES = {"frontend/index.html", "frontend/package.json", "frontend/package-lock.json",
                   "frontend/vite.config.ts", "frontend/tsconfig.json",
-                  "frontend/tsconfig.app.json", "frontend/tsconfig.node.json"}
+                  "frontend/tsconfig.app.json", "frontend/tsconfig.node.json", "frontend/public/vite.svg"}
+BILLING_PREFIX = "/__ielts-billing-test/"
+BILLING_RUNBOOK = "docs/qa/same-origin-billing-rehearsal.md"
+BILLING_INSTRUCTIONS = """# IELTS sandbox rehearsal bundle (not deployed)
+
+For the existing https://annababy.cc/__ielts-billing-test/ path only.
+The included same-origin billing runbook is the operational source of truth.
+This bundle neither configures ingress nor creates accounts, credentials,
+webhook destinations, or databases. It does not contain real data or Stripe secrets.
+
+Check the supplied archive digest and build-manifest.json before extracting
+into a clean, dedicated directory. Install the listed backend dependencies in
+a fresh environment. After checking the actual vhost, isolated PostgreSQL,
+and the approved access gate, use the guarded launcher only:
+
+    python -m app.same_origin_sandbox
+
+Set PYTHONPATH to the extracted backend directory and IELTS_BILLING_TEST_DIST
+to the extracted frontend directory. Start with both billing flags off
+until the runbook preflight checks pass. Never run app.main:app or overwrite the
+ordinary frontend's assets. Keep the test namespace gated; only the exact
+signed sandbox webhook POST is exempt from the operator gate.
+
+The smoke test is a learner opening the pass offer on the existing website,
+using Stripe test mode, returning to the same path, and seeing the pass
+activate only after verified settlement. No actual payment is permitted.
+"""
 INSTRUCTIONS = """# Local staging bundle (not deployed)
 
 This archive contains backend Python source and built frontend static assets.
@@ -56,7 +82,7 @@ def selected(path):
     if any(p in {"..", ".", "__tests__", "fixtures"} or p.startswith(".") for p in parts):
         return False
     return (path in FRONTEND_FILES or path == "backend/requirements.txt"
-            or path == "docs/qa/dashboard-only-sandbox-staging.md"
+            or path in {"docs/qa/dashboard-only-sandbox-staging.md", BILLING_RUNBOOK}
             or (path.startswith("backend/app/") and path.endswith(".py"))
             or (path.startswith("frontend/src/") and Path(path).suffix in {
                 ".ts", ".tsx", ".css", ".svg", ".json"}))
@@ -98,10 +124,11 @@ def build_environment(work):
             "npm_config_registry": "https://registry.npmjs.org/"}
 
 
-def write_archive(files, revision, output):
+def write_archive(files, revision, output, *, same_origin=False):
     """Stable metadata and ordering; refuse overwrite of an existing artifact."""
-    manifest = {"source_revision": revision, "entrypoint": "app.staging:create_app",
-                "api_base": "/api", "files": {
+    manifest = {"source_revision": revision,
+                "entrypoint": "app.same_origin_sandbox" if same_origin else "app.staging:create_app",
+                "api_base": BILLING_PREFIX + "api" if same_origin else "/api", "files": {
                     name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}}
     files = dict(files, **{"build-manifest.json": (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()})
     with output.open("xb") as raw:
@@ -113,7 +140,7 @@ def write_archive(files, revision, output):
                     archive.addfile(info, io.BytesIO(content))
 
 
-def package(repo, revision, output):
+def package(repo, revision, output, *, same_origin=False):
     if output.exists():
         raise ValueError("Output already exists")
     with tempfile.TemporaryDirectory(prefix="ielts-staging-build-") as directory:
@@ -123,7 +150,11 @@ def package(repo, revision, output):
         # Snapshot non-frontend inputs directly after the Git export. Dependency
         # installation and compiler output must not be able to add or replace
         # arbitrary backend/docs entries in the artifact.
-        files = {"STAGING-README.md": INSTRUCTIONS.encode()}
+        if same_origin and (not (source / "backend/app/same_origin_sandbox.py").is_file()
+                            or not (source / BILLING_RUNBOOK).is_file()):
+            raise ValueError("Revision lacks the guarded billing launcher or runbook")
+        files = ({"BILLING-TEST-README.md": BILLING_INSTRUCTIONS.encode()} if same_origin
+                 else {"STAGING-README.md": INSTRUCTIONS.encode()})
         for root in (source / "backend", source / "docs"):
             for path in root.rglob("*"):
                 if path.is_file():
@@ -144,24 +175,44 @@ def package(repo, revision, output):
                 install_env[key] = os.environ[key]
         subprocess.run([npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
                        cwd=frontend, env=install_env, check=True, timeout=300)
-        subprocess.run([npm, "run", "build"], cwd=frontend, env=env, check=True, timeout=180)
+        build = [npm, "run", "build"] + (["--", "--mode", "billing-test"] if same_origin else [])
+        subprocess.run(build, cwd=frontend, env=env, check=True, timeout=180)
         dist = frontend / "dist"
-        if not (dist / "index.html").is_file():
+        index = dist / "index.html"
+        if not index.is_file():
             raise ValueError("Frontend build produced no index")
+        if same_origin:
+            _check_billing_index(index.read_text(), dist)
         for path in dist.rglob("*"):
             if path.is_symlink():
                 raise ValueError("Frontend output must not contain links")
             if path.is_file():
                 files["frontend/" + str(path.relative_to(dist))] = path.read_bytes()
-        write_archive(files, revision, output)
+        write_archive(files, revision, output, same_origin=same_origin)
+
+
+def _check_billing_index(html, dist):
+    assets = re.findall(r'\b(?:src|href)="([^"]+)"', html)
+    local = [asset for asset in assets if asset.startswith("/")]
+    if (not any(a.startswith(BILLING_PREFIX + "assets/") and a.endswith(".js") for a in local)
+            or any(not a.startswith(BILLING_PREFIX) for a in local)):
+        raise ValueError("Frontend index is not a billing-test build")
+    for asset in local:
+        path = asset.removeprefix(BILLING_PREFIX)
+        if (not re.fullmatch(r"(?:assets/[A-Za-z0-9_.-]+|vite\.svg)", path)
+                or not (dist / path).is_file()):
+            raise ValueError("Billing-test index references a missing or invalid asset")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True, help="Exact full commit SHA, not branch name")
     parser.add_argument("--output", required=True, type=Path, help="New local .tar.gz path")
+    parser.add_argument("--same-origin-billing-test", action="store_true",
+                        help="Build only the guarded same-domain billing-test artifact")
     args = parser.parse_args()
-    package(Path(__file__).resolve().parents[1], args.revision, args.output.resolve())
+    package(Path(__file__).resolve().parents[1], args.revision, args.output.resolve(),
+            same_origin=args.same_origin_billing_test)
 
 
 if __name__ == "__main__":

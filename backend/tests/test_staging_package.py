@@ -151,3 +151,54 @@ def test_build_cannot_add_or_replace_exported_backend_files(tmp_path, monkeypatc
     with tarfile.open(target, "r:gz") as archive:
         assert archive.extractfile("backend/app/staging.py").read() == b"# tracked guard"
         assert "backend/.env" not in archive.getnames()
+
+
+def test_same_origin_bundle_selects_fixed_build_mode_and_launcher(tmp_path, monkeypatch):
+    def export(repo, revision, source):
+        for name, body in {
+            "backend/app/same_origin_sandbox.py": "# guarded launcher",
+            packaging.BILLING_RUNBOOK: "# rehearsal runbook",
+            "frontend/package.json": "{}",
+        }.items():
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+
+    def npm(args, *, cwd, env, check, timeout):
+        if args[1] != "run":
+            return
+        assert args[1:] == ["run", "build", "--", "--mode", "billing-test"]
+        dist = cwd / "dist"
+        (dist / "assets").mkdir(parents=True)
+        (dist / "assets/app.js").write_text("fixture")
+        (dist / "vite.svg").write_text("<svg/>")
+        (dist / "index.html").write_text(
+            '<script src="/__ielts-billing-test/assets/app.js"></script>'
+            '<link href="/__ielts-billing-test/vite.svg">')
+
+    monkeypatch.setattr(packaging, "export_sources", export)
+    monkeypatch.setattr(packaging.subprocess, "run", npm)
+    monkeypatch.setattr(packaging.shutil, "which", lambda _: "npm")
+    out = tmp_path / "billing.tgz"
+    packaging.package(tmp_path, "b" * 40, out, same_origin=True)
+    with tarfile.open(out, "r:gz") as archive:
+        manifest = json.load(archive.extractfile("build-manifest.json"))
+        assert manifest["entrypoint"] == "app.same_origin_sandbox"
+        assert manifest["api_base"] == "/__ielts-billing-test/api"
+        assert manifest["source_revision"] == "b" * 40
+        assert "BILLING-TEST-README.md" in archive.getnames()
+        assert "STAGING-README.md" not in archive.getnames()
+        for name, digest in manifest["files"].items():
+            assert hashlib.sha256(archive.extractfile(name).read()).hexdigest() == digest
+
+
+@pytest.mark.parametrize("html", [
+    '<script src="/assets/app.js"></script>',
+    '<script src="/__ielts-billing-test/assets/missing.js"></script>',
+    '<script src="/__ielts-billing-test/assets/app.js"></script><link href="/vite.svg">',
+])
+def test_rehearsal_artifact_rejects_root_or_missing_assets(tmp_path, html):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets/app.js").touch()
+    with pytest.raises(ValueError, match="billing-test build|missing or invalid asset"):
+        packaging._check_billing_index(html, tmp_path)
