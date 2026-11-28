@@ -64,6 +64,7 @@ def test_disabled_offer_hides_and_mutations_unavailable(client, auth_token, monk
     monkeypatch.setattr(settings, 'STRIPE_TEST_CHECKOUT_ENABLED', False)
     assert client.get('/api/checkout/offer', headers=auth(auth_token)).json() == {'enabled': False, 'test_mode': True}
     assert order(client, auth_token).status_code == 503
+    assert client.get('/api/checkout/orders/current', headers=auth(auth_token)).status_code == 503
     assert client.post('/api/checkout/webhook', content=b'fixture').status_code == 503
 
 
@@ -71,6 +72,7 @@ def test_offer_and_order_require_authentication(client, sandbox):
     assert client.get('/api/checkout/offer').status_code == 401
     assert client.post('/api/checkout/orders', json={'idempotency_key': 'x'}).status_code == 401
     assert client.get('/api/checkout/orders/unknown').status_code == 401
+    assert client.get('/api/checkout/orders/current').status_code == 401
 
 
 def test_server_offer_immutable_and_order_sanitized(client, auth_token, test_db, sandbox):
@@ -103,8 +105,35 @@ def test_order_status_hides_other_owners(client, auth_token, test_db, sandbox):
     client.app.dependency_overrides[get_current_user] = lambda: other
     try:
         assert client.get(f'/api/checkout/orders/{oid}', headers=auth(auth_token)).status_code == 404
+        assert client.get('/api/checkout/orders/current', headers=auth(auth_token)).status_code == 404
     finally:
         client.app.dependency_overrides.pop(get_current_user)
+
+
+def test_current_order_recovers_cross_tab_conflict_without_provider_or_grant(
+        client, auth_token, test_db, sandbox):
+    path = '/api/checkout/orders/current'
+    headers = auth(auth_token)
+    assert client.get(path, headers=headers).status_code == 404
+    oid = order(client, auth_token, key='first-tab').json()['id']
+    assert order(client, auth_token, key='second-tab').status_code == 409
+    for _ in range(2):
+        recovered = client.get(path, headers=headers)
+        assert recovered.status_code == 200
+        assert recovered.headers['Cache-Control'] == 'private, no-store'
+        assert recovered.json() == {'id': oid, 'test_mode': True}
+    assert client.get(f'/api/checkout/orders/{oid}', headers=headers).json()['state'] == 'pending'
+    assert len(sandbox.calls) == 1
+    assert test_db.query(CheckoutOrder).count() == 1
+    assert test_db.query(StudyPassGrant).count() == 0
+
+
+def test_current_order_is_limited_to_configured_provider_scope(client, auth_token, test_db, sandbox):
+    oid = order(client, auth_token).json()['id']
+    row = test_db.get(CheckoutOrder, oid)
+    row.provider_account_id = 'acct_other_fixture'
+    test_db.commit()
+    assert client.get('/api/checkout/orders/current', headers=auth(auth_token)).status_code == 404
 
 
 def test_webhook_keeps_raw_bytes_and_grants_only_verified_settlement(client, auth_token, test_db, sandbox):

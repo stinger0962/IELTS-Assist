@@ -2,7 +2,7 @@
 from urllib.parse import urlsplit
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.models import User
 from app.same_origin_route import ORIGIN as REHEARSAL_ORIGIN, PREFIX as REHEARSAL_PREFIX
 from app.services.auth import get_current_user
-from app.services.checkout import Offer, checkout_status, process_notification, start_checkout
+from app.services.checkout import Offer, checkout_status, current_checkout_id, process_notification, start_checkout
 from app.services.stripe_test import StripeTestAdapter, UnsupportedStripeEvent
 
 router = APIRouter()
@@ -120,6 +120,17 @@ def create_order(body: CreateOrder, request: Request, db: Session = Depends(get_
         # provider payload or database details to the client.
         db.rollback()
         raise HTTPException(503, 'Checkout could not be confirmed. Retry with the same request.') from None
+
+
+@router.get('/orders/current')
+def get_current_order(request: Request, response: Response, db: Session = Depends(get_db),
+                      user: User = Depends(get_current_user)):
+    _, adapter = _required_sandbox(request)
+    order_id = current_checkout_id(db, user.id, adapter.scope)
+    if order_id is None:
+        raise HTTPException(404, 'No current checkout order', headers={'Cache-Control': 'private, no-store'})
+    response.headers['Cache-Control'] = 'private, no-store'
+    return {'id': order_id, 'test_mode': True}
 
 
 @router.get('/orders/{order_id}')

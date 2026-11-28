@@ -52,5 +52,6 @@ const CREATE_TIMEOUT_MS = 30_000;
 export const checkoutAPI = {
   offer: () => api.get('/checkout/offer', { timeout: READ_TIMEOUT_MS }),
   create: (idempotencyKey: string) => api.post('/checkout/orders', { idempotency_key: idempotencyKey }, { timeout: CREATE_TIMEOUT_MS }),
+  current: () => api.get('/checkout/orders/current', { timeout: READ_TIMEOUT_MS }),
   status: (id: string) => api.get('/checkout/orders/' + encodeURIComponent(id), { timeout: READ_TIMEOUT_MS }),
 };

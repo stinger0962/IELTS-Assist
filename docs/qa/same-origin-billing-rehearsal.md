@@ -55,6 +55,17 @@ contexts, including malformed methods/paths and unchanged production home/API
 health. Confirm public webhook reachability without successful execution. Then
 enable only this isolated runtime, confirm the pre-created Stripe Price, and
 exercise $19 test checkout and signed completion. Capture status only, not
-credentials, Checkout URLs or account/learner details. Use a fixed expiry and
-withdraw the test location, service, database, learner and destination after
-the rehearsal. Do not merge or deploy the ordinary app for this test.
+credentials, Checkout URLs or account/learner details. Use a second tab on the
+same sandbox learner to check recovery: an order conflict offers **Find existing
+test order**, which opens the owned status page in the rehearsal namespace. It
+must not start another Stripe session. A lost or unverified lookup must not
+offer to start over. A pending order with no resumable session still requires
+operator reconciliation.
+
+Set a hard end time for the rehearsal. Before withdrawing it, stop creating
+sessions. In the Stripe sandbox, reconcile only the exact Checkout Session IDs
+created by the rehearsal. Verify test mode and fixture ownership, and expire
+any still open (Stripe's default lifetime is 24 hours). Confirm the terminal
+states and any expected webhook deliveries before removing the test location,
+service, database, learner and destination. Never touch unrelated sessions.
+Do not merge or deploy the ordinary app for this test.

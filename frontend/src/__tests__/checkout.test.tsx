@@ -155,7 +155,8 @@ describe('Test checkout offer', () => {
     sessionStorage.setItem(key, JSON.stringify({ ...record, createdAt: Date.now() - CHECKOUT_ATTEMPT_TTL_MS - 1 }));
     render(<StudyPassCheckout />);
     expect(await screen.findByRole('alert')).toHaveTextContent('needs recovery');
-    expect(screen.getByRole('button')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Find existing test order' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Open Stripe test checkout' })).not.toBeInTheDocument();
     expect(create).toHaveBeenCalledTimes(1);
   });
   it('stops on a pending-order conflict instead of cycling new keys', async () => {
@@ -163,8 +164,45 @@ describe('Test checkout offer', () => {
     render(<StudyPassCheckout />);
     fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('needs recovery');
-    expect(screen.getByRole('button')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Find existing test order' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Open Stripe test checkout' })).not.toBeInTheDocument();
     expect(create).toHaveBeenCalledTimes(1);
+  });
+  it('recovers a conflicting order without creating another checkout or visiting Stripe', async () => {
+    const create = vi.spyOn(checkoutAPI, 'create').mockRejectedValue({ response: { status: 409 } });
+    const current = vi.spyOn(checkoutAPI, 'current').mockResolvedValue(response({ id, test_mode: true }));
+    vi.spyOn(deployment, 'appPath').mockImplementation(path => '/__ielts-billing-test' + path);
+    render(<StudyPassCheckout />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
+    const find = await screen.findByRole('button', { name: 'Find existing test order' });
+    expect(current).not.toHaveBeenCalled();
+    fireEvent.click(find);
+    fireEvent.click(find);
+    await waitFor(() => expect(checkoutNavigation.assign).toHaveBeenCalledWith('/__ielts-billing-test/checkout/return?order_id=' + id));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(current).toHaveBeenCalledTimes(1);
+  });
+  it.each([null, { id, test_mode: false }, { id: '//example.test', test_mode: true }])(
+    'keeps payment blocked when order recovery cannot be confirmed', async data => {
+      const create = vi.spyOn(checkoutAPI, 'create').mockRejectedValue({ response: { status: 409 } });
+      vi.spyOn(checkoutAPI, 'current').mockResolvedValue(response(data));
+      render(<StudyPassCheckout />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Find existing test order' }));
+      expect(await screen.findByRole('status')).toHaveTextContent('Could not verify an existing test order');
+      expect(checkoutNavigation.assign).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+  it('ignores a recovery lookup that returns after logout', async () => {
+    vi.spyOn(checkoutAPI, 'create').mockRejectedValue({ response: { status: 409 } });
+    let resolve!: (value: AxiosResponse) => void;
+    vi.spyOn(checkoutAPI, 'current').mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    render(<StudyPassCheckout />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Find existing test order' }));
+    act(() => useAppStore.setState({ token: null }));
+    await act(async () => { resolve(response({ id, test_mode: true })); });
+    expect(checkoutNavigation.assign).not.toHaveBeenCalled();
   });
   it('stores only opaque request and time, never token, draft or redirect', async () => {
     vi.spyOn(checkoutAPI, 'create').mockResolvedValue(response(order));
@@ -191,9 +229,11 @@ describe('Checkout request deadlines', () => {
     vi.mocked(checkoutAPI.offer).mockRestore();
     await checkoutAPI.offer();
     await checkoutAPI.status(id);
+    await checkoutAPI.current();
     await checkoutAPI.create(id);
     expect(read).toHaveBeenCalledWith('/checkout/offer', { timeout: 8_000 });
     expect(read).toHaveBeenCalledWith('/checkout/orders/' + id, { timeout: 8_000 });
+    expect(read).toHaveBeenCalledWith('/checkout/orders/current', { timeout: 8_000 });
     expect(create).toHaveBeenCalledWith('/checkout/orders', { idempotency_key: id }, { timeout: 30_000 });
   });
 });

@@ -127,6 +127,15 @@ def checkout_status(db: Session, user_id: int, order_id: str):
     return order
 
 
+def current_checkout_id(db: Session, user_id: int, scope: GatewayScope) -> str | None:
+    """Read the owner's existing slot without contacting the gateway or changing it."""
+    _scope(scope)
+    return db.query(CheckoutOrder.id).filter_by(
+        owner_id=user_id, active_owner_id=user_id, provider=scope.provider,
+        provider_account_id=scope.account_id, mode=scope.mode,
+    ).scalar()
+
+
 def _lock_owner(db, user_id):
     user = db.query(User).filter_by(id=user_id).with_for_update().first()
     if not user:

@@ -12,7 +12,7 @@ from app.main import app
 from app.routers import checkout
 from app.same_origin_route import ORIGIN, PREFIX
 from app.same_origin_sandbox import _build_app, _validate
-from app.services.checkout import GatewayScope
+from app.services.checkout import CheckoutSession, GatewayScope
 from app.staging import StagingPreflightError
 from tests.test_stripe_precreated_price import PRICE_ID
 
@@ -115,6 +115,21 @@ def test_fixed_router_only_allows_namespaced_surface(client, auth_token, flags, 
         ):
             assert edge.request(method, path, headers=headers, follow_redirects=False).status_code == 404, path
         assert edge.post(PREFIX + "/api/checkout/orders", json={}, headers={**auth, "Origin": ORIGIN}).status_code == 422
+        current = PREFIX + "/api/checkout/orders/current"
+        assert edge.get(current, headers={"Cookie": "production=secret"}).status_code == 401
+        assert edge.post(current, headers={**auth, "Origin": ORIGIN}).status_code == 404
+        assert edge.get(current, headers=auth).status_code == 404
+        adapter.create_checkout.side_effect = lambda order: CheckoutSession(
+            "cs_test_fixture", "https://checkout.stripe.com/c/pay/cs_test_fixture",
+            order.provider_price_id, "prod_fixture" if order.provider_price_id else None,
+        )
+        original = edge.post(PREFIX + "/api/checkout/orders",
+                             json={"idempotency_key": "first-tab"}, headers={**auth, "Origin": ORIGIN})
+        assert original.status_code == 200
+        recovered = edge.get(current, headers=auth)
+        assert recovered.json() == {"id": original.json()["id"], "test_mode": True}
+        assert recovered.headers["cache-control"] == "private, no-store"
+        adapter.create_checkout.assert_called_once()
         assert edge.get(PREFIX + "/api/checkout/orders/11111111-1111-1111-1111-111111111111", headers=auth).status_code == 404
 
 

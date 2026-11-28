@@ -21,7 +21,7 @@ CSP = (
 UUID = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
 PAGES = {"", "/", "/login", "/practice", "/checkout/return", "/checkout/cancel"}
 GET_API = {"/api/health", "/api/auth/me", "/api/study-pass",
-           "/api/checkout/offer", "/api/generate/recent-exams", "/api/generate/pool-status"} | {
+           "/api/checkout/offer", "/api/checkout/orders/current", "/api/generate/recent-exams", "/api/generate/pool-status"} | {
                f"/api/generate/daily-{skill}" for skill in ("reading", "listening", "grammar", "writing", "speaking")}
 POST_API = {"/api/auth/login", "/api/checkout/orders", WEBHOOK, "/api/generate/trigger-replenish",
             "/api/generate/submit-ai-reading-exam", "/api/generate/submit-ai-listening-exam"}
