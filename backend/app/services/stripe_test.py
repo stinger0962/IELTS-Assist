@@ -14,7 +14,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from app.services.checkout import (
-    CheckoutRequest, CheckoutSession, GatewayScope, PaymentSnapshot,
+    CheckoutRequest, CheckoutSession, ExpiredCheckoutSnapshot, GatewayScope, PaymentSnapshot,
 )
 
 API_ORIGIN = "https://api.stripe.com"
@@ -22,7 +22,7 @@ API_VERSION = "2026-10-28.endive"
 SIGNATURE_TOLERANCE_SECONDS = 300
 SUPPORTED_EVENTS = {
     "checkout.session.completed", "checkout.session.async_payment_succeeded",
-    "checkout.session.async_payment_failed",
+    "checkout.session.async_payment_failed", "checkout.session.expired",
     "charge.refunded", "refund.created", "refund.updated", "refund.failed",
     "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed",
 }
@@ -350,6 +350,17 @@ class StripeTestAdapter:
             # current configuration/labels to reinterpret an existing paid order.
         elif product.get("metadata", {}).get("sku") != metadata["sku"]:
             raise ValueError("Legacy inline checkout SKU mismatch")
+        if event["type"] == "checkout.session.expired":
+            if (session.get("status") != "expired" or session.get("payment_status") != "unpaid"
+                    or "payment_intent" not in session or session["payment_intent"] is not None
+                    or session.get("after_expiration") is not None or session.get("recovered_from") is not None):
+                # Never release a slot based on an expired label alone.
+                raise ValueError("Checkout expiry is not confirmed unpaid and terminal")
+            return ExpiredCheckoutSnapshot(event["id"], metadata["order_id"], session_id,
+                                           int(metadata["user_id"]), metadata["sku"], amount,
+                                           currency.upper(), int(metadata["reviews"]),
+                                           int(metadata["duration_days"]), selected_price_id,
+                                           selected_product_id)
         payment_id = _identifier(session.get("payment_intent"), "pi_")
         if event_payment_id is not None and event_payment_id != payment_id:
             raise ValueError("Event payment does not own Checkout Session")

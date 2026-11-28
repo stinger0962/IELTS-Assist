@@ -267,3 +267,96 @@ def test_http_checkout_uses_native_signature_and_authoritative_mock_stripe(
         assert client.post("/api/checkout/webhook", content=settled, headers=proof).status_code == 200
         assert client.get(status_path, headers=auth(auth_token)).json()["state"] == "fulfilled"
         assert test_db.query(StudyPassGrant).count() == 1
+
+
+def test_signed_expiry_releases_only_exact_unpaid_order(
+        client, auth_token, test_db, sandbox, monkeypatch):
+    import json
+    from urllib.parse import parse_qs
+
+    import httpx
+
+    from app.models.models import CheckoutEvent
+    from app.services.stripe_test import StripeTestAdapter
+    from tests.test_stripe_test_adapter import NOW, SECRET, StripeFixture, signed
+
+    provider = StripeFixture()
+    provider.session.update(status="open", payment_status="unpaid", payment_intent=None)
+    created_sessions = []
+
+    def respond(request):
+        if request.method == "POST":
+            fields = parse_qs(request.content.decode())
+            metadata = {name: fields[f"metadata[{name}]"][0] for name in provider.session["metadata"]}
+            if created_sessions:
+                created_sessions.append("cs_test_replacement")
+                return httpx.Response(200, json={**provider.session,
+                    "id": "cs_test_replacement", "status": "open", "metadata": metadata,
+                    "client_reference_id": metadata["order_id"],
+                    "url": "https://checkout.stripe.com/c/pay/cs_test_replacement"})
+            created_sessions.append("cs_test_fixture")
+            provider.session.update(metadata=metadata, client_reference_id=metadata["order_id"])
+            provider.payment["metadata"] = metadata
+        return provider.respond(request)
+
+    monkeypatch.setattr(settings, "STRIPE_TEST_SECRET_KEY", "sk_test_not_a_real_key")
+    monkeypatch.setattr(settings, "STRIPE_TEST_WEBHOOK_SECRET", SECRET)
+    with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
+        monkeypatch.setattr(checkout, "_adapter_factory", lambda **kwargs: StripeTestAdapter(
+            **kwargs, http_client=transport, clock=lambda: NOW))
+        reply = order(client, auth_token)
+        assert reply.status_code == 200
+        oid = reply.json()["id"]
+        path = f"/api/checkout/orders/{oid}"
+        headers = auth(auth_token)
+        event = json.loads(signed()[0])
+        event.update(type="checkout.session.expired", id="evt_expired")
+        raw, proof = signed(event)
+        webhook = "/api/checkout/webhook"
+
+        def deliver():
+            return client.post(webhook, content=raw, headers=proof)
+
+        # A signed event for an open session and provider downtime never release it.
+        assert deliver().status_code == 400
+        provider.status_code = 503
+        assert deliver().status_code == 503
+        provider.status_code = 200
+        provider.session.update(status="expired", payment_status="unpaid", payment_intent="pi_fixture")
+        assert deliver().status_code == 400
+        provider.session.update(payment_intent=None, payment_status="paid")
+        assert deliver().status_code == 400
+        provider.session.update(payment_status="unpaid")
+        assert client.post(webhook, content=raw + b" ", headers=proof).status_code == 400
+        assert order(client, auth_token, key="replacement").status_code == 409
+        assert test_db.query(CheckoutEvent).count() == 0
+        # Wrong immutable offer metadata is rejected even for an expired session.
+        provider.session["metadata"]["reviews"] = "6"
+        assert deliver().status_code == 400
+        provider.session["metadata"]["reviews"] = "5"
+
+        assert deliver().status_code == 200
+        assert deliver().status_code == 200
+        assert client.get(path, headers=headers).json() == {
+            "id": oid, "state": "expired", "checkout_url": None, "test_mode": True,
+        }
+        current = "/api/checkout/orders/current"
+        assert client.get(current, headers=headers).json()["id"] == oid
+        assert order(client, auth_token).json()["state"] == "expired"
+        replaced = order(client, auth_token, key="replacement")
+        assert replaced.status_code == 200 and replaced.json()["id"] != oid
+        assert order(client, auth_token, key="other-replacement").status_code == 409
+        assert client.get(current, headers=headers).json()["id"] == replaced.json()["id"]
+        assert deliver().status_code == 200
+
+        # Contradictory late payment evidence cannot activate the old order or
+        # affect the replacement. Keep a distinct audit outcome for review.
+        provider.session.update(status="complete", payment_status="paid", payment_intent="pi_fixture")
+        assert client.post(webhook, content=signed()[0], headers=signed()[1]).status_code == 200
+        assert client.get(path, headers=headers).json()["state"] == "expired"
+        assert client.get(current, headers=headers).json()["id"] == replaced.json()["id"]
+        assert [e.outcome for e in test_db.query(CheckoutEvent).order_by(CheckoutEvent.id)] == [
+            "expired", "expired_review",
+        ]
+        assert len(created_sessions) == 2
+        assert test_db.query(StudyPassGrant).count() == 0

@@ -210,7 +210,7 @@ describe('Test checkout offer', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open Stripe test checkout' }));
     await waitFor(() => expect(checkoutNavigation.assign).toHaveBeenCalled());
     const raw = sessionStorage.getItem(sessionStorage.key(0)!)!;
-    expect(Object.keys(JSON.parse(raw)).sort()).toEqual(['createdAt', 'key']);
+    expect(Object.keys(JSON.parse(raw)).sort()).toEqual(['createdAt', 'key', 'orderId']);
     expect(raw).not.toContain('test-token');
     expect(raw).not.toContain('checkout.stripe.com');
   });
@@ -249,6 +249,28 @@ describe('Owned checkout return', () => {
     expect(status).toHaveBeenCalledWith(id);
     expect(create).not.toHaveBeenCalled();
     expect(checkoutNavigation.assign).not.toHaveBeenCalled();
+  });
+  it('an expired owned receipt clears only its bound attempt and never resumes or starts payment', async () => {
+    const prefix = deployment.browserStorageKey('ielts:test-checkout:v1:11:');
+    const expiredRecord = prefix + 'expired-offer';
+    const laterRecord = prefix + 'newer-offer';
+    const unknownRecord = prefix + 'unconfirmed';
+    const otherAccount = deployment.browserStorageKey('ielts:test-checkout:v1:22:expired-offer');
+    sessionStorage.setItem(expiredRecord, JSON.stringify({ key: id, createdAt: 10, orderId: id }));
+    sessionStorage.setItem(laterRecord, JSON.stringify({ key: id, createdAt: 20, orderId: 'newer' }));
+    sessionStorage.setItem(unknownRecord, JSON.stringify({ key: id, createdAt: 20 }));
+    sessionStorage.setItem(otherAccount, JSON.stringify({ key: id, createdAt: 10, orderId: id }));
+    vi.spyOn(checkoutAPI, 'status').mockResolvedValue(response({ ...order, state: 'expired', checkout_url: null }));
+    const create = vi.spyOn(checkoutAPI, 'create');
+    render(<MemoryRouter initialEntries={['/checkout/return?order_id=' + id]}><CheckoutReturn /></MemoryRouter>);
+    expect(await screen.findByText('This test checkout expired without payment.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Return to Practice to review the offer' })).toHaveAttribute('href', '/practice');
+    expect(screen.queryByRole('button', { name: /Resume existing/ })).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(expiredRecord)).toBeNull();
+    expect(sessionStorage.getItem(laterRecord)).not.toBeNull();
+    expect(sessionStorage.getItem(unknownRecord)).not.toBeNull();
+    expect(sessionStorage.getItem(otherAccount)).not.toBeNull();
+    expect(create).not.toHaveBeenCalled();
   });
   it('cancel displays closed and relies on real order status, never grants', async () => {
     vi.spyOn(checkoutAPI, 'status').mockResolvedValue(response(order));

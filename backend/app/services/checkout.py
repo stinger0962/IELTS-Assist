@@ -74,6 +74,21 @@ class PaymentSnapshot:
     provider_product_id: str | None = None
 
 
+@dataclass(frozen=True)
+class ExpiredCheckoutSnapshot:
+    event_id: str
+    order_id: str
+    session_id: str
+    user_id: int
+    sku: str
+    amount_minor: int
+    currency: str
+    reviews: int
+    duration_days: int
+    provider_price_id: str | None = None
+    provider_product_id: str | None = None
+
+
 class Gateway(Protocol):
     scope: GatewayScope
 
@@ -83,7 +98,7 @@ class Gateway(Protocol):
 class Verifier(Protocol):
     scope: GatewayScope
 
-    def verify(self, payload: bytes, headers: dict) -> PaymentSnapshot: ...
+    def verify(self, payload: bytes, headers: dict) -> PaymentSnapshot | ExpiredCheckoutSnapshot: ...
 
 
 def _scope(scope):
@@ -128,12 +143,17 @@ def checkout_status(db: Session, user_id: int, order_id: str):
 
 
 def current_checkout_id(db: Session, user_id: int, scope: GatewayScope) -> str | None:
-    """Read the owner's existing slot without contacting the gateway or changing it."""
+    """Read the owned slot or most recent expired receipt, without provider I/O."""
     _scope(scope)
-    return db.query(CheckoutOrder.id).filter_by(
-        owner_id=user_id, active_owner_id=user_id, provider=scope.provider,
+    orders = db.query(CheckoutOrder.id, CheckoutOrder.state).filter_by(
+        owner_id=user_id, provider=scope.provider,
         provider_account_id=scope.account_id, mode=scope.mode,
-    ).scalar()
+    )
+    active = orders.filter_by(active_owner_id=user_id).first()
+    if active:
+        return active.id
+    latest = orders.order_by(CheckoutOrder.created_at.desc(), CheckoutOrder.id.desc()).first()
+    return latest.id if latest and latest.state == "expired" else None
 
 
 def _lock_owner(db, user_id):
@@ -175,8 +195,8 @@ def start_checkout(db: Session, user_id: int, idempotency_key: str,
                 raise HTTPException(409, "An active entitlement already exists")
             previous = db.query(CheckoutOrder).filter_by(active_owner_id=user_id).first()
             if previous:
-                # Only a fulfilled, expired entitlement can free a slot. Pending,
-                # failed/review/refunded orders require explicit reconciliation.
+                # Fulfilled, expired entitlements can free a reserved slot here.
+                # Unpaid Checkout expiry releases its slot only via verified proof.
                 grant = db.get(StudyPassGrant, previous.grant_id) if previous.grant_id else None
                 if (previous.state == "fulfilled" and grant is not None
                         and grant.expires_at <= now and grant.revoked_at is None):
@@ -232,7 +252,8 @@ def start_checkout(db: Session, user_id: int, idempotency_key: str,
             order.provider_product_id = session.provider_product_id
         elif session.provider_product_id is not None:
             raise ValueError("Unexpected Product binding on legacy inline checkout")
-        order.session_id, order.checkout_url = session.session_id, session.url
+        if order.state != "expired":
+            order.session_id, order.checkout_url = session.session_id, session.url
         db.commit()
         return order
     except Exception:
@@ -252,6 +273,51 @@ def _validate_snapshot(snapshot):
         raise ValueError("Invalid verified payment state")
 
 
+def _expire_checkout(db: Session, scope: GatewayScope, snapshot: ExpiredCheckoutSnapshot, now):
+    """Release only the exact verified, unpaid Stripe order; keep its audit trail."""
+    for value in (snapshot.event_id, snapshot.order_id, snapshot.session_id, snapshot.sku):
+        if not isinstance(value, str) or not value or len(value) > 200:
+            raise ValueError("Invalid verified checkout expiry")
+    if (any(type(value) is not int or value < 1 for value in
+            (snapshot.user_id, snapshot.reviews, snapshot.amount_minor))
+            or snapshot.duration_days != 30):
+        raise ValueError("Invalid verified checkout expiry offer")
+    fingerprint = sha256(json.dumps({"expiry": asdict(snapshot)}, sort_keys=True).encode()).hexdigest()
+    try:
+        owner_id = db.query(CheckoutOrder.owner_id).filter_by(id=snapshot.order_id).scalar()
+        if owner_id is None or owner_id != snapshot.user_id:
+            raise ValueError("Unknown checkout expiry order")
+        _lock_owner(db, owner_id)
+        order = db.query(CheckoutOrder).filter_by(id=snapshot.order_id).with_for_update().one()
+        if (not _matches_scope(order, scope) or order.session_id != snapshot.session_id
+                or (order.sku, order.amount_minor, order.currency, order.reviews, order.duration_days,
+                    order.provider_price_id, order.provider_product_id) != (
+                    snapshot.sku, snapshot.amount_minor, snapshot.currency, snapshot.reviews,
+                    snapshot.duration_days, snapshot.provider_price_id, snapshot.provider_product_id)):
+            raise ValueError("Verified expiry does not match the immutable order")
+        existing = db.query(CheckoutEvent).filter_by(
+            provider=scope.provider, provider_account_id=scope.account_id, mode=scope.mode,
+            event_id=snapshot.event_id).first()
+        if existing:
+            if existing.order_id != order.id or existing.fingerprint != fingerprint:
+                raise ValueError("Expiry event identifier was reused with different content")
+            db.commit()
+            return order
+        outcome = "expiry_ignored"
+        if (order.state == "pending" and order.active_owner_id == owner_id
+                and order.payment_id is None and order.grant_id is None):
+            order.state, order.checkout_url, order.active_owner_id = "expired", None, None
+            outcome = "expired"
+        db.add(CheckoutEvent(provider=scope.provider, provider_account_id=scope.account_id,
+                             mode=scope.mode, event_id=snapshot.event_id, order_id=order.id,
+                             fingerprint=fingerprint, outcome=outcome, processed_at=now))
+        db.commit()
+        return order
+    except Exception:
+        db.rollback()
+        raise
+
+
 def process_notification(db: Session, payload: bytes, headers: dict,
                          verifier: Verifier, now=None):
     """Process ONLY through an injected verified-snapshot boundary, atomically.
@@ -262,8 +328,10 @@ def process_notification(db: Session, payload: bytes, headers: dict,
     """
     _scope(verifier.scope)
     snapshot = verifier.verify(payload, headers)
-    _validate_snapshot(snapshot)
     now = now or datetime.utcnow()
+    if isinstance(snapshot, ExpiredCheckoutSnapshot):
+        return _expire_checkout(db, verifier.scope, snapshot, now)
+    _validate_snapshot(snapshot)
     # Current authoritative state can change between retries of the SAME immutable
     # event. Deduplicate its identity, not mutable settlement/refund observations.
     # A distinct refund event (or separately identified reconciliation) applies a
@@ -300,9 +368,15 @@ def process_notification(db: Session, payload: bytes, headers: dict,
                 raise ValueError("Payment event identifier was reused with different content")
             db.commit()
             return order
-        order.payment_id = snapshot.payment_id
         outcome = "observed"
-        if order.state == "refunded":
+        if order.state != "expired":
+            order.payment_id = snapshot.payment_id
+        if order.state == "expired":
+            # A contradictory later payment observation needs human review but
+            # cannot grant a pass, reopen this checkout or touch its replacement.
+            outcome = ("expired_ignored" if snapshot.state == "pending" and not snapshot.refunded_minor
+                       else "expired_review")
+        elif order.state == "refunded":
             # Terminal: delayed settlement can never resurrect this entitlement.
             outcome = "terminal_ignored"
         elif snapshot.state == "refunded" and snapshot.refunded_minor == order.amount_minor:

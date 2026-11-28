@@ -62,6 +62,18 @@ must not start another Stripe session. A lost or unverified lookup must not
 offer to start over. A pending order with no resumable session still requires
 operator reconciliation.
 
+For a separate expiry test, subscribe the sandbox destination to
+`checkout.session.expired`. An owned, attached test Session is released only
+when Stripe still confirms expired, unpaid, and explicitly no PaymentIntent.
+The old receipt remains readable with no resume link; a matching stored tab
+attempt can be cleared and the learner must explicitly start again from
+Practice. This is not a timer and does not retry a payment automatically.
+Leave ambiguous provider state, known payment history, and unbound browser
+attempts for operator review. Check sibling tabs cannot create overlapping
+replacement orders. Do not enable Stripe's automatic expired-session recovery
+links. A contradictory late payment is flagged in the old order's event audit
+and does not grant access or affect a replacement.
+
 Set a hard end time for the rehearsal. Before withdrawing it, stop creating
 sessions. In the Stripe sandbox, reconcile only the exact Checkout Session IDs
 created by the rehearsal. Verify test mode and fixture ownership, and expire

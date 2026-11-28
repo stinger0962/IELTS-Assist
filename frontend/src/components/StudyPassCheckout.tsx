@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { checkoutAPI, isCheckoutOffer, isCheckoutOrder, isOrderId, safeStripeCheckoutUrl } from '../api/checkout';
-import { obtainCheckoutAttempt, readCheckoutAttempt } from '../utils/checkoutAttempt';
+import { obtainCheckoutAttempt, readCheckoutAttempt, rememberCheckoutOrder } from '../utils/checkoutAttempt';
 import type { CheckoutOffer } from '../api/checkout';
 import { useAppStore } from '../store';
 import { appPath } from '../deployment';
@@ -59,8 +59,10 @@ export default function StudyPassCheckout({ hasDraft = false }: { hasDraft?: boo
       const attempt = obtainCheckoutAttempt(userId, offer);
       setPrevious(true);
       const { data } = await checkoutAPI.create(attempt.key);
-      if (generationId !== generation.current || draftRef.current) return;
+      if (generationId !== generation.current) return;
       if (!isCheckoutOrder(data)) throw new Error('Invalid checkout response');
+      rememberCheckoutOrder(userId, offer, attempt.key, data.id);
+      if (draftRef.current) return;
       if (data.state !== 'pending') {
         checkoutNavigation.assign(appPath(`/checkout/return?order_id=${encodeURIComponent(data.id)}`));
         return;

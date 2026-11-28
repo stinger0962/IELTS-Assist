@@ -7,12 +7,14 @@ import { useAppStore } from '../store';
 import { useStudyPass } from '../hooks/useStudyPass';
 import { checkoutNavigation } from '../components/StudyPassCheckout';
 import StudyPassPanel from '../components/StudyPassPanel';
+import { clearExpiredCheckoutAttempt } from '../utils/checkoutAttempt';
 
 export default function CheckoutReturn() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const location = useLocation();
   const token = useAppStore(state => state.token);
+  const userId = useAppStore(state => state.user?.id);
   const orderId = params.get('order_id') || '';
   const canceled = location.pathname === '/checkout/cancel';
   const { status: pass, refresh } = useStudyPass();
@@ -35,6 +37,7 @@ export default function CheckoutReturn() {
       if (!isCheckoutOrder(data) || data.id !== orderId) throw new Error('Invalid order');
       setResult({ token, order: data });
       terminal.current = data.state !== 'pending';
+      if (data.state === 'expired' && userId !== undefined) clearExpiredCheckoutAttempt(userId, data.id);
       if (data.state === 'fulfilled' || data.state === 'refunded') void refresh();
     } catch {
       if (request === generation.current) { setError(true); setResult(null); }
@@ -44,7 +47,7 @@ export default function CheckoutReturn() {
         setChecking(false);
       }
     }
-  }, [token, orderId, refresh]);
+  }, [token, userId, orderId, refresh]);
 
   useEffect(() => {
     ++generation.current;
@@ -80,7 +83,7 @@ export default function CheckoutReturn() {
         )}
         {order?.state === 'fulfilled' && <StudyPassPanel status={pass} />}
       </>}
-      <p><Link to="/practice">{t('checkout.back')}</Link></p>
+      <p><Link to="/practice">{t(order?.state === 'expired' ? 'checkout.reviewOffer' : 'checkout.back')}</Link></p>
     </section>
   );
 }

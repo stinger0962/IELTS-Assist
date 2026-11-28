@@ -283,7 +283,7 @@ class CheckoutOrder(Base):
     duration_days = Column(Integer, nullable=False)
     provider_price_id = Column(String(200), nullable=True)
     provider_product_id = Column(String(200), nullable=True)
-    state = Column(String(20), nullable=False)  # pending | fulfilled | refunded | review
+    state = Column(String(20), nullable=False)  # pending | fulfilled | refunded | review | expired
     session_id = Column(String(200), nullable=True)
     payment_id = Column(String(200), nullable=True)
     checkout_url = Column(Text, nullable=True)

@@ -59,3 +59,45 @@ def test_parallel_order_requests_do_not_create_overlapping_purchases(pg):
                    [workers.submit(start, 'one'), workers.submit(start, 'two')]]
     assert sum(r[0] == 'created' for r in results) == 1
     assert ('rejected', 409) in results
+
+
+def test_verified_expiry_allows_at_most_one_concurrent_replacement(pg):
+    from fastapi import HTTPException
+    from app.models.models import CheckoutOrder, StudyPassGrant
+    from app.services.checkout import ExpiredCheckoutSnapshot, Offer, process_notification, start_checkout
+    from tests.support.fake_checkout import FakeGateway, FakeVerifier
+
+    factory, _, _ = pg
+    user_id, _ = seed(factory)
+    offer = Offer(sku='fixture-30-day', amount_minor=1900, currency='USD', reviews=5)
+    gateway = FakeGateway()
+    with factory() as db:
+        original = start_checkout(db, user_id, 'original', offer, gateway)
+        oid = original.id
+        proof = ExpiredCheckoutSnapshot('expiry', oid, original.session_id, user_id,
+                                        offer.sku, offer.amount_minor, offer.currency,
+                                        offer.reviews, offer.duration_days)
+        verify = FakeVerifier(gateway.scope, proof)
+        assert process_notification(db, b'fixture-notification',
+                                    {'fixture-proof': 'known'}, verify).state == 'expired'
+    barrier = threading.Barrier(2)
+
+    def restart(key):
+        with factory() as db:
+            barrier.wait(timeout=5)
+            try:
+                return start_checkout(db, user_id, key, offer, FakeGateway()).id
+            except HTTPException as exc:
+                return exc.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = [future.result(timeout=20) for future in
+                   [workers.submit(restart, 'first'), workers.submit(restart, 'second')]]
+    assert results.count(409) == 1
+    with factory() as db:
+        assert process_notification(db, b'fixture-notification',
+                                    {'fixture-proof': 'known'}, verify).state == 'expired'
+        active = db.query(CheckoutOrder).filter_by(active_owner_id=user_id).one()
+        assert active.id in results and active.id != oid
+        assert db.query(CheckoutOrder).filter_by(owner_id=user_id).count() == 2
+        assert db.query(StudyPassGrant).filter_by(user_id=user_id).count() == 0

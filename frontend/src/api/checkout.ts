@@ -11,7 +11,7 @@ export interface CheckoutOffer {
 }
 export interface CheckoutOrder {
   id: string;
-  state: 'pending' | 'fulfilled' | 'refunded' | 'review';
+  state: 'pending' | 'fulfilled' | 'refunded' | 'review' | 'expired';
   checkout_url: string | null;
   test_mode: true;
 }
@@ -28,7 +28,7 @@ export function isCheckoutOrder(value: unknown): value is CheckoutOrder {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return typeof v.id === 'string' && isOrderId(v.id) && v.test_mode === true &&
-    ['pending', 'fulfilled', 'refunded', 'review'].includes(String(v.state)) &&
+    ['pending', 'fulfilled', 'refunded', 'review', 'expired'].includes(String(v.state)) &&
     (v.checkout_url === null || typeof v.checkout_url === 'string');
 }
 export function safeStripeCheckoutUrl(value: string | null): string | null {
