@@ -51,6 +51,12 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short
 
+      - name: Test study pass with isolated PostgreSQL
+        env:
+          IELTS_TEST_POSTGRES_ALLOW_DISPOSABLE: "1"
+          IELTS_TEST_POSTGRES_URL: postgresql+psycopg2://test_user:test_pass@127.0.0.1:5432/test_db
+        run: python -m pytest backend_pg_tests -v --tb=short
+
   frontend-build:
     name: Frontend Build & Test
     runs-on: ubuntu-latest

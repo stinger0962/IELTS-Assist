@@ -1,3 +1,4 @@
+import { practiceAudioUrl } from '../../deployment';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Check, X, Play, Pause, RotateCcw } from 'lucide-react';
 import { practiceAPI, progressAPI } from '../../api';
@@ -223,7 +224,7 @@ export default function AIListeningFullTestView({ exercise, onBack, initialResul
   // Get audio URL for current section
   const getAudioUrl = (sectionIdx: number) => {
     const sec = sections[sectionIdx];
-    return sec?.audio_url || sec?.meta?.audio_url || '';
+    return practiceAudioUrl(sec?.audio_url || sec?.meta?.audio_url);
   };
 
   // Convert flat listening format {completion:[], multiple_choice:[], matching:[]} to groups format

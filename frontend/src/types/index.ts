@@ -420,6 +420,8 @@ export interface WritingCoachingFeedback {
 }
 
 export interface WritingGradingResult {
+  // Absent on historical results: completeness is unknown.
+  annotation_status?: 'complete' | 'partial' | 'unavailable';
   examiner_result: WritingExaminerResult;
   coaching_feedback: WritingCoachingFeedback;
   annotations: WritingAnnotation[];

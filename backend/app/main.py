@@ -28,17 +28,22 @@ from app.config import assert_secret_key_is_safe, settings
 assert_secret_key_is_safe(settings.SECRET_KEY)
 
 from app.database import init_db
-from app.routers import auth, generate, goals, grammar, listening, listening_exam, mistakes, practice, progress, reading, reading_exam, speaking, topics, writing
+from app.routers import checkout, study_pass, auth, generate, goals, grammar, listening, listening_exam, mistakes, practice, progress, reading, reading_exam, speaking, topics, writing
 from app.routers.generate import daily_generate
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.DAILY_GENERATION_ENABLED:
+        yield
+        return
     scheduler = AsyncIOScheduler()
     scheduler.add_job(daily_generate, CronTrigger(hour=0, minute=0), id="daily_generate")
     scheduler.start()
-    yield
-    scheduler.shutdown(wait=False)
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
@@ -61,6 +66,8 @@ app.add_middleware(
 init_db()
 
 # Include routers
+app.include_router(study_pass.router, prefix=f"{settings.API_PREFIX}/study-pass", tags=["Study pass"])
+app.include_router(checkout.router, prefix=f"{settings.API_PREFIX}/checkout", tags=["Sandbox checkout"])
 app.include_router(auth.router, prefix=f"{settings.API_PREFIX}/auth", tags=["Auth"])
 app.include_router(progress.router, prefix=f"{settings.API_PREFIX}", tags=["Progress"])
 app.include_router(practice.router, prefix=f"{settings.API_PREFIX}/practice", tags=["Practice"])

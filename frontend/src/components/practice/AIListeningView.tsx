@@ -1,3 +1,4 @@
+import { IS_BILLING_TEST, practiceAudioUrl } from '../../deployment';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, X, Play, Pause, RotateCcw, FileText } from 'lucide-react';
@@ -35,10 +36,7 @@ function AIListeningExerciseView({
   const matchingStemCount = matchingBlocks.reduce((sum, m) => sum + m.stems.length, 0);
   const totalQuestions = completionQs.length + mcqQs.length + matchingStemCount;
 
-  // Audio URL — prepend VPS base if it's a relative path
-  const audioUrl = exercise.meta.audio_url?.startsWith('http')
-    ? exercise.meta.audio_url
-    : exercise.meta.audio_url; // relative URL served by nginx
+  const audioUrl = IS_BILLING_TEST ? practiceAudioUrl(exercise.meta.audio_url) : exercise.meta.audio_url;
 
   // Audio controls
   const togglePlay = () => {

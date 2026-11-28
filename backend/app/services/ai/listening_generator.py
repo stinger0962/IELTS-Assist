@@ -270,7 +270,7 @@ class ListeningGenerator:
         # Validate
         validation = self._validate(result)
         attempts = 0
-        while not validation.get("valid", False) and attempts < 3:
+        while validation.get("valid") is not True and attempts < 3:
             attempts += 1
             # Regenerate with fresh metadata
             metadata = generate_metadata(avoid_topics=avoid_topics, format_hint=format_hint)
@@ -280,7 +280,8 @@ class ListeningGenerator:
                 if result:
                     validation = self._validate(result)
 
-        if not result:
+        if not result or validation.get("valid") is not True:
+            # Do not synthesize or publish a candidate that exhausted validation.
             return None
 
         # Store accent in meta for TTS voice selection

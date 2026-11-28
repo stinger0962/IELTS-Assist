@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { browserStorageKey } from '../deployment';
 import type { User, ProgressStats } from '../types';
 
 interface AppState {
@@ -46,7 +47,7 @@ export const useAppStore = create<AppState>()(
       setStats: (stats) => set({ stats }),
     }),
     {
-      name: 'ielts-assist-storage',
+      name: browserStorageKey('ielts-assist-storage'),
       partialize: (state) => ({
         theme: state.theme,
         language: state.language,

@@ -17,6 +17,9 @@ try:
     with engine.connect() as conn:
         pass
 except Exception:
+    if settings.STUDY_PASS_ENABLED:
+        # Paid entitlements must never split silently across databases.
+        raise
     # Use SQLite as fallback
     sqlite_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ielts_assist.db")
     db_url = f"sqlite:///{sqlite_path}"
@@ -37,6 +40,8 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     # Inline migrations for columns added after initial schema creation
     migrations = [
+        "ALTER TABLE checkout_orders ADD COLUMN provider_price_id VARCHAR(200)",
+        "ALTER TABLE checkout_orders ADD COLUMN provider_product_id VARCHAR(200)",
         "ALTER TABLE goals ADD COLUMN skill VARCHAR(50)",
         "ALTER TABLE goals ADD COLUMN goal_type VARCHAR(50) DEFAULT 'daily_minutes'",
         "ALTER TABLE topics ADD COLUMN user_id INTEGER REFERENCES users(id)",
